@@ -55,6 +55,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _sampleRate = MutableStateFlow(48000)
     val sampleRate: StateFlow<Int> = _sampleRate
 
+    private val _bitDepth = MutableStateFlow(16)
+    val bitDepth: StateFlow<Int> = _bitDepth
+
+    fun updateBitDepth(v: Int) { _bitDepth.value = v }
+
     // Save directory
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri

@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
+import com.example.recorderproject.ui.components.BitDepthSelector
 import com.example.recorderproject.ui.components.MeatrecMark
+import com.example.recorderproject.ui.components.RecordPulseButton
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.SampleRateSelector
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
@@ -49,6 +51,7 @@ fun RecorderApp(
     val files by viewModel.recordFiles.collectAsStateWithLifecycle()
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
+    val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -98,21 +101,25 @@ fun RecorderApp(
                             onChange = { viewModel.updateSampleRate(it) },
                         )
                     }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("BIT DEPTH", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                        BitDepthSelector(
+                            current = bitDepth,
+                            onChange = { viewModel.updateBitDepth(it) },
+                        )
+                    }
                 }
             }
 
-            // Record / Stop button — large primary
-            Button(
-                onClick = { if (isRecording) viewModel.stopRecording() else onStartRecording() },
-                colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            ) {
-                Text(
-                    text = if (isRecording) "■ Stop" else "● Record",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                )
-            }
+            // Animated Record / Stop button — press scale, ripple, breathing pulse while recording
+            RecordPulseButton(
+                isRecording = isRecording,
+                onTap = { if (isRecording) viewModel.stopRecording() else onStartRecording() },
+            )
 
             // Secondary actions row
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
