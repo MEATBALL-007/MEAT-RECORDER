@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
@@ -40,12 +43,28 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             RecorderProjectTheme {
-                RecorderApp(
-                    viewModel = viewModel,
-                    onStartRecording = { requestRecordingPermissions() },
-                    onSelectSaveLocation = { selectSaveDirectory() },
-                    onRequestPermission = { requestRecordingPermissions() }
-                )
+                val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
+                if (eqOpen) {
+                    EQScreen(
+                        viewModel = viewModel,
+                        onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
+                    )
+                } else {
+                    RecorderApp(
+                        viewModel = viewModel,
+                        onStartRecording = { requestRecordingPermissions() },
+                        onSelectSaveLocation = { selectSaveDirectory() },
+                        onRequestPermission = { requestRecordingPermissions() },
+                        onOpenEQOnLast = {
+                            val last = viewModel.recordFiles.value.lastOrNull()
+                            if (last != null) {
+                                viewModel.onEQOpen(last)
+                            } else {
+                                Toast.makeText(this, "No recordings yet — record something first", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    )
+                }
             }
         }
     }
