@@ -1,11 +1,14 @@
 package com.example.recorderproject.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,12 +21,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
+import com.example.recorderproject.ui.components.MeatrecMark
+import com.example.recorderproject.ui.components.RecordingFileList
+import com.example.recorderproject.ui.components.SampleRateSelector
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
+import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 
@@ -39,12 +48,18 @@ fun RecorderApp(
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val files by viewModel.recordFiles.collectAsStateWithLifecycle()
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
+    val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.SemiBold) },
-                colors = TopAppBardefaultColors(),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MeatrecMark(size = 32.dp)
+                        Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal),
             )
         },
         containerColor = RecorderCharcoal,
@@ -53,40 +68,90 @@ fun RecorderApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Recording: $fileName", color = RecorderBlueGrey)
-            Text(
-                text = if (isRecording) "● REC" else "Idle",
-                color = if (isRecording) RecorderOrange else RecorderBlueGrey,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
+            // Status row
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(RecorderCharcoalCard)
+                    .padding(14.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("FILE", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                    Text(fileName, color = Color_white(), fontWeight = FontWeight.SemiBold)
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = if (isRecording) "● REC" else "Idle",
+                            color = if (isRecording) RecorderOrange else RecorderBlueGrey,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        SampleRateSelector(
+                            current = sampleRate,
+                            onChange = { viewModel.updateSampleRate(it) },
+                        )
+                    }
+                }
+            }
+
+            // Record / Stop button — large primary
             Button(
-                onClick = {
-                    if (isRecording) viewModel.stopRecording() else onStartRecording()
-                },
+                onClick = { if (isRecording) viewModel.stopRecording() else onStartRecording() },
                 colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             ) {
-                Text(if (isRecording) "Stop" else "Record", fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = if (isRecording) "■ Stop" else "● Record",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                )
             }
-            OutlinedButton(onClick = onSelectSaveLocation) {
-                Text("Choose save folder", color = RecorderYellow)
+
+            // Secondary actions row
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onSelectSaveLocation, modifier = Modifier.weight(1f)) {
+                    Text("Save folder", color = RecorderYellow, fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onOpenEQOnLast,
+                    enabled = files.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        "Open EQ on last",
+                        color = if (files.isNotEmpty()) RecorderYellow else RecorderBlueGrey,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            Text("Recordings: ${files.size}", color = RecorderBlueGrey)
-            OutlinedButton(
-                onClick = onOpenEQOnLast,
-                enabled = files.isNotEmpty(),
+
+            // File list section header
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Open EQ on last recording", color = if (files.isNotEmpty()) RecorderYellow else RecorderBlueGrey)
+                Text("RECORDINGS", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.SemiBold)
+                Text("${files.size}", color = RecorderYellow, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
             }
+
+            RecordingFileList(
+                files = files,
+                onTapFile = { viewModel.selectFile(it) },
+                onTapEQ = { viewModel.onEQOpen(it) },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Small helper because using Color.White directly in many places adds verbosity
 @Composable
-private fun TopAppBardefaultColors() = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal)
+private fun Color_white(): androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
