@@ -43,7 +43,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.recorderproject.ui.components.BitDepthSelector
 import com.example.recorderproject.ui.components.MeatrecMark
+import com.example.recorderproject.ui.components.AudioSourcePicker
 import com.example.recorderproject.ui.components.PreRecordInputsCard
+import com.example.recorderproject.ui.components.RecorderFeatureChips
 import com.example.recorderproject.ui.components.RecordPulseButton
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
@@ -82,8 +84,12 @@ fun RecorderApp(
     }
 
     var slateOpen by remember { mutableStateOf(false) }
+    var sourcePickerOpen by remember { mutableStateOf(false) }
     val sceneName by viewModel.sceneName.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
+    val monitorOn by viewModel.monitorEnabled.collectAsStateWithLifecycle()
+    val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
+    val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -154,6 +160,16 @@ fun RecorderApp(
                     }
                 }
             }
+
+            // Feature chips row: Monitor (BT earphone) · Live EQ · Mic source
+            RecorderFeatureChips(
+                monitorOn = monitorOn,
+                liveEqOn = liveEqOn,
+                micSourceLabel = micSource,
+                onToggleMonitor = { viewModel.toggleMonitor() },
+                onToggleLiveEq = { viewModel.toggleLiveEq() },
+                onOpenSourcePicker = { sourcePickerOpen = true },
+            )
 
             // Pre-record inputs — only shown when not currently recording
             AnimatedVisibility(
@@ -232,6 +248,16 @@ fun RecorderApp(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+
+    if (sourcePickerOpen) {
+        AudioSourcePicker(
+            currentSourceName = micSource,
+            usbDevices = emptyList(),
+            onPickBuiltin = { viewModel.setMicSource(it) },
+            onPickUsb = { viewModel.setMicSource(it.productName) },
+            onDismiss = { sourcePickerOpen = false },
+        )
     }
 
     if (slateOpen) {

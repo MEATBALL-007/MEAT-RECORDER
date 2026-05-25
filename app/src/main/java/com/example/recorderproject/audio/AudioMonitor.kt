@@ -1,0 +1,106 @@
+package com.example.recorderproject.audio
+
+import android.annotation.SuppressLint
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.MediaRecorder
+import android.util.Log
+import com.example.recorderproject.model.EQChain
+import kotlin.concurrent.thread
+
+/**
+ * Phase 7 — Real-time mic-to-output monitor with optional EQ chain.
+ *
+ * Pipes AudioRecord PCM directly to an AudioTrack at low buffer sizes for live monitoring
+ * (Bluetooth earphones, wired earphones, USB). Optional biquad cascade applied per channel.
+ *
+ * Caveat: Android AudioRecord/AudioTrack incurs ~20-80ms latency depending on device and
+ * routing. True near-zero-latency monitoring would require Oboe/AAudio (Phase 7 follow-up).
+ */
+class AudioMonitor(
+    private val sampleRate: Int = 48_000,
+    private val audioSource: Int = MediaRecorder.AudioSource.MIC,
+) {
+    private val tag = "AudioMonitor"
+    @Volatile private var running = false
+    @Volatile private var chain: EQChain = EQChain.empty()
+    private var thread: Thread? = null
+
+    fun setChain(newChain: EQChain) {
+        chain = newChain
+    }
+
+    @SuppressLint("MissingPermission") // permission gated at the caller layer
+    fun start() {
+        if (running) return
+        running = true
+        thread = thread(name = "AudioMonitor") { run() }
+    }
+
+    fun stop() {
+        running = false
+        try { thread?.join(500) } catch (_: InterruptedException) {}
+        thread = null
+    }
+
+    private fun run() {
+        val channelInMask = AudioFormat.CHANNEL_IN_MONO
+        val channelOutMask = AudioFormat.CHANNEL_OUT_MONO
+        val format = AudioFormat.ENCODING_PCM_16BIT
+        val minIn = AudioRecord.getMinBufferSize(sampleRate, channelInMask, format).coerceAtLeast(1024)
+        val minOut = AudioTrack.getMinBufferSize(sampleRate, channelOutMask, format).coerceAtLeast(1024)
+        val bufSamples = maxOf(minIn, minOut) / 2 // shorts
+
+        val record = AudioRecord(audioSource, sampleRate, channelInMask, format, minIn * 2)
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(format)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(channelOutMask)
+                    .build()
+            )
+            .setBufferSizeInBytes(minOut * 2)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+
+        try {
+            record.startRecording()
+            track.play()
+
+            val buf = ShortArray(bufSamples)
+            while (running) {
+                val read = record.read(buf, 0, buf.size)
+                if (read <= 0) continue
+
+                // Apply EQ chain if enabled bands present
+                val activeBands = if (chain.bypassed) emptyList()
+                    else chain.bands.filter { it.enabled && !it.muted }
+                if (activeBands.isNotEmpty()) {
+                    val biquads = activeBands.flatMap { BiquadCoeffs.cascadeForBand(it, sampleRate.toFloat()) }
+                    for (i in 0 until read) {
+                        var x = buf[i].toDouble() / Short.MAX_VALUE
+                        for (b in biquads) x = b.process(x)
+                        buf[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+                    }
+                }
+
+                track.write(buf, 0, read)
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Monitor loop crashed: ${e.message}", e)
+        } finally {
+            try { record.stop(); record.release() } catch (_: Exception) {}
+            try { track.stop(); track.release() } catch (_: Exception) {}
+        }
+    }
+}

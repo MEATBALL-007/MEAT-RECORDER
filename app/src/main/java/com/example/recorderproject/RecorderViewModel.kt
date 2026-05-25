@@ -60,6 +60,62 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateBitDepth(v: Int) { _bitDepth.value = v }
 
+    // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
+
+    private val audioMonitor = com.example.recorderproject.audio.AudioMonitor()
+
+    private val _monitorEnabled = MutableStateFlow(false)
+    val monitorEnabled: StateFlow<Boolean> = _monitorEnabled
+
+    private val _liveEqEnabled = MutableStateFlow(false)
+    val liveEqEnabled: StateFlow<Boolean> = _liveEqEnabled
+
+    private val _micSourceLabel = MutableStateFlow("Microphone")
+    val micSourceLabel: StateFlow<String> = _micSourceLabel
+
+    fun toggleMonitor() {
+        val on = !_monitorEnabled.value
+        if (on) {
+            audioMonitor.setChain(_currentEQChain.value)
+            audioMonitor.start()
+            // Also start Bluetooth SCO for BT earphone monitoring
+            try {
+                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                @Suppress("DEPRECATION")
+                am.startBluetoothSco()
+                @Suppress("DEPRECATION")
+                am.isBluetoothScoOn = true
+            } catch (e: Exception) {
+                Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
+            }
+            Toast.makeText(app, "Monitor on", Toast.LENGTH_SHORT).show()
+        } else {
+            audioMonitor.stop()
+            try {
+                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                @Suppress("DEPRECATION")
+                am.isBluetoothScoOn = false
+                @Suppress("DEPRECATION")
+                am.stopBluetoothSco()
+            } catch (_: Exception) {}
+            Toast.makeText(app, "Monitor off", Toast.LENGTH_SHORT).show()
+        }
+        _monitorEnabled.value = on
+    }
+
+    fun toggleLiveEq() {
+        _liveEqEnabled.value = !_liveEqEnabled.value
+        Toast.makeText(app,
+            if (_liveEqEnabled.value) "Live EQ on — applied automatically after each take"
+            else "Live EQ off",
+            Toast.LENGTH_SHORT).show()
+    }
+
+    fun setMicSource(label: String) {
+        _micSourceLabel.value = label
+        updateAudioSource(label)
+    }
+
     // Save directory
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
@@ -274,12 +330,40 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     recordedFile
                 }
 
-                val finalFile = if (_noiseReductionEnabled.value) {
+                val nrFile = if (_noiseReductionEnabled.value) {
                     Log.d(TAG, "Applying noise reduction")
                     withContext(Dispatchers.IO) { noiseProcessor.process(renamedFile) }
                 } else {
                     renamedFile
                 }
+
+                // Phase 7 — Live EQ auto-apply: if enabled and the chain has active bands, render
+                // the current EQ chain onto the take immediately so the saved file is already EQ'd.
+                val finalFile = if (_liveEqEnabled.value &&
+                    _currentEQChain.value.bands.any { it.enabled && !it.muted } &&
+                    !nrFile.path.startsWith("content://")
+                ) {
+                    try {
+                        val srcFile = File(nrFile.path)
+                        val eqFile = File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.wav")
+                        withContext(Dispatchers.IO) {
+                            com.example.recorderproject.audio.EQProcessor.process(
+                                srcFile, eqFile, _currentEQChain.value,
+                            ) { /* progress ignored for live mode */ }
+                            File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.json")
+                                .writeText(com.example.recorderproject.model.EQChainJson.toJsonString(_currentEQChain.value))
+                        }
+                        Toast.makeText(app, "Live EQ applied", Toast.LENGTH_SHORT).show()
+                        nrFile.copy(
+                            name = eqFile.name,
+                            path = eqFile.absolutePath,
+                            hasEQ = true,
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Live EQ apply failed: ${e.message}", e)
+                        nrFile
+                    }
+                } else nrFile
 
                 _recordFiles.value = _recordFiles.value + finalFile
                 _isRecording.value = false
@@ -704,6 +788,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
+        try { audioMonitor.stop() } catch (_: Exception) {}
         mediaPlayer.release()
     }
 }
