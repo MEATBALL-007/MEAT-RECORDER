@@ -9,9 +9,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.RecorderApp
+import com.example.recorderproject.ui.SplashScreen
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
 
@@ -50,14 +54,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             RecorderProjectTheme {
+                var splashDone by remember { mutableStateOf(false) }
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
-                if (eqOpen) {
-                    EQScreen(
+                when {
+                    !splashDone -> SplashScreen(onDone = { splashDone = true })
+                    eqOpen -> EQScreen(
                         viewModel = viewModel,
                         onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
                     )
-                } else {
-                    RecorderApp(
+                    else -> RecorderApp(
                         viewModel = viewModel,
                         onStartRecording = { requestRecordingPermissions() },
                         onSelectSaveLocation = { selectSaveDirectory() },
