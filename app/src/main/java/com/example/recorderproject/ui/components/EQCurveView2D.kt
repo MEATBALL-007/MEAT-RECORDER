@@ -161,8 +161,11 @@ private fun yToDb(y: Float, height: Float): Float {
 
 /** Combined magnitude (dB) of the chain at log-spaced frequencies via closed-form |H(e^jw)|. */
 private fun computeResponse(chain: EQChain, sampleRate: Float, bins: Int = CURVE_BINS): FloatArray {
-    val activeBands = if (chain.bypassed) emptyList()
-                      else chain.bands.filter { it.enabled && !it.muted }
+    val activeBands = when {
+        chain.bypassed -> emptyList()
+        chain.bands.any { it.soloed && !it.muted } -> chain.bands.filter { it.soloed && !it.muted }
+        else -> chain.bands.filter { it.enabled && !it.muted }
+    }
     if (activeBands.isEmpty()) return FloatArray(bins) { 0f }
     val out = FloatArray(bins)
     for (i in 0 until bins) {

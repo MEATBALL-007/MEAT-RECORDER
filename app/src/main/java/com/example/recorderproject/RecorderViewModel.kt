@@ -464,6 +464,30 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _currentEQChain.value = EQChain(bands = preset.bands)
     }
 
+    fun onEQHumDetect(mainsHz: Float = 60f) {
+        pushEqHistory(_currentEQChain.value)
+        val combNotches = com.example.recorderproject.audio.EQHumDetect.combNotches(mainsHz)
+        // Place into the chain — fill from band 1 onward, overwriting disabled slots
+        var chain = EQChain.empty()
+        for ((idx, notch) in combNotches.withIndex()) {
+            if (idx >= 8) break
+            chain = chain.withBand(notch.copy(id = idx + 1))
+        }
+        _currentEQChain.value = chain
+        Toast.makeText(app, "Placed ${combNotches.size}-notch hum comb at ${mainsHz.toInt()} Hz", Toast.LENGTH_SHORT).show()
+    }
+
+    fun onEQRandomPreset() {
+        pushEqHistory(_currentEQChain.value)
+        _currentEQChain.value = com.example.recorderproject.model.EQRandomPreset.generate()
+    }
+
+    fun onEQSaveAsCustomPreset(name: String) {
+        val store = com.example.recorderproject.data.CustomPresetStore(app)
+        store.save(name, _currentEQChain.value)
+        Toast.makeText(app, "Saved preset: $name", Toast.LENGTH_SHORT).show()
+    }
+
     fun onEQNoiseAutoDetect() {
         val spec = _eqSourceSpectrum.value ?: return
         val suggestions = com.example.recorderproject.audio.EQAutoDetect.proposeNotches(spec, maxBands = 4)

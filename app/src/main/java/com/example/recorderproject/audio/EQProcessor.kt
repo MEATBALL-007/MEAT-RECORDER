@@ -24,8 +24,11 @@ object EQProcessor {
         val channels = header.channels.coerceAtMost(2)
         val sr = header.sampleRate.toFloat()
 
-        val activeBands = if (chain.bypassed) emptyList()
-                          else chain.bands.filter { it.enabled && !it.muted }
+        val activeBands = when {
+            chain.bypassed -> emptyList()
+            chain.bands.any { it.soloed && !it.muted } -> chain.bands.filter { it.soloed && !it.muted }
+            else -> chain.bands.filter { it.enabled && !it.muted }
+        }
         val cascadesPerChannel: List<List<Biquad>> = (0 until channels).map {
             activeBands.flatMap { BiquadCoeffs.cascadeForBand(it, sr) }
         }

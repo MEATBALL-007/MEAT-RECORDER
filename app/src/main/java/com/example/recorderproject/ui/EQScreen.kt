@@ -178,6 +178,8 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
                     EQEditMode.NOISE_CUT -> NoiseCutPanel(
                         chain = chain,
                         onAnalyze = viewModel::onEQNoiseAutoDetect,
+                        onHumDetect50 = { viewModel.onEQHumDetect(50f) },
+                        onHumDetect60 = { viewModel.onEQHumDetect(60f) },
                         onAccept = viewModel::onEQAcceptSuggestion,
                         onReject = viewModel::onEQRejectSuggestion,
                     )

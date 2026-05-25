@@ -110,8 +110,11 @@ private fun freqToX(freqHz: Float, width: Float): Float {
 }
 
 private fun computeResponse(chain: EQChain, sampleRate: Float, bins: Int = 256): FloatArray {
-    val activeBands = if (chain.bypassed) emptyList()
-                      else chain.bands.filter { it.enabled && !it.muted }
+    val activeBands = when {
+        chain.bypassed -> emptyList()
+        chain.bands.any { it.soloed && !it.muted } -> chain.bands.filter { it.soloed && !it.muted }
+        else -> chain.bands.filter { it.enabled && !it.muted }
+    }
     if (activeBands.isEmpty()) return FloatArray(bins) { 0f }
     val out = FloatArray(bins)
     for (i in 0 until bins) {

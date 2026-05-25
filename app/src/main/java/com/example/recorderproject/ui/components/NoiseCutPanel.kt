@@ -28,28 +28,35 @@ import com.example.recorderproject.ui.theme.RecorderYellow
 fun NoiseCutPanel(
     chain: EQChain,
     onAnalyze: () -> Unit,
+    onHumDetect50: () -> Unit,
+    onHumDetect60: () -> Unit,
     onAccept: (EQBand) -> Unit,
     onReject: (EQBand) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = onAnalyze,
                 colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1.2f),
             ) { Text("Analyze", fontWeight = FontWeight.SemiBold) }
-            Text(
-                text = "Drag on curve to draw",
-                color = RecorderBlueGrey,
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF0C0C10))
-                    .padding(vertical = 10.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
+            Button(
+                onClick = onHumDetect50,
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF0C0C10)),
+                modifier = Modifier.weight(1f),
+            ) { Text("Hum 50", color = RecorderYellow) }
+            Button(
+                onClick = onHumDetect60,
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF0C0C10)),
+                modifier = Modifier.weight(1f),
+            ) { Text("Hum 60", color = RecorderYellow) }
         }
+        Text(
+            text = "Drag on the curve to draw a noise-cut shape.",
+            color = RecorderBlueGrey,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
 
         if (chain.noiseCutSuggestions.isEmpty()) {
             Text(
