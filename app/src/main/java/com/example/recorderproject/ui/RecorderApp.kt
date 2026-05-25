@@ -183,6 +183,9 @@ fun RecorderApp(
                 files = files,
                 onTapFile = { viewModel.selectFile(it) },
                 onTapEQ = { viewModel.onEQOpen(it) },
+                onShare = { viewModel.shareRecording(it) },
+                onDelete = { viewModel.deleteRecording(it) },
+                onToggleLock = { viewModel.toggleLockRecording(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

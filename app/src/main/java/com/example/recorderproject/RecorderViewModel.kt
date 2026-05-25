@@ -295,6 +295,52 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun deleteRecording(file: RecordFile) {
+        try {
+            if (!file.path.startsWith("content://")) {
+                val srcFile = File(file.path)
+                if (srcFile.exists()) srcFile.delete()
+                // Also delete companion files (NR / EQ render / sidecar)
+                val parent = srcFile.parentFile
+                val base = srcFile.nameWithoutExtension
+                parent?.listFiles { f -> f.name.startsWith(base) }?.forEach { it.delete() }
+            }
+            _recordFiles.value = _recordFiles.value.filter { it.id != file.id }
+        } catch (e: Exception) {
+            Log.e(TAG, "Delete failed: ${e.message}", e)
+        }
+    }
+
+    fun toggleLockRecording(file: RecordFile) {
+        _recordFiles.value = _recordFiles.value.map {
+            if (it.id == file.id) it.copy(isLocked = !it.isLocked) else it
+        }
+    }
+
+    fun shareRecording(file: RecordFile) {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "audio/wav"
+                val uri = if (file.path.startsWith("content://")) {
+                    android.net.Uri.parse(file.path)
+                } else {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        app, app.packageName + ".fileprovider", File(file.path),
+                    )
+                }
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = android.content.Intent.createChooser(intent, "Share recording").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            app.startActivity(chooser)
+        } catch (e: Exception) {
+            Log.e(TAG, "Share failed: ${e.message}", e)
+            Toast.makeText(app, "Share unavailable: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun applyNoiseReduce(file: RecordFile) {
         viewModelScope.launch {
             val updated = withContext(Dispatchers.IO) { noiseProcessor.process(file) }
