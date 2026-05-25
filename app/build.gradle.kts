@@ -78,6 +78,8 @@ dependencies {
     implementation(libs.java.websocket)
 
     testImplementation(libs.junit)
+    // org.json is only stubs in Android JVM unit tests — pull in the real impl
+    testImplementation("org.json:json:20231013")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
