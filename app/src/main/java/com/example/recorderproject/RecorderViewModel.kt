@@ -7,6 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
 import com.example.recorderproject.audio.NoiseReductionProcessor
+import com.example.recorderproject.audio.StaticSpectrum
+import com.example.recorderproject.model.ApplySaveMode
+import com.example.recorderproject.model.EQChain
+import com.example.recorderproject.model.EQEditMode
+import com.example.recorderproject.model.EQViewMode
 import com.example.recorderproject.model.RecordFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -83,6 +88,48 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     private val _isPlayerReady = MutableStateFlow(false)
     val isPlayerReady: StateFlow<Boolean> = _isPlayerReady
+
+    // ------------- EQ state (Phase 1) -------------
+
+    private val _currentEQChain = MutableStateFlow(EQChain.empty())
+    val currentEQChain: StateFlow<EQChain> = _currentEQChain
+
+    private val _eqMode = MutableStateFlow(EQEditMode.PARAMETRIC)
+    val eqMode: StateFlow<EQEditMode> = _eqMode
+
+    private val _eqViewMode = MutableStateFlow(EQViewMode.TWO_D)
+    val eqViewMode: StateFlow<EQViewMode> = _eqViewMode
+
+    private val _eqSelectedBandId = MutableStateFlow<Int?>(null)
+    val eqSelectedBandId: StateFlow<Int?> = _eqSelectedBandId
+
+    private val _eqSnapshot = MutableStateFlow<EQChain?>(null)
+    val eqSnapshot: StateFlow<EQChain?> = _eqSnapshot
+
+    private val _eqApplySaveMode = MutableStateFlow(ApplySaveMode.BOTH)
+    val eqApplySaveMode: StateFlow<ApplySaveMode> = _eqApplySaveMode
+
+    /** -1f = idle, 0..1 = rendering, exactly 1f shows checkmark briefly. */
+    private val _eqRenderProgress = MutableStateFlow(-1f)
+    val eqRenderProgress: StateFlow<Float> = _eqRenderProgress
+
+    private val _eqSourceFile = MutableStateFlow<RecordFile?>(null)
+    val eqSourceFile: StateFlow<RecordFile?> = _eqSourceFile
+
+    private val _eqSourceSpectrum = MutableStateFlow<StaticSpectrum?>(null)
+    val eqSourceSpectrum: StateFlow<StaticSpectrum?> = _eqSourceSpectrum
+
+    private val _eqBypassed = MutableStateFlow(false)
+    val eqBypassed: StateFlow<Boolean> = _eqBypassed
+
+    /** True while the EQ screen should be shown — MainActivity observes for nav. */
+    private val _eqOpen = MutableStateFlow(false)
+    val eqOpen: StateFlow<Boolean> = _eqOpen
+
+    /** Undo / redo stacks for the chain. Capped at EQ_HISTORY_CAP. */
+    private val eqHistory = ArrayDeque<EQChain>()
+    private val eqRedo = ArrayDeque<EQChain>()
+    private val EQ_HISTORY_CAP = 10
 
     fun onPermissionDenied() {
         Log.d(TAG, "Permission denied")
