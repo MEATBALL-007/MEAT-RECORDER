@@ -105,8 +105,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleLiveEq() {
         _liveEqEnabled.value = !_liveEqEnabled.value
+        // Push the current chain into the recorder right now — if we're mid-recording, EQ takes
+        // effect on the very next PCM buffer the AudioRecord loop reads.
+        if (_liveEqEnabled.value) {
+            recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
+        } else {
+            recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
+        }
         Toast.makeText(app,
-            if (_liveEqEnabled.value) "Live EQ on — applied automatically after each take"
+            if (_liveEqEnabled.value) "Live EQ on — applied in real time to recording"
             else "Live EQ off",
             Toast.LENGTH_SHORT).show()
     }
@@ -283,6 +290,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _isRecording.value = true
         _errorMessage.value = null
         recorder.setAudioSource(_audioSource.value)
+        // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
+        if (_liveEqEnabled.value) {
+            recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
+        } else {
+            recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
+        }
+        recordingStartMs = System.currentTimeMillis()
         Log.d(TAG, "Set audio source to: ${_audioSource.value}")
         try {
             Log.d(TAG, "Calling recorder.start()")
@@ -337,33 +351,24 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     renamedFile
                 }
 
-                // Phase 7 — Live EQ auto-apply: if enabled and the chain has active bands, render
-                // the current EQ chain onto the take immediately so the saved file is already EQ'd.
-                val finalFile = if (_liveEqEnabled.value &&
-                    _currentEQChain.value.bands.any { it.enabled && !it.muted } &&
+                // Phase 7: real-time Live EQ — the chain was baked into the PCM as it was recorded.
+                // Mark the file with hasEQ + write the sidecar JSON so re-opening shows the chain.
+                val finalFile = if (_liveEqEnabled.value && recorder.isLiveEqActive() &&
                     !nrFile.path.startsWith("content://")
                 ) {
                     try {
                         val srcFile = File(nrFile.path)
-                        val eqFile = File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.wav")
-                        withContext(Dispatchers.IO) {
-                            com.example.recorderproject.audio.EQProcessor.process(
-                                srcFile, eqFile, _currentEQChain.value,
-                            ) { /* progress ignored for live mode */ }
-                            File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.json")
-                                .writeText(com.example.recorderproject.model.EQChainJson.toJsonString(_currentEQChain.value))
-                        }
-                        Toast.makeText(app, "Live EQ applied", Toast.LENGTH_SHORT).show()
-                        nrFile.copy(
-                            name = eqFile.name,
-                            path = eqFile.absolutePath,
-                            hasEQ = true,
-                        )
+                        File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.json")
+                            .writeText(com.example.recorderproject.model.EQChainJson.toJsonString(_currentEQChain.value))
+                        nrFile.copy(hasEQ = true)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Live EQ apply failed: ${e.message}", e)
-                        nrFile
+                        Log.e(TAG, "Live EQ sidecar write failed: ${e.message}", e)
+                        nrFile.copy(hasEQ = true)
                     }
                 } else nrFile
+
+                // Recorder no longer needs the chain after the take
+                recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
 
                 _recordFiles.value = _recordFiles.value + finalFile
                 _isRecording.value = false
@@ -580,6 +585,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun onEQBandChanged(updated: com.example.recorderproject.model.EQBand) {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = _currentEQChain.value.withBand(updated)
+        // If Live EQ is engaged, push the updated chain into the recorder immediately.
+        if (_liveEqEnabled.value) {
+            recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
+        }
     }
 
     fun onEQModeToggle(mode: EQEditMode) { _eqMode.value = mode }
@@ -617,6 +626,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun onEQPresetSelected(preset: com.example.recorderproject.model.EQPreset) {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = EQChain(bands = preset.bands)
+        if (_liveEqEnabled.value) {
+            recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
+        }
     }
 
     fun onEQToggleBypass() {

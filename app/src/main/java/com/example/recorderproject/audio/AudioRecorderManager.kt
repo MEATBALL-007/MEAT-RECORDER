@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
+import com.example.recorderproject.model.EQChain
 import com.example.recorderproject.model.RecordFile
 import java.io.BufferedOutputStream
 import java.io.File
@@ -53,6 +54,28 @@ class AudioRecorderManager(private val context: Context) {
     fun setAudioSource(source: Int) {
         audioSource = source
     }
+
+    // ------------- Real-time EQ during recording (Phase 7) -------------
+    //
+    // When set, every PCM frame read from AudioRecord is run through this biquad cascade
+    // BEFORE it lands in the WAV file. Set during recording for true real-time EQ.
+    @Volatile private var liveEqBiquads: List<Biquad> = emptyList()
+    @Volatile private var liveEqActive = false
+
+    /** Push a new EQ chain into the recording loop. Pass null to disable. */
+    fun setLiveEqChain(chain: EQChain?, sr: Float) {
+        if (chain == null) {
+            liveEqActive = false
+            liveEqBiquads = emptyList()
+            return
+        }
+        val active = if (chain.bypassed) emptyList() else chain.bands.filter { it.enabled && !it.muted }
+        liveEqBiquads = active.flatMap { BiquadCoeffs.cascadeForBand(it, sr) }
+        liveEqActive = liveEqBiquads.isNotEmpty()
+    }
+
+    /** True iff a chain with at least one active band is currently being applied. */
+    fun isLiveEqActive(): Boolean = liveEqActive
 
     private fun hasRecordAudioPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
@@ -134,6 +157,15 @@ class AudioRecorderManager(private val context: Context) {
                     val read = recorder?.read(audioBuffer, 0, audioBuffer.size) ?: 0
                     readCount++
                     if (read > 0) {
+                        // Real-time EQ: process every sample through the biquad cascade before write.
+                        val biquads = liveEqBiquads
+                        if (liveEqActive && biquads.isNotEmpty()) {
+                            for (i in 0 until read) {
+                                var x = audioBuffer[i].toDouble() / Short.MAX_VALUE
+                                for (b in biquads) x = b.process(x)
+                                audioBuffer[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+                            }
+                        }
                         writePcmData(audioBuffer, read)
                         val levels = audioBuffer.take(read).map { it / 32768f }
                         onAudioFrame(levels)
