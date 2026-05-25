@@ -547,6 +547,24 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         Toast.makeText(app, "Saved preset: $name", Toast.LENGTH_SHORT).show()
     }
 
+    fun onEQExportCurvePng() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val path = com.example.recorderproject.ui.components.CurveBitmapExport
+                    .exportToGallery(app, _currentEQChain.value, _sampleRate.value.toFloat())
+                withContext(Dispatchers.Main) {
+                    if (path != null) Toast.makeText(app, "Curve PNG saved", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(app, "PNG save failed", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Curve PNG export failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "PNG export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     fun onEQNoiseAutoDetect() {
         val spec = _eqSourceSpectrum.value ?: return
         val suggestions = com.example.recorderproject.audio.EQAutoDetect.proposeNotches(spec, maxBands = 4)

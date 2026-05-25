@@ -27,8 +27,12 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Compare
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.example.recorderproject.ui.components.SaveCustomPresetDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,6 +83,8 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
 
     var bandSheetBand by remember { mutableStateOf<EQBand?>(null) }
     var presetPickerOpen by remember { mutableStateOf(false) }
+    var overflowOpen by remember { mutableStateOf(false) }
+    var saveDialogOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -123,6 +129,28 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
                     }
                     IconButton(onClick = { viewModel.onEQResetAll() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = RecorderBlueGrey)
+                    }
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = RecorderBlueGrey)
+                        }
+                        DropdownMenu(
+                            expanded = overflowOpen,
+                            onDismissRequest = { overflowOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Save as preset…") },
+                                onClick = { overflowOpen = false; saveDialogOpen = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Random preset") },
+                                onClick = { overflowOpen = false; viewModel.onEQRandomPreset() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export curve as PNG") },
+                                onClick = { overflowOpen = false; viewModel.onEQExportCurvePng() },
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal),
@@ -238,6 +266,13 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
         EQPresetPicker(
             onPick = { preset -> viewModel.onEQPresetSelected(preset); presetPickerOpen = false },
             onDismiss = { presetPickerOpen = false },
+        )
+    }
+
+    if (saveDialogOpen) {
+        SaveCustomPresetDialog(
+            onConfirm = { viewModel.onEQSaveAsCustomPreset(it) },
+            onDismiss = { saveDialogOpen = false },
         )
     }
 }
