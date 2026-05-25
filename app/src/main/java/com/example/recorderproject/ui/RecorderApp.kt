@@ -27,10 +27,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.example.recorderproject.ui.components.BitDepthSelector
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.RecordPulseButton
 import com.example.recorderproject.ui.components.RecordingFileList
+import com.example.recorderproject.ui.components.RecordingMeterBar
 import com.example.recorderproject.ui.components.SampleRateSelector
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
@@ -52,6 +62,17 @@ fun RecorderApp(
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
+    val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
+
+    // Elapsed seconds tracker — increments while recording
+    var elapsed by remember { mutableStateOf(0) }
+    LaunchedEffect(isRecording) {
+        elapsed = 0
+        while (isRecording) {
+            kotlinx.coroutines.delay(1000)
+            elapsed++
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -113,6 +134,15 @@ fun RecorderApp(
                         )
                     }
                 }
+            }
+
+            // Recording meter: appears with a fade+expand when recording starts
+            AnimatedVisibility(
+                visible = isRecording,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                RecordingMeterBar(elapsedSeconds = elapsed, levels = waveform)
             }
 
             // Animated Record / Stop button — press scale, ripple, breathing pulse while recording
