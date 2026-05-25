@@ -65,7 +65,9 @@ fun RecorderApp(
             )
             Spacer(Modifier.height(8.dp))
             Button(
-                onClick = onStartRecording,
+                onClick = {
+                    if (isRecording) viewModel.stopRecording() else onStartRecording()
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
             ) {
                 Text(if (isRecording) "Stop" else "Record", fontWeight = FontWeight.SemiBold)

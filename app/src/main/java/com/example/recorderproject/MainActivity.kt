@@ -18,11 +18,18 @@ import android.widget.Toast
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<RecorderViewModel>()
 
+    // Storage permission is a runtime permission only on API <= 28 (legacy storage).
+    // From API 29 onward, scoped storage / app-specific dirs need no permission, and
+    // WRITE_EXTERNAL_STORAGE is silently denied if requested.
+    private val needsLegacyStoragePermission =
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        val storageGranted = permissions[Manifest.permission.WRITE_EXTERNAL_STORAGE] ?: false
+        val storageGranted = !needsLegacyStoragePermission ||
+            (permissions[Manifest.permission.WRITE_EXTERNAL_STORAGE] ?: false)
         if (audioGranted && storageGranted) {
             Toast.makeText(this, "Permissions granted", Toast.LENGTH_SHORT).show()
             viewModel.onPermissionGranted()
@@ -70,24 +77,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestRecordingPermissions() {
-        val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-        val storagePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        val storageGranted = !needsLegacyStoragePermission ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
 
-        android.util.Log.d("MainActivity", "Audio permission: $audioPermission (GRANTED=${PackageManager.PERMISSION_GRANTED})")
-        android.util.Log.d("MainActivity", "Storage permission: $storagePermission (GRANTED=${PackageManager.PERMISSION_GRANTED})")
-
-        if (audioPermission == PackageManager.PERMISSION_GRANTED &&
-            storagePermission == PackageManager.PERMISSION_GRANTED) {
+        if (audioGranted && storageGranted) {
             Toast.makeText(this, "Starting recording...", Toast.LENGTH_SHORT).show()
             viewModel.startRecording()
         } else {
             Toast.makeText(this, "Requesting permissions...", Toast.LENGTH_SHORT).show()
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                )
-            )
+            val perms = if (needsLegacyStoragePermission) {
+                arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            } else {
+                arrayOf(Manifest.permission.RECORD_AUDIO)
+            }
+            permissionLauncher.launch(perms)
         }
     }
 
