@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.recorderproject.model.ApplySaveMode
+import com.example.recorderproject.model.EQViewMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -27,6 +29,8 @@ class SettingsDataStore(private val context: Context) {
     private val maxDurKey = intPreferencesKey("max_duration_sec")
     private val countdownKey = intPreferencesKey("countdown_sec")
     private val gainKey = floatPreferencesKey("input_gain_linear")
+    private val applySaveModeKey = stringPreferencesKey("eq_apply_save_mode")
+    private val eqViewModeKey = stringPreferencesKey("eq_view_mode")
 
     val theme: Flow<String> = context.dataStore.data.map { it[themeKey] ?: "KMUTT" }
     val sampleRate: Flow<Int> = context.dataStore.data.map { it[sampleRateKey] ?: 48000 }
@@ -36,6 +40,14 @@ class SettingsDataStore(private val context: Context) {
     val maxDurationSec: Flow<Int> = context.dataStore.data.map { it[maxDurKey] ?: -1 }
     val countdownSec: Flow<Int> = context.dataStore.data.map { it[countdownKey] ?: 0 }
     val inputGain: Flow<Float> = context.dataStore.data.map { it[gainKey] ?: 1.0f }
+    val applySaveMode: Flow<ApplySaveMode> = context.dataStore.data.map { prefs ->
+        runCatching { ApplySaveMode.valueOf(prefs[applySaveModeKey] ?: ApplySaveMode.BOTH.name) }
+            .getOrDefault(ApplySaveMode.BOTH)
+    }
+    val eqViewMode: Flow<EQViewMode> = context.dataStore.data.map { prefs ->
+        runCatching { EQViewMode.valueOf(prefs[eqViewModeKey] ?: EQViewMode.TWO_D.name) }
+            .getOrDefault(EQViewMode.TWO_D)
+    }
 
     suspend fun setTheme(v: String) = context.dataStore.edit { it[themeKey] = v }
     suspend fun setSampleRate(v: Int) = context.dataStore.edit { it[sampleRateKey] = v }
@@ -45,4 +57,6 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setMaxDurationSec(v: Int) = context.dataStore.edit { it[maxDurKey] = v }
     suspend fun setCountdownSec(v: Int) = context.dataStore.edit { it[countdownKey] = v }
     suspend fun setInputGain(v: Float) = context.dataStore.edit { it[gainKey] = v }
+    suspend fun setApplySaveMode(v: ApplySaveMode) = context.dataStore.edit { it[applySaveModeKey] = v.name }
+    suspend fun setEqViewMode(v: EQViewMode) = context.dataStore.edit { it[eqViewModeKey] = v.name }
 }
