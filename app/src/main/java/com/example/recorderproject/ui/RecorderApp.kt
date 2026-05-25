@@ -41,15 +41,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.example.recorderproject.ui.components.BitDepthSelector
-import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.AudioSourcePicker
+import com.example.recorderproject.ui.components.BitDepthSelector
+import com.example.recorderproject.ui.components.CircleRecordButton
+import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.PreRecordInputsCard
 import com.example.recorderproject.ui.components.RecorderFeatureChips
-import com.example.recorderproject.ui.components.RecordPulseButton
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
 import com.example.recorderproject.ui.components.SampleRateSelector
+import com.example.recorderproject.ui.components.SpectrumSplash
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
@@ -85,12 +86,14 @@ fun RecorderApp(
 
     var slateOpen by remember { mutableStateOf(false) }
     var sourcePickerOpen by remember { mutableStateOf(false) }
+    var splashTrigger by remember { mutableStateOf(0) }
     val sceneName by viewModel.sceneName.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val monitorOn by viewModel.monitorEnabled.collectAsStateWithLifecycle()
     val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -203,11 +206,19 @@ fun RecorderApp(
                 )
             }
 
-            // Animated Record / Stop button — press scale, ripple, breathing pulse while recording
-            RecordPulseButton(
-                isRecording = isRecording,
-                onTap = { if (isRecording) viewModel.stopRecording() else onStartRecording() },
-            )
+            // Centered circular Record / Stop button — morphing icon, breathing rings
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircleRecordButton(
+                    isRecording = isRecording,
+                    onTap = {
+                        splashTrigger++
+                        if (isRecording) viewModel.stopRecording() else onStartRecording()
+                    },
+                )
+            }
 
             // Secondary actions row
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -249,6 +260,13 @@ fun RecorderApp(
             )
         }
     }
+
+    // Spectrum-splash overlay — erupts when Record/Stop is pressed
+    SpectrumSplash(
+        triggerKey = splashTrigger,
+        modifier = Modifier.fillMaxSize(),
+    )
+    } // end outer Box
 
     if (sourcePickerOpen) {
         AudioSourcePicker(
