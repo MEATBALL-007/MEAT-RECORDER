@@ -367,6 +367,220 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // ============= EQ actions (Phase 1) =============
+
+    private fun pushEqHistory(chain: EQChain) {
+        eqHistory.addLast(chain)
+        if (eqHistory.size > EQ_HISTORY_CAP) eqHistory.removeFirst()
+        eqRedo.clear()
+    }
+
+    fun onEQOpen(file: RecordFile) {
+        _eqSourceFile.value = file
+        val srcPath = file.path
+        if (!srcPath.startsWith("content://")) {
+            val sidecar = File(srcPath.replace(Regex("\\.wav$", RegexOption.IGNORE_CASE), "_eq.json"))
+            _currentEQChain.value = if (sidecar.exists()) {
+                com.example.recorderproject.model.EQChainJson.fromJsonString(sidecar.readText())
+                    ?: EQChain.empty()
+            } else EQChain.empty()
+        } else {
+            _currentEQChain.value = EQChain.empty()
+        }
+        eqHistory.clear(); eqRedo.clear()
+        _eqOpen.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!srcPath.startsWith("content://")) {
+                try {
+                    val spec = com.example.recorderproject.audio.SpectrumAnalyzer
+                        .analyzeFile(File(srcPath), bins = 256)
+                    _eqSourceSpectrum.value = spec
+                } catch (e: Exception) {
+                    Log.e(TAG, "Spectrum compute failed: ${e.message}", e)
+                    _eqSourceSpectrum.value = null
+                }
+            } else {
+                _eqSourceSpectrum.value = null
+            }
+        }
+    }
+
+    fun onEQClose() {
+        _eqSourceFile.value?.let { file ->
+            if (!file.path.startsWith("content://")) {
+                val sidecar = File(file.path.replace(Regex("\\.wav$", RegexOption.IGNORE_CASE), "_eq.json"))
+                try {
+                    sidecar.writeText(com.example.recorderproject.model.EQChainJson.toJsonString(_currentEQChain.value))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Sidecar autosave failed: ${e.message}")
+                }
+            }
+        }
+        _eqOpen.value = false
+        _eqSourceSpectrum.value = null
+        _eqRenderProgress.value = -1f
+    }
+
+    fun onEQBandChanged(updated: com.example.recorderproject.model.EQBand) {
+        pushEqHistory(_currentEQChain.value)
+        _currentEQChain.value = _currentEQChain.value.withBand(updated)
+    }
+
+    fun onEQModeToggle(mode: EQEditMode) { _eqMode.value = mode }
+    fun onEQViewModeToggle(mode: EQViewMode) { _eqViewMode.value = mode }
+    fun onEQSelectBand(id: Int?) { _eqSelectedBandId.value = id }
+
+    fun onEQUndo() {
+        val prev = eqHistory.removeLastOrNull() ?: return
+        eqRedo.addLast(_currentEQChain.value)
+        _currentEQChain.value = prev
+    }
+
+    fun onEQRedo() {
+        val next = eqRedo.removeLastOrNull() ?: return
+        eqHistory.addLast(_currentEQChain.value)
+        _currentEQChain.value = next
+    }
+
+    fun onEQABToggle() {
+        val snap = _eqSnapshot.value
+        if (snap == null) {
+            _eqSnapshot.value = _currentEQChain.value
+        } else {
+            val current = _currentEQChain.value
+            _currentEQChain.value = snap
+            _eqSnapshot.value = current
+        }
+    }
+
+    fun onEQResetAll() {
+        pushEqHistory(_currentEQChain.value)
+        _currentEQChain.value = EQChain.empty()
+    }
+
+    fun onEQPresetSelected(preset: com.example.recorderproject.model.EQPreset) {
+        pushEqHistory(_currentEQChain.value)
+        _currentEQChain.value = EQChain(bands = preset.bands)
+    }
+
+    fun onEQNoiseAutoDetect() {
+        val spec = _eqSourceSpectrum.value ?: return
+        val suggestions = com.example.recorderproject.audio.EQAutoDetect.proposeNotches(spec, maxBands = 4)
+        _currentEQChain.value = _currentEQChain.value.copy(noiseCutSuggestions = suggestions)
+        if (suggestions.isEmpty()) {
+            Toast.makeText(app, "Spectrum is clean — no peaks detected", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun onEQAcceptSuggestion(band: com.example.recorderproject.model.EQBand) {
+        val current = _currentEQChain.value
+        val added = current.withAddedBand(band) ?: run {
+            Toast.makeText(app, "8-band limit reached — disable a band first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pushEqHistory(current)
+        _currentEQChain.value = added.copy(
+            noiseCutSuggestions = current.noiseCutSuggestions.filter { it.id != band.id }
+        )
+    }
+
+    fun onEQRejectSuggestion(band: com.example.recorderproject.model.EQBand) {
+        _currentEQChain.value = _currentEQChain.value.copy(
+            noiseCutSuggestions = _currentEQChain.value.noiseCutSuggestions.filter { it.id != band.id }
+        )
+    }
+
+    fun onEQDrawCurve(targetDbCurve: FloatArray) {
+        val bands = com.example.recorderproject.audio.EQCurveFitter
+            .fitToCurve(targetDbCurve, 20f, 20_000f, maxBands = 6)
+        if (bands.isEmpty()) return
+        pushEqHistory(_currentEQChain.value)
+        val padded = bands + (bands.size + 1..8).map { com.example.recorderproject.model.EQBand.defaultForSlot(it) }
+        _currentEQChain.value = EQChain(bands = padded.take(8))
+    }
+
+    fun onEQTapNotch(frequencyHz: Float) {
+        val newBand = com.example.recorderproject.model.EQBand(
+            id = 0,
+            type = com.example.recorderproject.model.EQBandType.NOTCH,
+            frequencyHz = frequencyHz,
+            gainDb = 0f,
+            q = 8f,
+            enabled = true,
+        )
+        val added = _currentEQChain.value.withAddedBand(newBand) ?: run {
+            Toast.makeText(app, "8-band limit reached — disable a band first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pushEqHistory(_currentEQChain.value)
+        _currentEQChain.value = added
+    }
+
+    fun onEQSaveModeChange(mode: ApplySaveMode) { _eqApplySaveMode.value = mode }
+
+    fun onEQApply() {
+        val src = _eqSourceFile.value ?: return
+        val mode = _eqApplySaveMode.value
+        if (mode == ApplySaveMode.ORIGINAL_ONLY) {
+            _currentEQChain.value = EQChain.empty()
+            onEQClose()
+            return
+        }
+        if (src.path.startsWith("content://")) {
+            Toast.makeText(app, "SAF (content://) sources not supported for Apply yet — save to a local folder", Toast.LENGTH_LONG).show()
+            return
+        }
+        val srcFile = File(src.path)
+        val eqFile = File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.wav")
+        val chain = _currentEQChain.value
+        viewModelScope.launch(Dispatchers.IO) {
+            _eqRenderProgress.value = 0f
+            try {
+                com.example.recorderproject.audio.EQProcessor.process(srcFile, eqFile, chain) { p ->
+                    _eqRenderProgress.value = p
+                }
+                when (mode) {
+                    ApplySaveMode.BOTH -> {
+                        File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.json")
+                            .writeText(com.example.recorderproject.model.EQChainJson.toJsonString(chain))
+                        _recordFiles.value = _recordFiles.value.map {
+                            if (it.id == src.id) it.copy(hasEQ = true) else it
+                        }
+                    }
+                    ApplySaveMode.EQ_ONLY -> {
+                        val tmpRename = File(srcFile.parentFile, srcFile.name + ".replacing")
+                        srcFile.renameTo(tmpRename)
+                        if (eqFile.renameTo(srcFile)) {
+                            tmpRename.delete()
+                        } else {
+                            tmpRename.renameTo(srcFile)
+                            eqFile.delete()
+                            throw RuntimeException("Atomic rename failed")
+                        }
+                        _recordFiles.value = _recordFiles.value.map {
+                            if (it.id == src.id) it.copy(hasEQ = true) else it
+                        }
+                    }
+                    ApplySaveMode.ORIGINAL_ONLY -> Unit
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "EQ applied", Toast.LENGTH_SHORT).show()
+                    delay(600)
+                    _eqRenderProgress.value = -1f
+                    onEQClose()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "EQ render failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "EQ render failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+                _eqRenderProgress.value = -1f
+                eqFile.delete()
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         mediaPlayer.release()
