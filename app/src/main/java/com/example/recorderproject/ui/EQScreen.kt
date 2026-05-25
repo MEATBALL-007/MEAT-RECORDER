@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
@@ -60,6 +61,7 @@ import com.example.recorderproject.ui.components.EQBandSheet
 import com.example.recorderproject.ui.components.EQCurveView
 import com.example.recorderproject.ui.components.EQPresetPicker
 import com.example.recorderproject.ui.components.NoiseCutPanel
+import com.example.recorderproject.ui.components.EQBandReadout
 import com.example.recorderproject.ui.components.SaveModeSelector
 import com.example.recorderproject.ui.components.ViewModeToggle
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
@@ -175,13 +177,20 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
                 ViewModeToggle(viewMode, viewModel::onEQViewModeToggle)
             }
 
-            // Curve view
+            // Curve view with floating active-band readout
             Box(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.15f)
                     .clip(RoundedCornerShape(10.dp))
             ) {
+                val selectedBand = chain.bands.firstOrNull { it.id == selectedBandId && it.enabled }
+                EQBandReadout(
+                    band = selectedBand,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .zIndex(2f)
+                )
                 EQCurveView(
                     chain = chain,
                     spectrum = spectrum,
