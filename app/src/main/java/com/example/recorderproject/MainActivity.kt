@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
+import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.SplashScreen
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RecorderProjectTheme {
                 var splashDone by remember { mutableStateOf(false) }
+                var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
                 var settingsOpen by remember { mutableStateOf(false) }
                 var theme by remember { mutableStateOf("MEATrec") }
                 var reduceMotion by remember { mutableStateOf(false) }
@@ -63,6 +65,10 @@ class MainActivity : ComponentActivity() {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 when {
                     !splashDone -> SplashScreen(onDone = { splashDone = true })
+                    !onboardingDone -> OnboardingOverlay(onDone = {
+                        onboardingDone = true
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
+                    })
                     settingsOpen -> SettingsScreenV2(
                         theme = theme,
                         noiseReductionEnabled = noiseReductionEnabled,
