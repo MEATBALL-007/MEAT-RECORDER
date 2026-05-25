@@ -311,6 +311,20 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // Phase 4 — cue points dropped while recording
+    private val _liveCueCount = MutableStateFlow(0)
+    val liveCueCount: StateFlow<Int> = _liveCueCount
+
+    private val pendingCues = mutableListOf<com.example.recorderproject.model.CuePoint>()
+    private var recordingStartMs = 0L
+
+    fun dropCueMarker(label: String = "") {
+        if (!_isRecording.value) return
+        val tMs = System.currentTimeMillis() - recordingStartMs
+        pendingCues.add(com.example.recorderproject.model.CuePoint(timeMs = tMs, label = label))
+        _liveCueCount.value = pendingCues.size
+    }
+
     fun toggleStarRecording(file: RecordFile) {
         _recordFiles.value = _recordFiles.value.map {
             if (it.id == file.id) it.copy(starred = !it.starred) else it
