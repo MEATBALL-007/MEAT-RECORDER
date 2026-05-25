@@ -19,10 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
+
+private fun Modifier.androidx_clickable(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
 
 /**
  * Recording in-progress card: shows mm:ss elapsed timer + rolling rms-history meter.
@@ -32,6 +35,8 @@ import com.example.recorderproject.ui.theme.RecorderYellow
 fun RecordingMeterBar(
     elapsedSeconds: Int,
     levels: List<Float>,
+    cueCount: Int = 0,
+    onDropCue: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -48,12 +53,28 @@ fun RecordingMeterBar(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
             ) {
                 Text("REC", color = RecorderOrange, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                Text(
-                    text = String.format("%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
-                    color = RecorderYellow,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 22.sp,
-                )
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "📍 $cueCount",
+                        color = RecorderYellow,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0C0C10))
+                            .androidx_clickable(onDropCue)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                    Text(
+                        text = String.format("%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
+                        color = RecorderYellow,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 22.sp,
+                    )
+                }
             }
             Canvas(
                 modifier = Modifier

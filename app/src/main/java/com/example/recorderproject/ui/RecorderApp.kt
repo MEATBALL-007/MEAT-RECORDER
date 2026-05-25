@@ -160,7 +160,13 @@ fun RecorderApp(
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically(),
             ) {
-                RecordingMeterBar(elapsedSeconds = elapsed, levels = waveform)
+                val cueCount by viewModel.liveCueCount.collectAsStateWithLifecycle()
+                RecordingMeterBar(
+                    elapsedSeconds = elapsed,
+                    levels = waveform,
+                    cueCount = cueCount,
+                    onDropCue = { viewModel.dropCueMarker() },
+                )
             }
 
             // Animated Record / Stop button — press scale, ripple, breathing pulse while recording
@@ -204,6 +210,7 @@ fun RecorderApp(
                 onShare = { viewModel.shareRecording(it) },
                 onDelete = { viewModel.deleteRecording(it) },
                 onToggleLock = { viewModel.toggleLockRecording(it) },
+                onToggleStar = { viewModel.toggleStarRecording(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

@@ -45,6 +45,7 @@ fun RecordingFileList(
     onShare: (RecordFile) -> Unit = {},
     onDelete: (RecordFile) -> Unit = {},
     onToggleLock: (RecordFile) -> Unit = {},
+    onToggleStar: (RecordFile) -> Unit = {},
     onOpenSpectrogram: (RecordFile) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -65,6 +66,7 @@ fun RecordingFileList(
                 onShare = { onShare(file) },
                 onRequestDelete = { deleteCandidate = file },
                 onToggleLock = { onToggleLock(file) },
+                onToggleStar = { onToggleStar(file) },
                 onOpenSpectrogram = { onOpenSpectrogram(file) },
             )
         }
@@ -101,6 +103,7 @@ private fun FileRow(
     onShare: () -> Unit,
     onRequestDelete: () -> Unit,
     onToggleLock: () -> Unit,
+    onToggleStar: () -> Unit,
     onOpenSpectrogram: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -122,6 +125,7 @@ private fun FileRow(
             Text(file.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${file.durationSeconds}s", color = RecorderBlueGrey, fontSize = 11.sp)
+                if (file.starred) Badge("★")
                 if (file.hasNoiseReduction) Badge("NR")
                 if (file.hasEQ) Badge("EQ")
                 if (file.isLocked) Badge("🔒")
@@ -142,6 +146,10 @@ private fun FileRow(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
         ) {
+            DropdownMenuItem(
+                text = { Text(if (file.starred) "Unstar" else "Star") },
+                onClick = { menuOpen = false; onToggleStar() },
+            )
             DropdownMenuItem(
                 text = { Text("Spectrogram") },
                 onClick = { menuOpen = false; onOpenSpectrogram() },
