@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.RecorderApp
+import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.SplashScreen
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
@@ -55,9 +56,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             RecorderProjectTheme {
                 var splashDone by remember { mutableStateOf(false) }
+                var settingsOpen by remember { mutableStateOf(false) }
+                var theme by remember { mutableStateOf("MEATrec") }
+                var reduceMotion by remember { mutableStateOf(false) }
+                val noiseReductionEnabled by viewModel.noiseReductionEnabled.collectAsStateWithLifecycle()
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 when {
                     !splashDone -> SplashScreen(onDone = { splashDone = true })
+                    settingsOpen -> SettingsScreenV2(
+                        theme = theme,
+                        noiseReductionEnabled = noiseReductionEnabled,
+                        reduceMotion = reduceMotion,
+                        onChangeTheme = { theme = it },
+                        onToggleNR = { viewModel.toggleNoiseReduction(it) },
+                        onToggleReduceMotion = { reduceMotion = it },
+                        onBack = { settingsOpen = false },
+                    )
                     eqOpen -> EQScreen(
                         viewModel = viewModel,
                         onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
@@ -75,6 +89,7 @@ class MainActivity : ComponentActivity() {
                                 Toast.makeText(this, "No recordings yet — record something first", Toast.LENGTH_SHORT).show()
                             }
                         },
+                        onOpenSettings = { settingsOpen = true },
                     )
                 }
             }

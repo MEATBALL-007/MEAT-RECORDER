@@ -15,6 +15,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AssignmentLate
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -56,6 +61,7 @@ fun RecorderApp(
     onSelectSaveLocation: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenEQOnLast: () -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val files by viewModel.recordFiles.collectAsStateWithLifecycle()
@@ -74,6 +80,10 @@ fun RecorderApp(
         }
     }
 
+    var slateOpen by remember { mutableStateOf(false) }
+    val sceneName by viewModel.sceneName.collectAsStateWithLifecycle()
+    val notes by viewModel.notes.collectAsStateWithLifecycle()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,6 +91,14 @@ fun RecorderApp(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MeatrecMark(size = 32.dp)
                         Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { slateOpen = true }) {
+                        Icon(Icons.Outlined.AssignmentLate, contentDescription = "Slate", tint = RecorderBlueGrey)
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = RecorderBlueGrey)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal),
@@ -189,6 +207,21 @@ fun RecorderApp(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+
+    if (slateOpen) {
+        com.example.recorderproject.ui.components.ProductionSlateDialog(
+            initialScene = sceneName,
+            initialTake = "",
+            initialRoll = "",
+            initialCamera = "",
+            initialNotes = notes,
+            onConfirm = { scene, _, _, _, n ->
+                viewModel.updateSceneName(scene)
+                viewModel.updateNotes(n)
+            },
+            onDismiss = { slateOpen = false },
+        )
     }
 }
 
