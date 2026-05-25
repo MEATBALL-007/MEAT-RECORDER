@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.recorderproject.ui.components.BitDepthSelector
 import com.example.recorderproject.ui.components.MeatrecMark
+import com.example.recorderproject.ui.components.PreRecordInputsCard
 import com.example.recorderproject.ui.components.RecordPulseButton
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
@@ -152,6 +153,23 @@ fun RecorderApp(
                         )
                     }
                 }
+            }
+
+            // Pre-record inputs — only shown when not currently recording
+            AnimatedVisibility(
+                visible = !isRecording,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                PreRecordInputsCard(
+                    fileName = fileName,
+                    sceneName = sceneName,
+                    notes = notes,
+                    enabled = !isRecording,
+                    onFileNameChange = { viewModel.updateFileName(it) },
+                    onSceneChange = { viewModel.updateSceneName(it) },
+                    onNotesChange = { viewModel.updateNotes(it) },
+                )
             }
 
             // Recording meter: appears with a fade+expand when recording starts
