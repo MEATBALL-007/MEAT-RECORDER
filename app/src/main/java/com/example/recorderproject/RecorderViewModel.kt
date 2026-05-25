@@ -60,6 +60,17 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateBitDepth(v: Int) { _bitDepth.value = v }
 
+    // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop
+    private val _inputGainDb = MutableStateFlow(0f)
+    val inputGainDb: StateFlow<Float> = _inputGainDb
+
+    fun updateInputGainDb(db: Float) {
+        val clamped = db.coerceIn(-12f, 24f)
+        _inputGainDb.value = clamped
+        val linear = kotlin.math.exp(kotlin.math.ln(10.0) * clamped / 20.0).toFloat()
+        recorder.setInputGain(linear)
+    }
+
     // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
 
     private val audioMonitor = com.example.recorderproject.audio.AudioMonitor()

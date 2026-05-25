@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import com.example.recorderproject.ui.components.AudioSourcePicker
 import com.example.recorderproject.ui.components.BitDepthSelector
 import com.example.recorderproject.ui.components.CircleRecordButton
+import com.example.recorderproject.ui.components.GainSlider
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.PreRecordInputsCard
 import com.example.recorderproject.ui.components.RecorderFeatureChips
@@ -51,6 +52,11 @@ import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
 import com.example.recorderproject.ui.components.SampleRateSelector
 import com.example.recorderproject.ui.components.SpectrumSplash
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn as fadeInAnim
+import androidx.compose.animation.fadeOut as fadeOutAnim
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
@@ -92,6 +98,7 @@ fun RecorderApp(
     val monitorOn by viewModel.monitorEnabled.collectAsStateWithLifecycle()
     val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
+    val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
@@ -116,10 +123,31 @@ fun RecorderApp(
         },
         containerColor = RecorderCharcoal,
     ) { inner ->
+        // Toggle between IDLE home content and RECORDING session view based on isRecording
+        AnimatedContent(
+            targetState = isRecording,
+            transitionSpec = { fadeInAnim(tween(360)) togetherWith fadeOutAnim(tween(200)) },
+            label = "recOrIdle",
+            modifier = Modifier.fillMaxSize().padding(inner),
+        ) { recording ->
+            if (recording) {
+                val cueCountState by viewModel.liveCueCount.collectAsStateWithLifecycle()
+                RecordingSessionView(
+                    fileName = fileName,
+                    elapsedSeconds = elapsed,
+                    levels = waveform,
+                    sampleRate = sampleRate,
+                    cueCount = cueCountState,
+                    onDropCue = { viewModel.dropCueMarker() },
+                    onStop = {
+                        splashTrigger++
+                        viewModel.stopRecording()
+                    },
+                )
+            } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inner)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -163,6 +191,12 @@ fun RecorderApp(
                     }
                 }
             }
+
+            // Input gain slider — drag from -12 to +24 dB, applies in real time
+            GainSlider(
+                valueDb = inputGainDb,
+                onChange = { viewModel.updateInputGainDb(it) },
+            )
 
             // Feature chips row: Monitor (BT earphone) · Live EQ · Mic source
             RecorderFeatureChips(
@@ -258,6 +292,8 @@ fun RecorderApp(
                 onToggleStar = { viewModel.toggleStarRecording(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+            } // end else (idle home)
         }
     }
 

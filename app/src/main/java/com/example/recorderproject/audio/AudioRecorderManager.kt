@@ -62,6 +62,10 @@ class AudioRecorderManager(private val context: Context) {
     @Volatile private var liveEqBiquads: List<Biquad> = emptyList()
     @Volatile private var liveEqActive = false
 
+    /** Input gain multiplier applied before EQ (1.0 = unity). Clipped softly at ±1 after. */
+    @Volatile private var inputGain: Float = 1.0f
+    fun setInputGain(v: Float) { inputGain = v.coerceIn(0.0f, 8.0f) }
+
     /** Push a new EQ chain into the recording loop. Pass null to disable. */
     fun setLiveEqChain(chain: EQChain?, sr: Float) {
         if (chain == null) {
@@ -157,12 +161,17 @@ class AudioRecorderManager(private val context: Context) {
                     val read = recorder?.read(audioBuffer, 0, audioBuffer.size) ?: 0
                     readCount++
                     if (read > 0) {
-                        // Real-time EQ: process every sample through the biquad cascade before write.
+                        // Input gain + Real-time EQ: gain first, then biquad cascade, soft-clip.
+                        val gain = inputGain
                         val biquads = liveEqBiquads
-                        if (liveEqActive && biquads.isNotEmpty()) {
+                        val eqOn = liveEqActive && biquads.isNotEmpty()
+                        val gainOn = kotlin.math.abs(gain - 1.0f) > 0.01f
+                        if (eqOn || gainOn) {
                             for (i in 0 until read) {
                                 var x = audioBuffer[i].toDouble() / Short.MAX_VALUE
-                                for (b in biquads) x = b.process(x)
+                                if (gainOn) x *= gain
+                                if (eqOn) for (b in biquads) x = b.process(x)
+                                if (x > 0.999 || x < -0.999) x = kotlin.math.tanh(x)
                                 audioBuffer[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
                             }
                         }
