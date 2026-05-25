@@ -311,6 +311,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun toggleStarRecording(file: RecordFile) {
+        _recordFiles.value = _recordFiles.value.map {
+            if (it.id == file.id) it.copy(starred = !it.starred) else it
+        }
+    }
+
     fun toggleLockRecording(file: RecordFile) {
         _recordFiles.value = _recordFiles.value.map {
             if (it.id == file.id) it.copy(isLocked = !it.isLocked) else it

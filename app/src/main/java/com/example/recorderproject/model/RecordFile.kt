@@ -16,5 +16,7 @@ data class RecordFile(
     val hasEQ: Boolean = false,
     val syncPointMs: Long? = null,
     val locationTag: String? = null,
-    val environmentTag: String? = null
+    val environmentTag: String? = null,
+    val starred: Boolean = false,
+    val cuePoints: List<CuePoint> = emptyList(),
 )
