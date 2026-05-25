@@ -26,6 +26,8 @@ Fixing screens (#3, #4, #5 from the polish backlog) before fixing the foundation
 
 Confirmed: **dark, sophisticated, instrument/data-viz vibe** — references skew toward fintech dashboards, pro audio interfaces, iOS-quality polish. Not consumer-playful. The brand palette (orange / yellow / blue-grey on charcoal) already supports this. The system formalizes it.
 
+Brand stance also takes a **KMUTT-style institutional wordmark** approach: bold caps, two-tone treatment, paired short words. See "Brand wordmark" section below.
+
 Concretely:
 - Numbers are first-class citizens — tabular monospace for timecodes, dB, Hz, sample rates
 - Hierarchy through restraint — fewer weights, more spacing
@@ -33,6 +35,60 @@ Concretely:
 - 4-pt spacing grid (matches Material default; predictable rhythm)
 - Tighter corner radii than consumer Material (6–10 dp default, not 16–24) — instrument feel
 - Semantic colors (success / warning / error / info) so component code never reaches for raw hex
+
+## Brand wordmark — "MEAT REC"
+
+The app name renders as **two words, two colors, all caps**:
+
+```
+MEAT REC
+████ ███
+ ↑    ↑
+orange yellow
+(#FA4616) (#FFC72C)
+```
+
+| Property | Value |
+|---|---|
+| App display name | `MEAT REC` (was `MEATrec`) |
+| Word 1 | `MEAT` in `RecorderOrange` — primary brand mass |
+| Word 2 | `REC` in `RecorderYellow` — accent / recording-indicator semantic |
+| Font | Plus Jakarta Sans, Bold (700) |
+| Case | ALL CAPS |
+| Letter spacing | 2.5 sp |
+| Inter-word spacing | 8 dp (between MEAT and REC) |
+| Background | `RecorderCharcoal` (or transparent over charcoal surfaces) |
+
+**Why this split:** parallels institutional wordmark patterns (KMUTT-style two-tone), gives the recording-indicator semantic to the "REC" word (industry convention — REC is always the eye-catching word), keeps "MEAT" as the brand mass. The two-color split also makes the wordmark recognizable at thumbnail / launcher size.
+
+**Affected surfaces:**
+- `res/values/strings.xml` → `<string name="app_name">MEAT REC</string>`
+- `RecorderApp.kt:110` → replace single `Text("MEATrec", color = RecorderYellow, ...)` with a `Row` of two `Text` calls per the spec above
+- `SplashScreen.kt` → wordmark uses the same two-color split (file inspection pending; same treatment)
+- `MeatrecMark.kt` icon badge stays unchanged (the orange-yellow sweep gradient already harmonizes); rename of file/symbol to `MeatRecMark` is **out of scope** to keep churn small — comment will note the new spelling.
+
+A `BrandWordmark` composable lives in `ui/components/BrandWordmark.kt` (new) so the split rendering exists in one place and every surface calls it:
+
+```kotlin
+@Composable
+fun BrandWordmark(
+    modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.titleLarge.copy(
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 2.5.sp,
+    ),
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm), // 8.dp
+    ) {
+        Text("MEAT", style = style, color = RecorderOrange)
+        Text("REC",  style = style, color = RecorderYellow)
+    }
+}
+```
+
+Callers pass `style = MaterialTheme.typography.displayMedium...` for splash, `titleLarge` for TopBar — single component, scales by typography token.
 
 ---
 
@@ -47,6 +103,7 @@ Concretely:
 - `Spacing.kt` (**new**) — `object Spacing` with 4-pt grid tokens
 - `Motion.kt` (**new**) — duration + easing tokens, `LocalReduceMotion` composition local
 - One proof-of-use migration: replace the three hardcoded `fontSize = 10.sp, letterSpacing = 1.5.sp` triplets in `RecorderApp.kt` with the new `labelTiny` style, and one magic-dp value with `Spacing.md`
+- Brand wordmark rename: `app_name` → `MEAT REC`; new `BrandWordmark` composable; `RecorderApp` TopBar adopts it
 - Font files added to `app/src/main/res/font/`
 - `docs/superpowers/design-system.md` — usage reference for future PRs
 
@@ -331,6 +388,7 @@ This contains scope without leaving permanent two-system drift.
 - [ ] Plus Jakarta Sans + JetBrains Mono `.ttf` files in `res/font/` and registered via `FontFamily`
 - [ ] `RecorderProjectTheme` accepts `reduceMotion` parameter (default `false`) and provides `LocalReduceMotion`
 - [ ] `RecorderApp.kt` uses `labelTiny` for the three "FILE" / "BIT DEPTH" / "RECORDINGS" labels and `Spacing.md` for one card padding (proof of use)
+- [ ] `strings.xml` app_name = `MEAT REC`; `BrandWordmark` composable exists; `RecorderApp` TopBar renders it instead of the inline `Text("MEATrec", ...)`
 - [ ] No remaining `KmuttMaroon` / `KmuttGold` references in `Theme.kt`
 - [ ] `./gradlew assembleDebug` green
 - [ ] `./gradlew test` green (unchanged behavior)
@@ -350,9 +408,12 @@ These intentionally fall to later specs, listed here so reviewers know what is N
 - **Light theme polish** — beyond functional minimum
 - **Snapshot testing infra** — Paparazzi/Roborazzi setup
 
-## Open questions
+## Resolved judgment calls
 
-None blocking. Two judgment calls worth flagging at review:
+These were flagged for review and confirmed:
 
-1. **Plus Jakarta Sans over Inter** — chose Jakarta for Thai support + slight geometric character; Inter would be the safer/more-neutral pick. Easy swap if you prefer.
-2. **Tightened card radius (12 → 8)** — instrument vibe, but it's a brand call. Reversible.
+1. **Brand wordmark "MEAT REC", MEAT = Orange / REC = Yellow** — confirmed 2026-05-25; parallels KMUTT institutional two-tone treatment; recording-indicator semantic on the REC word.
+2. **Plus Jakarta Sans (display + body)** — confirmed; Thai support + geometric character; over the more neutral Inter alternative.
+3. **Tightened card radius (12 → 8 dp) as `shapes.medium`** — confirmed; instrument vibe over consumer Material default; existing screens that hardcode `RoundedCornerShape(12.dp)` keep working until they migrate.
+
+No open questions remain.
