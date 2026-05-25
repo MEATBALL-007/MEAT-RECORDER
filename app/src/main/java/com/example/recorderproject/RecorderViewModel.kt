@@ -515,6 +515,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _currentEQChain.value = EQChain(bands = preset.bands)
     }
 
+    fun onEQToggleBypass() {
+        _currentEQChain.value = _currentEQChain.value.copy(bypassed = !_currentEQChain.value.bypassed)
+    }
+
+    fun onEQToggleGainCompensation() {
+        _currentEQChain.value = _currentEQChain.value.copy(gainCompensation = !_currentEQChain.value.gainCompensation)
+    }
+
     fun onEQHumDetect(mainsHz: Float = 60f) {
         pushEqHistory(_currentEQChain.value)
         val combNotches = com.example.recorderproject.audio.EQHumDetect.combNotches(mainsHz)

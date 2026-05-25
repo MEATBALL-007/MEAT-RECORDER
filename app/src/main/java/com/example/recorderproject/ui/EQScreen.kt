@@ -25,7 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Compare
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -96,6 +98,20 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.onEQToggleBypass() }) {
+                        Icon(
+                            Icons.Default.PowerSettingsNew,
+                            contentDescription = "Bypass",
+                            tint = if (chain.bypassed) RecorderOrange else RecorderBlueGrey,
+                        )
+                    }
+                    IconButton(onClick = { viewModel.onEQToggleGainCompensation() }) {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = "Gain compensation",
+                            tint = if (chain.gainCompensation) RecorderYellow else RecorderBlueGrey,
+                        )
+                    }
                     IconButton(onClick = { viewModel.onEQUndo() }) {
                         Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = RecorderBlueGrey)
                     }
