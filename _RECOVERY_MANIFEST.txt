@@ -1,0 +1,75 @@
+RECOVERED PROJECT FILE MANIFEST
+================================
+
+Source legend:
+  content.dat-canon    = IntelliJ persistent content cache, classified blob
+  content.dat-versions = Same cache, additional snapshot for same file
+  gemini-history       = Android Studio Gemini Agent conversation log
+
+   size source                 pkg.Name
+--------------------------------------------------------------------------------
+  14881 gemini-history         com.example.recorderproject.audio.AudioRecorderManager
+   7135 content.dat-canon        (alternate version)
+   7135 content.dat-versions     (alternate version)
+   6521 content.dat-versions     (alternate version)
+   6443 content.dat-versions     (alternate version)
+   5979 content.dat-versions     (alternate version)
+  11906 gemini-history         com.example.recorderproject.RecorderViewModel
+   6941 content.dat-canon        (alternate version)
+   6941 content.dat-versions     (alternate version)
+   6879 content.dat-versions     (alternate version)
+   6330 content.dat-versions     (alternate version)
+   5723 content.dat-versions     (alternate version)
+   5709 content.dat-versions     (alternate version)
+   5707 content.dat-versions     (alternate version)
+   5676 content.dat-versions     (alternate version)
+   6465 content.dat-canon      com.example.recorderproject.ui.SettingsScreen
+   6421 content.dat-canon      com.example.recorderproject.audio.AudioSegment
+   6421 content.dat-versions     (alternate version)
+   5973 content.dat-versions     (alternate version)
+   4649 content.dat-versions     (alternate version)
+   5948 content.dat-canon      com.example.recorderproject.ui.components.PresetEditSheet
+   5566 content.dat-canon      com.example.recorderproject.audio.FFTAnalyzer
+   5566 content.dat-versions     (alternate version)
+   4501 content.dat-versions     (alternate version)
+   4435 content.dat-canon      com.example.recorderproject.audio.BtScoState
+   4435 content.dat-versions     (alternate version)
+   4195 content.dat-versions     (alternate version)
+   4171 content.dat-versions     (alternate version)
+   3206 content.dat-canon      com.example.recorderproject.MainActivity
+   3206 content.dat-versions     (alternate version)
+   3092 content.dat-versions     (alternate version)
+   2943 content.dat-versions     (alternate version)
+   2906 content.dat-versions     (alternate version)
+   2779 content.dat-versions     (alternate version)
+   2767 gemini-history           (alternate version)
+   2730 content.dat-versions     (alternate version)
+   2710 content.dat-versions     (alternate version)
+   2522 content.dat-canon      com.example.recorderproject.ui.components.WaveformView
+   2522 content.dat-versions     (alternate version)
+   2522 content.dat-versions     (alternate version)
+   1605 gemini-history           (alternate version)
+   1566 content.dat-versions     (alternate version)
+   1193 content.dat-versions     (alternate version)
+   2263 content.dat-canon      com.example.recorderproject.audio.WavTrimmer
+   2218 content.dat-canon      com.example.recorderproject.network.RecorderRemoteServer
+   2218 content.dat-versions     (alternate version)
+   2217 content.dat-versions     (alternate version)
+   2182 gemini-history         com.example.recorderproject.audio.NoiseReductionProcessor
+   2143 content.dat-canon        (alternate version)
+   2143 content.dat-versions     (alternate version)
+   1405 content.dat-versions     (alternate version)
+    718 content.dat-versions     (alternate version)
+   2147 content.dat-canon      com.example.recorderproject.audio.PitchDetector
+   2030 content.dat-canon      com.example.recorderproject.audio.RoomProfile
+   2030 content.dat-versions     (alternate version)
+   1810 content.dat-versions     (alternate version)
+   1206 content.dat-canon      com.example.recorderproject.data.SettingsDataStore
+    558 content.dat-canon      com.example.recorderproject.model.RecordFile
+    558 content.dat-versions     (alternate version)
+    481 content.dat-versions     (alternate version)
+    453 content.dat-versions     (alternate version)
+    422 content.dat-versions     (alternate version)
+    322 content.dat-versions     (alternate version)
+    373 content.dat-canon      com.example.recorderproject.audio.PitchShifter
+     92 content.dat-canon      com.example.recorderproject.model.EQBandType

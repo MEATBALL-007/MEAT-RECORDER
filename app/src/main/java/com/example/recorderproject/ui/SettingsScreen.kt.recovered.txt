@@ -1,0 +1,154 @@
+package com.example.recorderproject.ui
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.recorderproject.ui.theme.*
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    currentTheme: AppTheme,
+    onThemeSelect: (AppTheme) -> Unit,
+    onBack: () -> Unit
+) {
+    val appColors = LocalAppColors.current
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Appearance", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+                        Text("Choose your theme", fontSize = 11.sp, color = MeatYellow.copy(alpha = 0.85f), letterSpacing = 0.5.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MeatOrange)
+            )
+        },
+        containerColor = appColors.background
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 20.dp)
+        ) {
+            Text(
+                "Theme",
+                color = TextSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+                modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
+            )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement   = Arrangement.spacedBy(12.dp)
+            ) {
+                items(AppTheme.entries) { theme ->
+                    ThemeCard(
+                        theme     = theme,
+                        selected  = theme == currentTheme,
+                        onClick   = { onThemeSelect(theme) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+            HorizontalDivider(color = MeatYellow.copy(alpha = 0.15f), thickness = 0.5.dp)
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "Orange, Yellow and Blue-Grey accents are preserved in all themes.",
+                color    = TextSecondary.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard(
+    theme: AppTheme,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    // Border width animates from 0 to 3dp with a spring when selected
+    val borderWidth by animateDpAsState(
+        targetValue    = if (selected) 2.5.dp else 0.dp,
+        animationSpec  = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label          = "border_${theme.name}"
+    )
+    val borderColor by animateColorAsState(
+        targetValue   = if (selected) MeatOrange else Color.Transparent,
+        animationSpec = tween(200),
+        label         = "borderC_${theme.name}"
+    )
+    val cardBg by animateColorAsState(
+        targetValue   = if (selected) theme.surface else theme.surface.copy(alpha = 0.92f),
+        animationSpec = tween(200),
+        label         = "cardBg_${theme.name}"
+    )
+
+    // Scale pulse on tap
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue   = if (pressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+        label         = "scale_${theme.name}"
+    )
+
+    Box(
+        modifier = Modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(14.dp))
+            .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
+            .background(cardBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication        = null,
+                onClick = {
+                    pressed = true
+                    onClick()
+                }
+            )
+            .padding(16.dp)
+    ) {
+        LaunchedEffect(pressed) {
+            if (pressed) {
+                kotlinx.coroutines.delay(120)
+                pressed = false
+            }
+        }
