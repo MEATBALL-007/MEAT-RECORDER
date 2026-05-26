@@ -79,6 +79,12 @@ fun SettingsScreenV2(
     val antiClipOn by viewModel.antiClipOn.collectAsStateWithLifecycle()
     val vadOn by viewModel.vadOn.collectAsStateWithLifecycle()
     val quality by viewModel.quality.collectAsStateWithLifecycle()
+    val compressorOn by viewModel.compressorOn.collectAsStateWithLifecycle()
+    val stereoWidenerOn by viewModel.stereoWidenerOn.collectAsStateWithLifecycle()
+    val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
+    val lockScreenControlsOn by viewModel.lockScreenControlsOn.collectAsStateWithLifecycle()
+    val groupByScene by viewModel.groupByScene.collectAsStateWithLifecycle()
+    val autoStopMin by viewModel.autoStopMinutes.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -161,6 +167,44 @@ fun SettingsScreenV2(
                 detail = "Auto-arms recording when voice detected",
                 value = vadOn,
                 onChange = { viewModel.toggleVad() },
+            )
+            ToggleRow(
+                label = "Compressor",
+                detail = "Soft-limit transients during recording",
+                value = compressorOn,
+                onChange = { viewModel.toggleCompressor() },
+            )
+            ToggleRow(
+                label = "Stereo widener",
+                detail = "Mid/side widening (stereo recordings only)",
+                value = stereoWidenerOn,
+                onChange = { viewModel.toggleStereoWidener() },
+            )
+            ChipRow(
+                label = "Auto-stop after",
+                options = listOf(0 to "Off", 1 to "1 m", 5 to "5 m", 15 to "15 m", 30 to "30 m"),
+                current = autoStopMin,
+                onChange = { viewModel.setAutoStopMinutes(it) },
+            )
+
+            SectionHeader("ORGANIZATION")
+            ToggleRow(
+                label = "Group recordings by scene",
+                detail = "Visual folder grouping by sceneName tag",
+                value = groupByScene,
+                onChange = { viewModel.toggleGroupByScene() },
+            )
+            ToggleRow(
+                label = "Cloud backup",
+                detail = "Auto-upload to cloud (provider wiring later)",
+                value = cloudBackupOn,
+                onChange = { viewModel.toggleCloudBackup() },
+            )
+            ToggleRow(
+                label = "Lock-screen controls",
+                detail = "Show transport controls on lock screen",
+                value = lockScreenControlsOn,
+                onChange = { viewModel.toggleLockScreenControls() },
             )
 
             SectionHeader("TIMING")

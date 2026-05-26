@@ -474,6 +474,75 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openStats() { _statsOpen.value = true }
     fun closeStats() { _statsOpen.value = false }
 
+    /** G17: trim editor open for which file (null = none). */
+    private val _trimFile = MutableStateFlow<RecordFile?>(null)
+    val trimFile: StateFlow<RecordFile?> = _trimFile
+    fun openTrim(file: RecordFile) { _trimFile.value = file }
+    fun closeTrim() { _trimFile.value = null }
+
+    /** G18: compressor live during record (uses existing MasterLimiter — toggle only). */
+    private val _compressorOn = MutableStateFlow(false)
+    val compressorOn: StateFlow<Boolean> = _compressorOn
+    fun toggleCompressor() { _compressorOn.value = !_compressorOn.value }
+
+    /** G19: stereo widener live (only matters when channelCount=2). */
+    private val _stereoWidenerOn = MutableStateFlow(false)
+    val stereoWidenerOn: StateFlow<Boolean> = _stereoWidenerOn
+    fun toggleStereoWidener() { _stereoWidenerOn.value = !_stereoWidenerOn.value }
+
+    /** G20: cloud backup toggle (no real cloud yet — surfaces intent). */
+    private val _cloudBackupOn = MutableStateFlow(false)
+    val cloudBackupOn: StateFlow<Boolean> = _cloudBackupOn
+    fun toggleCloudBackup() { _cloudBackupOn.value = !_cloudBackupOn.value }
+
+    /** G21: device health snapshot — battery % + remaining storage MB. Computed on demand. */
+    fun snapshotHealth(context: android.content.Context): Pair<Int, Long> {
+        val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+        val battery = try { bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) } catch (_: Exception) { -1 }
+        val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        val freeMb = (stat.availableBlocksLong * stat.blockSizeLong) / (1024L * 1024L)
+        return battery to freeMb
+    }
+
+    /** G22: Pomodoro / auto-stop timer that fires while recording. 0 = off. */
+    private val _autoStopMinutes = MutableStateFlow(0)
+    val autoStopMinutes: StateFlow<Int> = _autoStopMinutes
+    private var autoStopJob: kotlinx.coroutines.Job? = null
+    fun setAutoStopMinutes(m: Int) {
+        _autoStopMinutes.value = m.coerceAtLeast(0)
+    }
+    /** Called by start-recording flow to arm the timer. */
+    fun armAutoStop(onFire: () -> Unit) {
+        autoStopJob?.cancel()
+        val mins = _autoStopMinutes.value
+        if (mins <= 0) return
+        autoStopJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(mins * 60_000L)
+            if (_isRecording.value) onFire()
+        }
+    }
+    fun cancelAutoStop() { autoStopJob?.cancel() }
+
+    /** G23: which files were viewed/played recently (FIFO, capped 10). */
+    private val _recentIds = MutableStateFlow<List<String>>(emptyList())
+    val recentIds: StateFlow<List<String>> = _recentIds
+    fun touchRecent(id: String) {
+        val current = _recentIds.value.toMutableList()
+        current.remove(id)
+        current.add(0, id)
+        _recentIds.value = current.take(10)
+    }
+
+    /** G24: group by sceneName? (folders proxy). */
+    private val _groupByScene = MutableStateFlow(false)
+    val groupByScene: StateFlow<Boolean> = _groupByScene
+    fun toggleGroupByScene() { _groupByScene.value = !_groupByScene.value }
+
+    /** G25: lockscreen control intent — placeholder flag for future foreground-service work. */
+    private val _lockScreenControlsOn = MutableStateFlow(true)
+    val lockScreenControlsOn: StateFlow<Boolean> = _lockScreenControlsOn
+    fun toggleLockScreenControls() { _lockScreenControlsOn.value = !_lockScreenControlsOn.value }
+
     /** Phase D: which file's transcript view is open (null = none). */
     private val _transcriptFile = MutableStateFlow<RecordFile?>(null)
     val transcriptFile: StateFlow<RecordFile?> = _transcriptFile

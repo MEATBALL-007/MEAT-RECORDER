@@ -25,6 +25,7 @@ import com.example.recorderproject.ui.SceneSlicerScreen
 import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.StatisticsScreen
 import com.example.recorderproject.ui.TranscriptScreen
+import com.example.recorderproject.ui.TrimScreen
 import com.example.recorderproject.ui.components.PitchShiftDialog
 import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
@@ -80,6 +81,7 @@ class MainActivity : ComponentActivity() {
                 val sceneSliceFile by viewModel.sceneSliceFile.collectAsStateWithLifecycle()
                 val menuOpen by viewModel.menuOpen.collectAsStateWithLifecycle()
                 val statsOpen by viewModel.statsOpen.collectAsStateWithLifecycle()
+                val trimFile by viewModel.trimFile.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -142,6 +144,18 @@ class MainActivity : ComponentActivity() {
                         statsOpen -> StatisticsScreen(
                             viewModel = viewModel,
                             onBack = { viewModel.closeStats() },
+                        )
+                        trimFile != null -> TrimScreen(
+                            file = trimFile!!,
+                            onConfirm = { inMs, outMs ->
+                                Toast.makeText(
+                                    this,
+                                    "Trim ${inMs}ms..${outMs}ms (export wiring pending)",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                                viewModel.closeTrim()
+                            },
+                            onBack = { viewModel.closeTrim() },
                         )
                         else -> RecorderApp(
                             viewModel = viewModel,
