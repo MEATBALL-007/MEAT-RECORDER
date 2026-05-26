@@ -1,5 +1,14 @@
 package com.example.recorderproject.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.ui.components.IconLineSettings
+import com.example.recorderproject.ui.components.OrangeAura
+import com.example.recorderproject.ui.components.OrangeUnderglow
 
 /**
  * MeatRec home screen — pixel-faithful rebuild of the 22 May APK home.
@@ -85,11 +99,18 @@ fun MeatRecHome(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        // ============== 1. ORANGE TOP BAR ==============
+        // ============== 1. ORANGE TOP BAR (with gradient depth) ==============
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MeatOrange)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFA4616),  // top — solid orange
+                            Color(0xFFE13606),  // bottom — slightly darker for depth
+                        ),
+                    ),
+                )
                 .statusBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -121,6 +142,9 @@ fun MeatRecHome(
             }
         }
 
+        // Underglow strip below the top bar
+        OrangeUnderglow(modifier = Modifier.fillMaxWidth())
+
         // ============== 2. SCROLLABLE BODY ==============
         Column(
             modifier = Modifier
@@ -131,8 +155,11 @@ fun MeatRecHome(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Hero record button + labels
-            BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
+            // Hero record button + aura halo behind
+            Box(contentAlignment = Alignment.Center) {
+                OrangeAura(diameter = 220.dp, recording = isRecording)
+                BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
+            }
             Text(
                 if (isRecording) "Recording…" else "Tap to Record",
                 color = Color.White,
@@ -173,28 +200,55 @@ fun MeatRecHome(
 
 @Composable
 private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.93f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+        label = "recPress",
+    )
+
     Box(
         modifier = Modifier
+            .scale(pressScale)
             .size(220.dp)
             .clip(RoundedCornerShape(110.dp))
-            .background(MeatOrange)
-            .clickable(onClick = onTap),
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFFF5A20),  // brighter center
+                        Color(0xFFFA4616),  // brand
+                        Color(0xFFD13507),  // edge slightly darker for depth
+                    ),
+                ),
+            )
+            .clickable {
+                pressed = true
+                onTap()
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (isRecording) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.White),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White),
-            )
+        // Animated dot ↔ square morph using a Box with animated size
+        val targetSize by animateFloatAsState(
+            targetValue = if (isRecording) 48f else 36f,
+            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+            label = "recMorph",
+        )
+        val targetCorner by animateFloatAsState(
+            targetValue = if (isRecording) 4f else 18f,
+            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+            label = "recCorner",
+        )
+        Box(
+            modifier = Modifier
+                .size(targetSize.dp)
+                .clip(RoundedCornerShape(targetCorner.dp))
+                .background(Color.White),
+        )
+    }
+    androidx.compose.runtime.LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(140)
+            pressed = false
         }
     }
 }
@@ -221,11 +275,26 @@ private fun RecordingSettingsCard(
     onAnalyzeRoom: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(true) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else 180f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label = "chevron",
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(CardBg)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1B1B1B),
+                        Color(0xFF131313),
+                    ),
+                ),
+            )
+            .animateContentSize(
+                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
+            )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -255,9 +324,10 @@ private fun RecordingSettingsCard(
                 )
             }
             Text(
-                text = if (expanded) "▲" else "▼",
+                text = "▲",
                 color = Color.White.copy(alpha = 0.45f),
                 fontSize = 14.sp,
+                modifier = Modifier.rotate(chevronRotation),
             )
         }
 
@@ -459,11 +529,24 @@ private fun <T> PillRow(
     ) {
         for ((value, label, sublabel) in options) {
             val active = value == current
+            // Spring scale on active for a subtle "pop" when selected
+            val scale by animateFloatAsState(
+                targetValue = if (active) 1.02f else 1f,
+                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                label = "pillScale",
+            )
+            // Animated background color for the lit-up effect
+            val bgColor by androidx.compose.animation.animateColorAsState(
+                targetValue = if (active) MeatOrange else Color.Transparent,
+                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
+                label = "pillBg",
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .scale(scale)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (active) MeatOrange else Color.Transparent)
+                    .background(bgColor)
                     .clickable { onSelect(value) }
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

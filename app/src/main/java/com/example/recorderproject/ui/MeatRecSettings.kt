@@ -1,5 +1,10 @@
 package com.example.recorderproject.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,10 +28,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,7 +80,14 @@ fun MeatRecSettings(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MeatOrange)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFA4616),
+                            Color(0xFFE13606),
+                        ),
+                    ),
+                )
                 .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -183,19 +200,54 @@ private fun ThemeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val cardBg = theme.surface // each theme has its own dark palette
-    val borderColor = if (selected) MeatOrange else Color.White.copy(alpha = 0.08f)
-    val borderWidth = if (selected) 2.5.dp else 1.dp
+    var pressed by remember { mutableStateOf(false) }
+    val cardBg = theme.surface
+    // Spring everything when selection state changes — feels tactile.
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+        label = "themePress",
+    )
+    val borderColorAnim by animateColorAsState(
+        targetValue = if (selected) MeatOrange else Color.White.copy(alpha = 0.08f),
+        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
+        label = "themeBorder",
+    )
+    val borderWidthAnim by animateDpAsState(
+        targetValue = if (selected) 2.5.dp else 1.dp,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+        label = "themeBorderWidth",
+    )
 
     Box(
         modifier = modifier
+            .scale(pressScale)
             .height(112.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(cardBg)
-            .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
+            .border(borderWidthAnim, borderColorAnim, RoundedCornerShape(14.dp))
+            .clickable {
+                pressed = true
+                onClick()
+            }
             .padding(14.dp),
     ) {
+        // Glow halo behind the card when selected — subtle aura
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MeatOrange.copy(alpha = 0.10f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    ),
+            )
+        }
         // 3 dots at top-left
         Row(
             modifier = Modifier.align(Alignment.TopStart),
@@ -250,6 +302,14 @@ private fun ThemeCard(
                 .clip(RoundedCornerShape(1.dp))
                 .background(Color.White.copy(alpha = 0.10f)),
         )
+    }
+
+    // Release press scale after a frame so it bounces back
+    androidx.compose.runtime.LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(140)
+            pressed = false
+        }
     }
 }
 
