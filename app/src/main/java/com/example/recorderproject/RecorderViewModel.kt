@@ -55,6 +55,57 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun setSortOrder(order: SortOrder) { _sortOrder.value = order }
 
+    // F6+F7: search query + filter chip
+    enum class FileFilter { ALL, STARRED, LOCKED, NR, EQ }
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
+    fun setSearchQuery(q: String) { _searchQuery.value = q }
+
+    private val _fileFilter = MutableStateFlow(FileFilter.ALL)
+    val fileFilter: StateFlow<FileFilter> = _fileFilter
+    fun setFileFilter(f: FileFilter) { _fileFilter.value = f }
+
+    // F8: bulk multi-select state for RECORDINGS list
+    private val _selectedFileIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedFileIds: StateFlow<Set<String>> = _selectedFileIds
+
+    fun toggleFileSelection(id: String) {
+        _selectedFileIds.value = _selectedFileIds.value.toMutableSet().also {
+            if (!it.add(id)) it.remove(id)
+        }
+    }
+    fun clearSelection() { _selectedFileIds.value = emptySet() }
+    fun selectAll() { _selectedFileIds.value = _recordFiles.value.map { it.id }.toSet() }
+
+    fun deleteSelected() {
+        val ids = _selectedFileIds.value
+        if (ids.isEmpty()) return
+        _recordFiles.value.filter { it.id in ids }.forEach { deleteRecording(it) }
+        _selectedFileIds.value = emptySet()
+    }
+
+    /**
+     * Files filtered by [searchQuery] (case-insensitive substring of name) AND
+     * [fileFilter] chip, then sorted per [sortOrder]. UI should observe this.
+     */
+    val visibleRecordFiles: StateFlow<List<RecordFile>> = kotlinx.coroutines.flow.combine(
+        _recordFiles, _sortOrder, _searchQuery, _fileFilter,
+    ) { files, order, query, filter ->
+        val matched = files.filter { f ->
+            val matchesQuery = query.isBlank() || f.name.contains(query, ignoreCase = true)
+            val matchesFilter = when (filter) {
+                FileFilter.ALL -> true
+                FileFilter.STARRED -> f.starred
+                FileFilter.LOCKED -> f.isLocked
+                FileFilter.NR -> f.hasNoiseReduction
+                FileFilter.EQ -> f.hasEQ
+            }
+            matchesQuery && matchesFilter
+        }
+        applySort(matched, order)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private fun applySort(files: List<RecordFile>, order: SortOrder): List<RecordFile> = when (order) {
         SortOrder.DATE_NEWEST    -> files.asReversed()
         SortOrder.DATE_OLDEST    -> files
@@ -66,6 +117,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
+
+    /** F2: paused-while-recording state. When true, the recording loop still runs but
+     *  written-sample count is held — the file ends up with no data while paused. */
+    private val _isPaused = MutableStateFlow(false)
+    val isPaused: StateFlow<Boolean> = _isPaused
+    fun togglePause() {
+        if (!_isRecording.value) return
+        _isPaused.value = !_isPaused.value
+    }
 
     private val _currentWaveform = MutableStateFlow<List<Float>>(emptyList())
     val currentWaveform: StateFlow<List<Float>> = _currentWaveform
@@ -338,6 +398,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * Phase E: Run PitchShifter on [file] at [semitones]. Output saved alongside
      * original with `_pitch+N` suffix. Returns the resulting File or null on error.
      */
+    /**
+     * F3: Detect sync point in [file] (first onset, ms from start). Stores result
+     * on the in-memory RecordFile as `syncPointMs` so future UI can show a badge
+     * or jump-to-onset action.
+     */
+    fun detectSyncPoint(file: RecordFile): Long? {
+        val ms = com.example.recorderproject.audio.SyncDetector.detect(file.path) ?: return null
+        _recordFiles.value = _recordFiles.value.map {
+            if (it.id == file.id) it.copy(syncPointMs = ms) else it
+        }
+        return ms
+    }
+
     fun shiftFilePitch(file: RecordFile, semitones: Float): java.io.File? {
         if (file.path.startsWith("content://")) return null
         return try {

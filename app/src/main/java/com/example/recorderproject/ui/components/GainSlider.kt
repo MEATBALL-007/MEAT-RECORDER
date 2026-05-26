@@ -1,12 +1,14 @@
 package com.example.recorderproject.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -58,6 +60,23 @@ fun GainSlider(
             Text("-12", color = RecorderBlueGrey, fontSize = 10.sp)
             Text("0", color = RecorderBlueGrey, fontSize = 10.sp)
             Text("+24", color = RecorderBlueGrey, fontSize = 10.sp)
+        }
+        // F10: quick gain presets — one-tap to common values
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(-6f, 0f, 6f, 12f).forEach { preset ->
+                val active = valueDb == preset
+                Text(
+                    text = if (preset == 0f) "0" else String.format("%+.0f", preset),
+                    color = if (active) RecorderOrange else RecorderBlueGrey,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (active) RecorderOrange.copy(alpha = 0.15f) else Color(0xFF0C0C10))
+                        .clickable { onChange(preset) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }

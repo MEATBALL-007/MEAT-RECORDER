@@ -79,8 +79,11 @@ fun RecordingFileList(
     onDetectSync: (RecordFile) -> Unit = {},
     onPitchShift: (RecordFile) -> Unit = {},
     onApplyNR: (RecordFile) -> Unit = {},
+    selectedIds: Set<String> = emptySet(),
+    onToggleSelect: (RecordFile) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val selectionMode = selectedIds.isNotEmpty()
     if (files.isEmpty()) {
         Box(modifier = modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
             Text("No recordings yet — tap Record to start", color = RecorderBlueGrey)
@@ -93,9 +96,18 @@ fun RecordingFileList(
 
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(files) { file ->
+            val selected = file.id in selectedIds
             FileRow(
                 file = file,
-                onTap = { onTapFile(file) },
+                selected = selected,
+                onTap = {
+                    if (selectionMode) onToggleSelect(file) else onTapFile(file)
+                },
+                onLongPress = {
+                    // Long-press still opens the dropdown menu via FileRow's internal state.
+                    // (Multi-select is entered via the "Select" menu item below.)
+                },
+                onSelect = { onToggleSelect(file) },
                 onTapEQ = { onTapEQ(file) },
                 onShare = { onShare(file) },
                 onRequestDelete = { deleteCandidate = file },
@@ -212,7 +224,10 @@ private fun InfoLine(label: String, value: String, mono: Boolean = false) {
 @Composable
 private fun FileRow(
     file: RecordFile,
+    selected: Boolean,
     onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    onSelect: () -> Unit,
     onTapEQ: () -> Unit,
     onShare: () -> Unit,
     onRequestDelete: () -> Unit,
@@ -229,12 +244,13 @@ private fun FileRow(
     onApplyNR: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val rowBg = if (selected) Color(0xFF3A1F0A) else RecorderCharcoalCard
 
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(RecorderCharcoalCard)
+            .background(rowBg)
             .combinedClickable(
                 onClick = onTap,
                 onLongClick = { menuOpen = true },
@@ -246,18 +262,21 @@ private fun FileRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(file.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${file.durationSeconds}s", color = RecorderBlueGrey, fontSize = 11.sp)
+                Text(formatElapsed(file.durationSeconds), color = RecorderBlueGrey, fontSize = 11.sp)
                 if (file.starred) Badge("★")
                 if (file.hasNoiseReduction) Badge("NR")
                 if (file.hasEQ) Badge("EQ")
                 if (file.isLocked) Badge("🔒")
             }
         }
+        // F9: mini waveform thumbnail
+        MiniWaveform(path = file.path)
         Text(
             "EQ →",
             color = RecorderOrange,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
+                .padding(start = 8.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color(0xFF0C0C10))
                 .combinedClickable(onClick = onTapEQ)
@@ -268,6 +287,12 @@ private fun FileRow(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
         ) {
+            // F8 entry point
+            DropdownMenuItem(
+                text = { Text(if (selected) "Deselect" else "Select") },
+                onClick = { menuOpen = false; onSelect() },
+            )
+            HorizontalDivider()
             // Group 1 — quick file operations
             DropdownMenuItem(
                 text = { Text("Rename") },

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.PreRecordInputsCard
 import com.example.recorderproject.ui.components.MonitorLevelMeter
 import com.example.recorderproject.ui.components.RecorderFeatureChips
+import com.example.recorderproject.ui.components.formatElapsed
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
 import com.example.recorderproject.ui.components.SampleRateSelector
@@ -91,8 +93,11 @@ fun RecorderApp(
     onOpenSettings: () -> Unit = {},
 ) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
-    val files by viewModel.sortedRecordFiles.collectAsStateWithLifecycle()
+    val files by viewModel.visibleRecordFiles.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val fileFilter by viewModel.fileFilter.collectAsStateWithLifecycle()
+    val selectedIds by viewModel.selectedFileIds.collectAsStateWithLifecycle()
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
@@ -255,6 +260,21 @@ fun RecorderApp(
                 }
             }
 
+            // Centered circular Record / Stop button — moved to TOP per UX request
+            // so the primary action is always within thumb-reach from the status row.
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircleRecordButton(
+                    isRecording = isRecording,
+                    onTap = {
+                        splashTrigger++
+                        if (isRecording) viewModel.stopRecording() else onStartRecording()
+                    },
+                )
+            }
+
             // Input gain slider — drag from -12 to +24 dB, applies in real time
             GainSlider(
                 valueDb = inputGainDb,
@@ -304,25 +324,15 @@ fun RecorderApp(
                 exit = fadeOut() + shrinkVertically(),
             ) {
                 val cueCount by viewModel.liveCueCount.collectAsStateWithLifecycle()
+                val isPaused by viewModel.isPaused.collectAsStateWithLifecycle()
                 RecordingMeterBar(
                     elapsedSeconds = elapsed,
                     levels = waveform,
                     cueCount = cueCount,
+                    isPaused = isPaused,
                     onDropCue = { viewModel.dropCueMarker() },
-                )
-            }
-
-            // Centered circular Record / Stop button — morphing icon, breathing rings
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircleRecordButton(
-                    isRecording = isRecording,
-                    onTap = {
-                        splashTrigger++
-                        if (isRecording) viewModel.stopRecording() else onStartRecording()
-                    },
+                    onDropCueWithLabel = { viewModel.dropCueMarker(label = it) },
+                    onTogglePause = { viewModel.togglePause() },
                 )
             }
 
@@ -360,6 +370,62 @@ fun RecorderApp(
                 }
             }
 
+            // F6: search bar
+            com.example.recorderproject.ui.components.RecordingsSearchBar(
+                query = searchQuery,
+                onChange = { viewModel.setSearchQuery(it) },
+            )
+
+            // F7: filter chips
+            com.example.recorderproject.ui.components.RecordingsFilterChips(
+                current = fileFilter,
+                onChange = { viewModel.setFileFilter(it) },
+            )
+
+            // F8: bulk-selection action bar — visible only when something is selected
+            AnimatedVisibility(
+                visible = selectedIds.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(RecorderCharcoalCard)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "${selectedIds.size} selected",
+                        color = RecorderYellow,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        Text(
+                            "Clear",
+                            color = RecorderBlueGrey,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0C0C10))
+                                .clickable { viewModel.clearSelection() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            "🗑 Delete",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(RecorderOrange)
+                                .clickable { viewModel.deleteSelected() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+
             val ctx = androidx.compose.ui.platform.LocalContext.current
             RecordingFileList(
                 files = files,
@@ -388,11 +454,13 @@ fun RecorderApp(
                     android.widget.Toast.makeText(ctx, "Ghost take set: ${it.name}", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDetectSync = {
-                    // Sync detection is a small DSP feature — stubbed for now, will use
-                    // PitchDetector / FFTAnalyzer crosscorrelation in a follow-up.
-                    android.widget.Toast.makeText(ctx, "Sync detect — coming next release", android.widget.Toast.LENGTH_SHORT).show()
+                    val ms = viewModel.detectSyncPoint(it)
+                    val msg = if (ms != null) "Sync at ${formatElapsed((ms / 1000L).toInt())} (${ms} ms)" else "No onset found"
+                    android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onPitchShift = { viewModel.openPitchShift(it) },
+                selectedIds = selectedIds,
+                onToggleSelect = { viewModel.toggleFileSelection(it.id) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
