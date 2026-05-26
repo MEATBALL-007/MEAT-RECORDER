@@ -86,6 +86,8 @@ fun RecordingActiveSection(
     onOpenEqEditor: () -> Unit = {},
     liveNoiseGateOn: Boolean = false,
     onToggleLiveNoiseGate: () -> Unit = {},
+    liveEqBandGains: FloatArray = FloatArray(6),
+    onChangeLiveEqBand: (Int, Float) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -138,6 +140,13 @@ fun RecordingActiveSection(
             )
         }
         LiveWaveformCard(waveform = waveform)
+        // Q1: 6-band live EQ — only shown when Live EQ is toggled on
+        if (liveEqOn) {
+            LiveEqBandStrip(
+                bandGainsDb = liveEqBandGains,
+                onChangeBand = onChangeLiveEqBand,
+            )
+        }
         SpectrumCard(spectrumHistory = spectrumHistory, fallbackWaveform = waveform)
         PitchCard(pitchHz = pitchHz)
     }

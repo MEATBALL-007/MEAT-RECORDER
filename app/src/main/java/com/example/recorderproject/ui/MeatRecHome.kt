@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
@@ -106,6 +107,10 @@ fun MeatRecHome(
     onDeleteFile: (RecordFile) -> Unit = {},
     onTrimFile: (RecordFile) -> Unit = {},
     onEQFile: (RecordFile) -> Unit = {},
+    selectedIds: Set<String> = emptySet(),
+    onToggleSelect: (RecordFile) -> Unit = {},
+    onBulkDelete: () -> Unit = {},
+    onClearSelection: () -> Unit = {},
     searchQuery: String = "",
     onSearchChange: (String) -> Unit = {},
     fileFilter: com.example.recorderproject.RecorderViewModel.FileFilter = com.example.recorderproject.RecorderViewModel.FileFilter.ALL,
@@ -128,6 +133,8 @@ fun MeatRecHome(
     onOpenEqEditor: () -> Unit = {},
     liveNoiseGateOn: Boolean = false,
     onToggleLiveNoiseGate: () -> Unit = {},
+    liveEqBandGains: FloatArray = FloatArray(6),
+    onChangeLiveEqBand: (Int, Float) -> Unit = { _, _ -> },
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -215,8 +222,17 @@ fun MeatRecHome(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Hero record button + aura halo behind
+            // Hero record button + LiquidBlob backdrop + aura halo behind
             Box(contentAlignment = Alignment.Center) {
+                // Subtle LiquidBlob — only visible while recording, gives a "live"
+                // feel without competing with the button itself
+                if (isRecording) {
+                    Box(modifier = Modifier.size(360.dp).alpha(0.22f)) {
+                        com.example.recorderproject.ui.components.LiquidBlobCanvas(
+                            modifier = Modifier.size(360.dp),
+                        )
+                    }
+                }
                 OrangeAura(diameter = 220.dp, recording = isRecording)
                 BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
             }
@@ -255,6 +271,8 @@ fun MeatRecHome(
                     onOpenEqEditor = onOpenEqEditor,
                     liveNoiseGateOn = liveNoiseGateOn,
                     onToggleLiveNoiseGate = onToggleLiveNoiseGate,
+                    liveEqBandGains = liveEqBandGains,
+                    onChangeLiveEqBand = onChangeLiveEqBand,
                 )
             }
 
@@ -285,6 +303,50 @@ fun MeatRecHome(
                 maxDurationMinutes = maxDurationMinutes,
                 onChangeMaxDuration = onChangeMaxDuration,
             )
+
+            // Q6: bulk-select action bar — only visible when items are selected
+            if (selectedIds.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MeatOrange.copy(alpha = 0.18f))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "${selectedIds.size} selected",
+                        color = MeatOrange,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Clear",
+                            color = Color.White.copy(alpha = 0.65f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1F1F1F))
+                                .clickable(onClick = onClearSelection)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            "Delete",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MeatOrange)
+                                .clickable(onClick = onBulkDelete)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
 
             // Batch 4: Toolbar above the recordings list (search + filter + sort)
             if (files.isNotEmpty() || searchQuery.isNotEmpty()) {

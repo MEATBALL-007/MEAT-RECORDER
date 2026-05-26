@@ -41,7 +41,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _recordFiles = MutableStateFlow<List<RecordFile>>(emptyList())
     val recordFiles: StateFlow<List<RecordFile>> = _recordFiles
 
-    private val _sortOrder = MutableStateFlow(SortOrder.Default)
+    // Q5: persisted across sessions via SharedPreferences
+    private val prefs = application.getSharedPreferences("meatrec_ui", 0)
+    private val _sortOrder = MutableStateFlow(
+        runCatching { SortOrder.valueOf(prefs.getString("sort_order", null) ?: "") }
+            .getOrElse { SortOrder.Default }
+    )
     val sortOrder: StateFlow<SortOrder> = _sortOrder
 
     /**
@@ -53,7 +58,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         applySort(files, order)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    fun setSortOrder(order: SortOrder) { _sortOrder.value = order }
+    fun setSortOrder(order: SortOrder) {
+        _sortOrder.value = order
+        prefs.edit().putString("sort_order", order.name).apply()
+    }
 
     // F6+F7: search query + filter chip
     enum class FileFilter { ALL, STARRED, LOCKED, NR, EQ }
@@ -62,9 +70,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val searchQuery: StateFlow<String> = _searchQuery
     fun setSearchQuery(q: String) { _searchQuery.value = q }
 
-    private val _fileFilter = MutableStateFlow(FileFilter.ALL)
+    private val _fileFilter = MutableStateFlow(
+        runCatching { FileFilter.valueOf(prefs.getString("file_filter", null) ?: "") }
+            .getOrElse { FileFilter.ALL }
+    )
     val fileFilter: StateFlow<FileFilter> = _fileFilter
-    fun setFileFilter(f: FileFilter) { _fileFilter.value = f }
+    fun setFileFilter(f: FileFilter) {
+        _fileFilter.value = f
+        prefs.edit().putString("file_filter", f.name).apply()
+    }
 
     // F8: bulk multi-select state for RECORDINGS list
     private val _selectedFileIds = MutableStateFlow<Set<String>>(emptySet())
@@ -489,6 +503,37 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openDesignPicker() { _designPickerOpen.value = true }
     fun closeDesignPicker() { _designPickerOpen.value = false }
 
+    /** Q1: live EQ band gains (6 bands: 60/200/500/1k/3k/10k Hz) in dB.
+     *  Tapping +/− on the LiveEqBandStrip writes here; ViewModel pushes a new
+     *  EQChain into the recorder if recording is active. */
+    private val _liveEqBandGains = MutableStateFlow(FloatArray(6))
+    val liveEqBandGains: StateFlow<FloatArray> = _liveEqBandGains
+    fun setLiveEqBand(band: Int, gainDb: Float) {
+        val arr = _liveEqBandGains.value.copyOf()
+        if (band in arr.indices) {
+            arr[band] = gainDb.coerceIn(-12f, 12f)
+            _liveEqBandGains.value = arr
+            // Build an EQChain and push to recorder if recording.
+            if (_isRecording.value) {
+                val freqs = floatArrayOf(60f, 200f, 500f, 1000f, 3000f, 10000f)
+                val bands = arr.mapIndexed { i, g ->
+                    com.example.recorderproject.model.EQBand(
+                        id = i + 1,
+                        type = com.example.recorderproject.model.EQBandType.BELL,
+                        frequencyHz = freqs[i],
+                        gainDb = g,
+                        q = 1.0f,
+                        enabled = kotlin.math.abs(g) > 0.05f,
+                    )
+                }
+                recorder.setLiveEqChain(
+                    com.example.recorderproject.model.EQChain(bands = bands, bypassed = false),
+                    _sampleRate.value.toFloat(),
+                )
+            }
+        }
+    }
+
     /** N2: currently selected recording mode + auto-apply preset on change. */
     private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
     val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = _recorderMode
@@ -767,6 +812,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             ) { level ->
                 _currentWaveform.value = level
             }
+            // Q2: start foreground service so recording survives screen-off
+            try {
+                val intent = android.content.Intent(
+                    app, com.example.recorderproject.audio.RecordingForegroundService::class.java,
+                )
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not start foreground service: ${e.message}")
+            }
             // M1/M2: wire live spectrum + pitch listeners
             recorder.setSpectrumListener { bands ->
                 _liveSpectrum.value = bands
@@ -800,6 +858,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
         _spectrumHistory.value = emptyList()
+
+        // Q2: stop foreground service
+        try {
+            app.stopService(
+                android.content.Intent(
+                    app, com.example.recorderproject.audio.RecordingForegroundService::class.java,
+                ),
+            )
+        } catch (_: Exception) {}
 
         val capturedScene = _sceneName.value
         val capturedNotes = _notes.value

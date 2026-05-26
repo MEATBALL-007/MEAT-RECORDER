@@ -168,6 +168,54 @@ fun MeatRecSettings(
                 Text("Change →", color = MeatOrange, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
 
+            // Q3: Storage indicator + remaining time estimate
+            val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+            val freeBytes = stat.availableBlocksLong * stat.blockSizeLong
+            val freeMb = freeBytes / (1024L * 1024L)
+            val sampleRateVal = viewModel.sampleRate.collectAsStateWithLifecycle().value
+            val bitDepthVal = viewModel.bitDepth.collectAsStateWithLifecycle().value
+            val channelsVal = viewModel.channelCount.collectAsStateWithLifecycle().value
+            val bytesPerSec = sampleRateVal.toLong() * (bitDepthVal / 8) * channelsVal
+            val remainingSec = if (bytesPerSec > 0) freeBytes / bytesPerSec else 0L
+            val remainingH = remainingSec / 3600
+            val remainingM = (remainingSec % 3600) / 60
+            SectionHeader("STORAGE")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF161616))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Free space", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${if (freeMb < 1024) "$freeMb MB" else "%.1f GB".format(freeMb / 1024f)} · " +
+                            "~${remainingH}h ${remainingM}m at current settings",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                    )
+                }
+                // Tiny visual bar — % used (out of total). StatFs gives availableBlocks, not total
+                val totalBytes = stat.blockCountLong * stat.blockSizeLong
+                val usedFrac = if (totalBytes > 0) 1f - (freeBytes.toFloat() / totalBytes.toFloat()) else 0f
+                Box(
+                    modifier = Modifier
+                        .size(width = 60.dp, height = 6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFF2A2A2A)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = (60 * usedFrac).dp, height = 6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (usedFrac > 0.85f) MeatOrange else MeatYellow),
+                    )
+                }
+            }
+
             SectionHeader("APPEARANCE")
             ThemeGrid(currentTheme = currentTheme, onChange = onChangeTheme)
 

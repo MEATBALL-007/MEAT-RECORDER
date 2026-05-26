@@ -214,6 +214,12 @@ fun RecorderApp(
         },
         liveNoiseGateOn = liveNoiseGateOn,
         onToggleLiveNoiseGate = { viewModel.toggleLiveNoiseGate() },
+        liveEqBandGains = viewModel.liveEqBandGains.collectAsStateWithLifecycle().value,
+        onChangeLiveEqBand = { band, gain -> viewModel.setLiveEqBand(band, gain) },
+        selectedIds = selectedIds,
+        onToggleSelect = { viewModel.toggleFileSelection(it.id) },
+        onBulkDelete = { viewModel.deleteSelected() },
+        onClearSelection = { viewModel.clearSelection() },
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
