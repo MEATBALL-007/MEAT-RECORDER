@@ -168,6 +168,9 @@ fun RecorderApp(
         onAnalyzeRoom = { viewModel.openRoomProfiler() },
         files = files,
         onTapFile = { viewModel.selectFile(it) },
+        elapsedSeconds = elapsed,
+        waveform = waveform,
+        inputLevelPercent = (monitorLevel.rmsDb + 60f).coerceIn(0f, 60f).let { (it / 60f * 100f).toInt() },
     )
 
     // Spectrum-splash overlay — erupts when Record/Stop is pressed

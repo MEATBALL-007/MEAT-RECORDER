@@ -92,6 +92,9 @@ fun MeatRecHome(
     onAnalyzeRoom: () -> Unit = {},
     files: List<RecordFile> = emptyList(),
     onTapFile: (RecordFile) -> Unit = {},
+    elapsedSeconds: Int = 0,
+    waveform: List<Float> = emptyList(),
+    inputLevelPercent: Int = 0,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -166,11 +169,26 @@ fun MeatRecHome(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Text(
-                if (isRecording) "Tap the button to stop recording" else "Tap the button to start recording",
-                color = Color.White.copy(alpha = 0.50f),
-                fontSize = 14.sp,
-            )
+            if (!isRecording) {
+                Text(
+                    "Tap the button to start recording",
+                    color = Color.White.copy(alpha = 0.50f),
+                    fontSize = 14.sp,
+                )
+            }
+
+            // K1: rich recording-active section — Live Waveform + SPECTRUM + PITCH
+            AnimatedVisibility(
+                visible = isRecording,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                com.example.recorderproject.ui.components.RecordingActiveSection(
+                    elapsedSeconds = elapsedSeconds,
+                    waveform = waveform,
+                    inputLevelPercent = inputLevelPercent,
+                )
+            }
 
             Box(modifier = Modifier.height(8.dp))
 

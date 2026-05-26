@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.RecorderViewModel
+import com.example.recorderproject.ui.components.OrangeUnderglow
 import com.example.recorderproject.ui.theme.AppTheme
 
 /**
@@ -122,6 +123,9 @@ fun MeatRecSettings(
                 )
             }
         }
+
+        // Underglow strip — consistent with home
+        OrangeUnderglow(modifier = Modifier.fillMaxWidth())
 
         // 2-5. Scrollable body
         Column(
