@@ -62,6 +62,9 @@ import com.example.recorderproject.ui.theme.RecorderCharcoal
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
+import com.example.recorderproject.ui.components.BrandWordmark
+import com.example.recorderproject.ui.theme.LocalAppTypography
+import com.example.recorderproject.ui.theme.Spacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +110,7 @@ fun RecorderApp(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MeatrecMark(size = 32.dp)
-                        Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        BrandWordmark()
                     }
                 },
                 actions = {
@@ -158,10 +161,10 @@ fun RecorderApp(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(RecorderCharcoalCard)
-                    .padding(14.dp),
+                    .padding(Spacing.md),
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("FILE", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                    Text("FILE", style = LocalAppTypography.current.labelTiny, color = RecorderBlueGrey)
                     Text(fileName, color = Color_white(), fontWeight = FontWeight.SemiBold)
                     Row(
                         Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -183,7 +186,7 @@ fun RecorderApp(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("BIT DEPTH", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                        Text("BIT DEPTH", style = LocalAppTypography.current.labelTiny, color = RecorderBlueGrey)
                         BitDepthSelector(
                             current = bitDepth,
                             onChange = { viewModel.updateBitDepth(it) },
@@ -278,8 +281,8 @@ fun RecorderApp(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("RECORDINGS", color = RecorderBlueGrey, fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.SemiBold)
-                Text("${files.size}", color = RecorderYellow, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Text("RECORDINGS", style = LocalAppTypography.current.labelTiny, color = RecorderBlueGrey)
+                Text("${files.size}", style = LocalAppTypography.current.labelTiny, color = RecorderYellow)
             }
 
             RecordingFileList(
