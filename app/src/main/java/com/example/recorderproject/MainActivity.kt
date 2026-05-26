@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.DesignPickerScreen
+import com.example.recorderproject.ui.MeatRecSettings
 import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
@@ -92,17 +93,14 @@ class MainActivity : ComponentActivity() {
                             onboardingDone = true
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
-                        settingsOpen -> SettingsScreenV2(
+                        settingsOpen -> MeatRecSettings(
                             viewModel = viewModel,
-                            theme = appTheme,
-                            reduceMotion = reduceMotion,
+                            currentTheme = appTheme,
                             onChangeTheme = {
                                 appTheme = it
                                 getPreferences(MODE_PRIVATE).edit()
                                     .putString("app_theme", it.displayName).apply()
                             },
-                            onToggleReduceMotion = { reduceMotion = it },
-                            onPickSaveLocation = { selectSaveDirectory() },
                             onBack = { settingsOpen = false },
                         )
                         eqOpen -> EQScreen(

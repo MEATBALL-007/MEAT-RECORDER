@@ -1,0 +1,302 @@
+package com.example.recorderproject.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.recorderproject.RecorderViewModel
+import com.example.recorderproject.ui.theme.AppTheme
+
+/**
+ * MeatRec Settings — pixel-faithful rebuild of the 22 May APK settings screen.
+ *
+ * Reference: recovery/screenshots/10-settings.png
+ *
+ * Layout top → bottom:
+ *   1. Orange top bar with back arrow + "Settings" white + "Audio, recording &
+ *      appearance" yellow subtitle
+ *   2. APPEARANCE section header (tracked caps, dim grey)
+ *   3. 2-column theme grid (10 themes: Midnight / Navy / Forest / Maroon /
+ *      Carbon / Violet / Steel / Amber / Slate / Obsidian)
+ *      - Each card = theme's bg color · 3 dots top-left (theme + orange + yellow)
+ *        · theme name centered · two small level bars at the bottom corners
+ *      - Selected = thick orange border + orange checkmark dot top-right
+ *   4. AUDIO QUALITY section header
+ *   5. Sample Rate label + 3 pills (44.1 / 48 / 96 kHz)
+ */
+@Composable
+fun MeatRecSettings(
+    viewModel: RecorderViewModel,
+    currentTheme: AppTheme,
+    onChangeTheme: (AppTheme) -> Unit,
+    onBack: () -> Unit,
+) {
+    val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
+    val scroll = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+    ) {
+        // 1. Orange top bar (same style as home but with back arrow + 2-line title)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MeatOrange)
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Settings",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "Audio, recording & appearance",
+                    color = MeatYellow,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.3.sp,
+                )
+            }
+        }
+
+        // 2-5. Scrollable body
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(horizontal = 20.dp)
+                .padding(top = 24.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            SectionHeader("APPEARANCE")
+            ThemeGrid(currentTheme = currentTheme, onChange = onChangeTheme)
+
+            // Faint divider
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.08f)),
+            )
+
+            SectionHeader("AUDIO QUALITY")
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Sample Rate",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                SampleRatePillRow(
+                    current = sampleRate,
+                    onChange = { viewModel.updateSampleRate(it) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        color = Color.White.copy(alpha = 0.55f),
+        fontSize = 13.sp,
+        letterSpacing = 2.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun ThemeGrid(currentTheme: AppTheme, onChange: (AppTheme) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AppTheme.entries.chunked(2).forEach { rowThemes ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                rowThemes.forEach { theme ->
+                    ThemeCard(
+                        theme = theme,
+                        selected = theme == currentTheme,
+                        onClick = { onChange(theme) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowThemes.size == 1) Box(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard(
+    theme: AppTheme,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardBg = theme.surface // each theme has its own dark palette
+    val borderColor = if (selected) MeatOrange else Color.White.copy(alpha = 0.08f)
+    val borderWidth = if (selected) 2.5.dp else 1.dp
+
+    Box(
+        modifier = modifier
+            .height(112.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(cardBg)
+            .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+    ) {
+        // 3 dots at top-left
+        Row(
+            modifier = Modifier.align(Alignment.TopStart),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Dot(color = theme.background, ringed = true)
+            Dot(color = MeatOrange)
+            Dot(color = MeatYellow)
+        }
+
+        // Selected checkmark — orange circle with white check at top-right
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MeatOrange),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "✓",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
+        // Theme name centered (slightly left-aligned in old)
+        Text(
+            theme.displayName,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.75f),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
+
+        // Two small level bars at the bottom corners
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .size(width = 32.dp, height = 2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(Color.White.copy(alpha = 0.20f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(width = 32.dp, height = 2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(Color.White.copy(alpha = 0.10f)),
+        )
+    }
+}
+
+@Composable
+private fun Dot(color: Color, ringed: Boolean = false) {
+    if (ringed) {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .border(1.dp, MeatYellow.copy(alpha = 0.6f), RoundedCornerShape(7.dp))
+                .background(color),
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(color),
+        )
+    }
+}
+
+@Composable
+private fun SampleRatePillRow(current: Int, onChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        listOf(44100 to "44.1 kHz", 48000 to "48 kHz", 96000 to "96 kHz").forEach { (value, label) ->
+            val active = value == current
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(if (active) MeatOrange else Color(0xFF222222))
+                    .clickable { onChange(value) }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    color = if (active) Color.White else Color.White.copy(alpha = 0.50f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
