@@ -386,7 +386,8 @@ fun RecorderApp(
                     android.widget.Toast.makeText(ctx, "Scene slicer coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onSetGhostTake = {
-                    android.widget.Toast.makeText(ctx, "Ghost take coming in Phase D", android.widget.Toast.LENGTH_SHORT).show()
+                    viewModel.setGhostTake(it)
+                    android.widget.Toast.makeText(ctx, "Ghost take set: ${it.name}", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDetectSync = {
                     android.widget.Toast.makeText(ctx, "Sync detect coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()

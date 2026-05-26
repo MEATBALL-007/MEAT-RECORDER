@@ -15,10 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
+import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.RecorderAppWithIntro
 import com.example.recorderproject.ui.SettingsScreenV2
+import com.example.recorderproject.ui.TranscriptScreen
 import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
@@ -66,6 +68,8 @@ class MainActivity : ComponentActivity() {
             RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 val portraitFile by viewModel.portraitFile.collectAsStateWithLifecycle()
+                val multiTakeOpen by viewModel.multiTakeOpen.collectAsStateWithLifecycle()
+                val transcriptFile by viewModel.transcriptFile.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -94,6 +98,15 @@ class MainActivity : ComponentActivity() {
                         portraitFile != null -> HarmonicPortraitScreen(
                             file = portraitFile!!,
                             onBack = { viewModel.closePortrait() },
+                        )
+                        multiTakeOpen -> MultiTakeScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeMultiTake() },
+                        )
+                        transcriptFile != null -> TranscriptScreen(
+                            viewModel = viewModel,
+                            file = transcriptFile!!,
+                            onBack = { viewModel.closeTranscript() },
                         )
                         else -> RecorderApp(
                             viewModel = viewModel,

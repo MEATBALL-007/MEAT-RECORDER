@@ -299,6 +299,41 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openPortrait(file: RecordFile) { _portraitFile.value = file }
     fun closePortrait() { _portraitFile.value = null }
 
+    /** Phase D: ghost-take file overlaid on next recording (null = no ghost). */
+    private val _ghostTakeFile = MutableStateFlow<RecordFile?>(null)
+    val ghostTakeFile: StateFlow<RecordFile?> = _ghostTakeFile
+    fun setGhostTake(file: RecordFile?) { _ghostTakeFile.value = file }
+
+    /** Phase D: is the multi-take comparison screen open? */
+    private val _multiTakeOpen = MutableStateFlow(false)
+    val multiTakeOpen: StateFlow<Boolean> = _multiTakeOpen
+    fun openMultiTake() { _multiTakeOpen.value = true }
+    fun closeMultiTake() { _multiTakeOpen.value = false }
+
+    /** Phase D: which file's transcript view is open (null = none). */
+    private val _transcriptFile = MutableStateFlow<RecordFile?>(null)
+    val transcriptFile: StateFlow<RecordFile?> = _transcriptFile
+    fun openTranscript(file: RecordFile) { _transcriptFile.value = file }
+    fun closeTranscript() { _transcriptFile.value = null }
+
+    /**
+     * Phase D: transcribed text per file (keyed by RecordFile.id).
+     * Populated by [requestTranscribe] when an STT engine is hooked up.
+     * Until then, requestTranscribe seeds a placeholder so the UI has something to show.
+     */
+    private val _transcripts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val transcripts: StateFlow<Map<String, String>> = _transcripts
+
+    fun requestTranscribe(file: RecordFile) {
+        // Placeholder: real STT engine wiring is out of scope this round. Seed a stub so
+        // the transcript card has content. Wire ML Kit / SpeechRecognizer here later.
+        _transcripts.value = _transcripts.value + (file.id to
+            "[Placeholder] Transcript engine not yet integrated. " +
+                "When ML Kit / SpeechRecognizer is wired, the result for ${file.name} " +
+                "will appear here. Duration ${file.durationSeconds}s."
+        )
+    }
+
     /** Undo / redo stacks for the chain. Capped at EQ_HISTORY_CAP. */
     private val eqHistory = ArrayDeque<EQChain>()
     private val eqRedo = ArrayDeque<EQChain>()
