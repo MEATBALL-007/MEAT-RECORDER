@@ -1,6 +1,5 @@
 package com.example.recorderproject.model
 
-// TODO: original definition lost 2026-05-25. Placeholder values for typical recording modes.
 enum class RecordingMode(val displayName: String) {
     FIELD("Field"),
     STUDIO("Studio"),
@@ -8,13 +7,21 @@ enum class RecordingMode(val displayName: String) {
     MUSIC("Music")
 }
 
+/**
+ * Per-mode recording preset.
+ *
+ * Shape restored from the 2026-05-22 APK pulled off the user's S24 Ultra during the
+ * APK-recovery pass on 2026-05-26 (decompiled via jadx; see `recovery/INVENTORY.md`).
+ * Typical usage in the old build was a `Map<RecordingMode, ModeSettings>` persisted to
+ * SettingsDataStore — re-add those flows once the mode-selector flow is rewired.
+ */
 data class ModeSettings(
-    val mode: RecordingMode = RecordingMode.FIELD,
-    val sampleRate: Int = 48000,
+    val sampleRate: Int = 48_000,
     val bitDepth: Int = 16,
     val channelCount: Int = 1,
     val noiseReduction: Boolean = true,
-    val inputGainLinear: Float = 1.0f,
-    val countdownSec: Int = 0,
-    val maxDurationSec: Int = -1
+    /** Pre-roll countdown before recording starts. 0 = no countdown. */
+    val countdownSeconds: Int = 0,
+    /** Auto-stop after N minutes. 0 = no limit. */
+    val autoStopMinutes: Int = 0,
 )
