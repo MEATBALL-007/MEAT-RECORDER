@@ -12,8 +12,11 @@ import com.example.recorderproject.model.ApplySaveMode
 import com.example.recorderproject.model.EQChain
 import com.example.recorderproject.model.EQEditMode
 import com.example.recorderproject.model.EQViewMode
+import com.example.recorderproject.model.MonitorLevel
 import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.model.SortOrder
+import com.example.recorderproject.model.applyAudioSample
+import com.example.recorderproject.model.applyDecayTick
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -105,6 +108,26 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _monitorEnabled = MutableStateFlow(false)
     val monitorEnabled: StateFlow<Boolean> = _monitorEnabled
 
+    private val _monitorLevel = MutableStateFlow(MonitorLevel.Silent)
+    val monitorLevel: StateFlow<MonitorLevel> = _monitorLevel
+
+    private var monitorClipUntilMs: Long = 0L
+    private var monitorDecayJob: Job? = null
+
+    /** Called from AudioMonitor's audio thread once per PCM buffer. */
+    private fun onMonitorPcm(rmsDb: Float, peakDb: Float) {
+        val now = System.currentTimeMillis()
+        val update = applyAudioSample(
+            curr = _monitorLevel.value,
+            newRmsDb = rmsDb,
+            newPeakDb = peakDb,
+            nowMs = now,
+            clipUntilMs = monitorClipUntilMs,
+        )
+        monitorClipUntilMs = update.clipUntilMs
+        _monitorLevel.value = update.level
+    }
+
     private val _liveEqEnabled = MutableStateFlow(false)
     val liveEqEnabled: StateFlow<Boolean> = _liveEqEnabled
 
@@ -115,7 +138,24 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         val on = !_monitorEnabled.value
         if (on) {
             audioMonitor.setChain(_currentEQChain.value)
+            // Wire level callback BEFORE start so the very first buffer is observed
+            audioMonitor.setLevelListener(::onMonitorPcm)
             audioMonitor.start()
+            // Peak-hold decay tick — every 50 ms, decay peakDb by 1 toward rmsDb
+            monitorDecayJob?.cancel()
+            monitorDecayJob = viewModelScope.launch {
+                while (true) {
+                    delay(50)
+                    val now = System.currentTimeMillis()
+                    val update = applyDecayTick(
+                        curr = _monitorLevel.value,
+                        nowMs = now,
+                        clipUntilMs = monitorClipUntilMs,
+                    )
+                    monitorClipUntilMs = update.clipUntilMs
+                    _monitorLevel.value = update.level
+                }
+            }
             // Also start Bluetooth SCO for BT earphone monitoring
             try {
                 val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -129,6 +169,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Toast.makeText(app, "Monitor on", Toast.LENGTH_SHORT).show()
         } else {
             audioMonitor.stop()
+            // Cancel decay coroutine, clear listener (after stop so the run-loop has exited)
+            monitorDecayJob?.cancel()
+            monitorDecayJob = null
+            audioMonitor.setLevelListener(null)
+            monitorClipUntilMs = 0L
+            _monitorLevel.value = MonitorLevel.Silent
             try {
                 val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
                 @Suppress("DEPRECATION")
