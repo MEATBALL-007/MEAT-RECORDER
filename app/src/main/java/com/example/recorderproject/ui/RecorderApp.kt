@@ -47,6 +47,7 @@ import com.example.recorderproject.ui.components.CircleRecordButton
 import com.example.recorderproject.ui.components.GainSlider
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.components.PreRecordInputsCard
+import com.example.recorderproject.ui.components.MonitorLevelMeter
 import com.example.recorderproject.ui.components.RecorderFeatureChips
 import com.example.recorderproject.ui.components.RecordingFileList
 import com.example.recorderproject.ui.components.RecordingMeterBar
@@ -101,6 +102,7 @@ fun RecorderApp(
     val sceneName by viewModel.sceneName.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val monitorOn by viewModel.monitorEnabled.collectAsStateWithLifecycle()
+    val monitorLevel by viewModel.monitorLevel.collectAsStateWithLifecycle()
     val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
@@ -212,6 +214,15 @@ fun RecorderApp(
                 onToggleLiveEq = { viewModel.toggleLiveEq() },
                 onOpenSourcePicker = { sourcePickerOpen = true },
             )
+
+            // Pre-record input level meter — visible only when monitoring and not recording
+            AnimatedVisibility(
+                visible = monitorOn && !isRecording,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                MonitorLevelMeter(level = monitorLevel, modifier = Modifier.fillMaxWidth())
+            }
 
             // Pre-record inputs — only shown when not currently recording
             AnimatedVisibility(
