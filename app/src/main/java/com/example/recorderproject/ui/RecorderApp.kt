@@ -360,6 +360,7 @@ fun RecorderApp(
                 }
             }
 
+            val ctx = androidx.compose.ui.platform.LocalContext.current
             RecordingFileList(
                 files = files,
                 onTapFile = { viewModel.selectFile(it) },
@@ -368,6 +369,33 @@ fun RecorderApp(
                 onDelete = { viewModel.deleteRecording(it) },
                 onToggleLock = { viewModel.toggleLockRecording(it) },
                 onToggleStar = { viewModel.toggleStarRecording(it) },
+                onRename = { f, newName ->
+                    val ok = viewModel.renameRecording(f, newName)
+                    if (!ok) android.widget.Toast.makeText(
+                        ctx, "Rename failed", android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onApplyNR = { viewModel.applyNoiseReduce(it) },
+                // Phase C/D/E features — surface the menu items now so the UI is structurally
+                // complete, but the actual screens land in later phases.
+                onOpenSpectrogram = {
+                    android.widget.Toast.makeText(ctx, "Spectrogram coming in Phase C", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onOpenPortrait = {
+                    android.widget.Toast.makeText(ctx, "Harmonic portrait coming in Phase C", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onSliceScenes = {
+                    android.widget.Toast.makeText(ctx, "Scene slicer coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onSetGhostTake = {
+                    android.widget.Toast.makeText(ctx, "Ghost take coming in Phase D", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onDetectSync = {
+                    android.widget.Toast.makeText(ctx, "Sync detect coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onPitchShift = {
+                    android.widget.Toast.makeText(ctx, "Pitch shift coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

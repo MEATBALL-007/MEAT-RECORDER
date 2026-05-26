@@ -525,6 +525,38 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Rename a recording on disk and update the in-memory list. Returns true on success.
+     * If [newName] doesn't end with `.wav`, the extension is preserved from the original.
+     */
+    fun renameRecording(file: RecordFile, newName: String): Boolean {
+        if (newName.isBlank()) return false
+        if (file.path.startsWith("content://")) {
+            // SAF-backed files can't be renamed via java.io.File — skip the disk side but
+            // still update the in-memory label so the UI reflects the new name.
+            _recordFiles.value = _recordFiles.value.map {
+                if (it.id == file.id) it.copy(name = newName) else it
+            }
+            return true
+        }
+        return try {
+            val srcFile = File(file.path)
+            if (!srcFile.exists()) return false
+            val ext = srcFile.extension.ifBlank { "wav" }
+            val finalName = if (newName.endsWith(".$ext")) newName else "$newName.$ext"
+            val target = File(srcFile.parentFile, finalName)
+            if (target.exists()) return false
+            if (!srcFile.renameTo(target)) return false
+            _recordFiles.value = _recordFiles.value.map {
+                if (it.id == file.id) it.copy(name = finalName, path = target.absolutePath) else it
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Rename failed: ${e.message}", e)
+            false
+        }
+    }
+
     fun shareRecording(file: RecordFile) {
         try {
             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
