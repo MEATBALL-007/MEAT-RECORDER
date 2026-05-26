@@ -170,7 +170,16 @@ fun RecorderApp(
         onTapFile = { viewModel.selectFile(it) },
         elapsedSeconds = elapsed,
         waveform = waveform,
-        inputLevelPercent = (monitorLevel.rmsDb + 60f).coerceIn(0f, 60f).let { (it / 60f * 100f).toInt() },
+        inputLevelPercent = if (isRecording && waveform.isNotEmpty()) {
+            // Derive level from live recording samples (more responsive than monitor)
+            val recent = waveform.takeLast(512)
+            val rms = kotlin.math.sqrt(recent.map { (it * it).toDouble() }.average()).toFloat()
+            (rms * 200f).toInt().coerceIn(0, 100)
+        } else {
+            (monitorLevel.rmsDb + 60f).coerceIn(0f, 60f).let { (it / 60f * 100f).toInt() }
+        },
+        spectrumHistory = viewModel.spectrumHistory.collectAsStateWithLifecycle().value,
+        pitchHz = viewModel.livePitchHz.collectAsStateWithLifecycle().value,
         selectedFileId = selectedPlayFile?.id,
         isPlaying = isPlaying,
         onShareFile = { viewModel.shareRecording(it) },

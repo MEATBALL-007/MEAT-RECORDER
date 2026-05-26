@@ -222,6 +222,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _currentWaveform = MutableStateFlow<List<Float>>(emptyList())
     val currentWaveform: StateFlow<List<Float>> = _currentWaveform
 
+    // M1/M2: live spectrum + pitch — populated only while recording
+    private val _liveSpectrum = MutableStateFlow(FloatArray(0))
+    val liveSpectrum: StateFlow<FloatArray> = _liveSpectrum
+    private val _livePitchHz = MutableStateFlow(0f)
+    val livePitchHz: StateFlow<Float> = _livePitchHz
+    // Rolling window of recent FFT frames so the SPECTRUM heatmap can scroll
+    private val _spectrumHistory = MutableStateFlow<List<FloatArray>>(emptyList())
+    val spectrumHistory: StateFlow<List<FloatArray>> = _spectrumHistory
+
     private val _fileName = MutableStateFlow("scene1_take1.wav")
     val fileName: StateFlow<String> = _fileName
 
@@ -743,6 +752,17 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             ) { level ->
                 _currentWaveform.value = level
             }
+            // M1/M2: wire live spectrum + pitch listeners
+            recorder.setSpectrumListener { bands ->
+                _liveSpectrum.value = bands
+                val hist = _spectrumHistory.value.toMutableList()
+                hist.add(bands)
+                if (hist.size > 80) hist.removeAt(0) // ~80 frames rolling window
+                _spectrumHistory.value = hist
+            }
+            recorder.setPitchListener { hz ->
+                _livePitchHz.value = hz
+            }
             Log.d(TAG, "Recording started successfully")
             Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
@@ -759,6 +779,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Log.d(TAG, "Not recording, ignoring")
             return
         }
+        // M1/M2: clear listeners + reset live state
+        recorder.setSpectrumListener(null)
+        recorder.setPitchListener(null)
+        _liveSpectrum.value = FloatArray(0)
+        _livePitchHz.value = 0f
+        _spectrumHistory.value = emptyList()
+
         val capturedScene = _sceneName.value
         val capturedNotes = _notes.value
 

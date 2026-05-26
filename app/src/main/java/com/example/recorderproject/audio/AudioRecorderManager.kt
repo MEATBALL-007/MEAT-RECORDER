@@ -82,6 +82,14 @@ class AudioRecorderManager(private val context: Context) {
     @Volatile private var paused: Boolean = false
     fun setPaused(p: Boolean) { paused = p }
 
+    // M1/M2: Live spectrum + pitch listeners — called once every N PCM reads
+    // so the rate is ~10-20 Hz and visualization doesn't melt the CPU.
+    @Volatile private var spectrumListener: ((FloatArray) -> Unit)? = null
+    @Volatile private var pitchListener: ((Float) -> Unit)? = null
+    private var dspFrameCounter: Int = 0
+    fun setSpectrumListener(cb: ((FloatArray) -> Unit)?) { spectrumListener = cb }
+    fun setPitchListener(cb: ((Float) -> Unit)?) { pitchListener = cb }
+
     // G9: AGC — track running peak; slowly bring it toward target.
     @Volatile private var agcOn: Boolean = false
     @Volatile private var agcGain: Float = 1f
@@ -263,6 +271,28 @@ class AudioRecorderManager(private val context: Context) {
                         writePcmData(audioBuffer, read)
                         val levels = audioBuffer.take(read).map { it / 32768f }
                         onAudioFrame(levels)
+
+                        // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch.
+                        // Listeners are best-effort and run on the recording thread.
+                        dspFrameCounter++
+                        if (dspFrameCounter % 4 == 0) {
+                            val sl = spectrumListener
+                            val pl = pitchListener
+                            if (sl != null && read >= FFTAnalyzer.FFT_SIZE) {
+                                try {
+                                    val bands = FFTAnalyzer.frameSpectrum(
+                                        audioBuffer, 0, FFTAnalyzer.FFT_SIZE, sampleRate
+                                    )
+                                    sl(bands)
+                                } catch (_: Exception) { /* swallow — never break the loop */ }
+                            }
+                            if (pl != null && read >= 2048) {
+                                try {
+                                    val result = PitchDetector.detect(audioBuffer, 0, read, sampleRate)
+                                    if (result.confidence > 0.30f) pl(result.frequencyHz)
+                                } catch (_: Exception) {}
+                            }
+                        }
                         if (readCount % 10 == 0) {
                             Log.d(TAG, "Read: $read samples, total written: $totalBytesWritten bytes")
                         }

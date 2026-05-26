@@ -95,6 +95,8 @@ fun MeatRecHome(
     elapsedSeconds: Int = 0,
     waveform: List<Float> = emptyList(),
     inputLevelPercent: Int = 0,
+    spectrumHistory: List<FloatArray> = emptyList(),
+    pitchHz: Float = 0f,
     selectedFileId: String? = null,
     isPlaying: Boolean = false,
     onShareFile: (RecordFile) -> Unit = {},
@@ -196,6 +198,8 @@ fun MeatRecHome(
                     elapsedSeconds = elapsedSeconds,
                     waveform = waveform,
                     inputLevelPercent = inputLevelPercent,
+                    spectrumHistory = spectrumHistory,
+                    pitchHz = pitchHz,
                 )
             }
 

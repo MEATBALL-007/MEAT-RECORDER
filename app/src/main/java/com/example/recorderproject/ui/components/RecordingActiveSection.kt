@@ -74,6 +74,8 @@ fun RecordingActiveSection(
     elapsedSeconds: Int,
     waveform: List<Float>,
     inputLevelPercent: Int,
+    spectrumHistory: List<FloatArray> = emptyList(),
+    pitchHz: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -83,8 +85,8 @@ fun RecordingActiveSection(
         RecBadge(elapsedSeconds = elapsedSeconds)
         InputLevelBar(percent = inputLevelPercent)
         LiveWaveformCard(waveform = waveform)
-        SpectrumCard(waveform = waveform)
-        PitchCard(waveform = waveform)
+        SpectrumCard(spectrumHistory = spectrumHistory, fallbackWaveform = waveform)
+        PitchCard(pitchHz = pitchHz)
     }
 }
 
@@ -130,6 +132,25 @@ private fun RecBadge(elapsedSeconds: Int) {
 @Composable
 private fun InputLevelBar(percent: Int) {
     val fraction = (percent.coerceIn(0, 100)) / 100f
+
+    // M3: peak hold — climbs instantly with level, decays slowly
+    var peakHold by remember { mutableStateOf(0f) }
+    LaunchedEffect(percent) {
+        if (fraction > peakHold) {
+            peakHold = fraction
+        }
+    }
+    LaunchedEffect(Unit) {
+        // Decay every 80ms by 1.5% — peak slowly slides down toward 0
+        while (true) {
+            kotlinx.coroutines.delay(80)
+            if (peakHold > fraction) {
+                peakHold = (peakHold - 0.015f).coerceAtLeast(fraction)
+            }
+        }
+    }
+
+    val clipping = percent >= 95
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -137,17 +158,39 @@ private fun InputLevelBar(percent: Int) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "INPUT LEVEL",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 11.sp,
-                letterSpacing = 2.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "INPUT LEVEL",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 11.sp,
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (clipping) {
+                    // Small red CLIP indicator dot
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(RecRed),
+                    )
+                    Text(
+                        "CLIP",
+                        color = RecRed,
+                        fontSize = 9.sp,
+                        letterSpacing = 1.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
             Text(
                 "${percent}%",
-                color = Color.White.copy(alpha = 0.85f),
+                color = if (clipping) RecRed else Color.White.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
@@ -160,6 +203,7 @@ private fun InputLevelBar(percent: Int) {
                 .clip(RoundedCornerShape(5.dp))
                 .background(Color(0xFF222222)),
         ) {
+            // Main fill bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth(fraction)
@@ -170,11 +214,24 @@ private fun InputLevelBar(percent: Int) {
                             colors = listOf(
                                 MeatYellow,
                                 MeatYellow.copy(alpha = 0.85f),
-                                Color(0xFFFAA616), // amber peak
+                                Color(0xFFFAA616),
                             ),
                         ),
                     ),
             )
+            // Peak hold tick — 2dp white bar at peakHold position
+            if (peakHold > 0f) {
+                Canvas(
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                ) {
+                    val x = (size.width * peakHold).coerceIn(0f, size.width - 3f)
+                    drawRect(
+                        color = if (clipping) RecRed else Color.White,
+                        topLeft = Offset(x, 0f),
+                        size = Size(3f, size.height),
+                    )
+                }
+            }
         }
     }
 }
@@ -217,28 +274,33 @@ private fun LiveWaveformCard(waveform: List<Float>) {
 }
 
 @Composable
-private fun SpectrumCard(waveform: List<Float>) {
-    // Rolling spectrum buffer — each frame is a vertical column of band magnitudes.
-    // We don't have a real FFT pipeline plumbed here yet, so derive a believable
-    // log-band approximation from the rolling waveform energy. Real FFT comes later.
-    val frames = remember { mutableStateListOf<FloatArray>() }
-    val bandCount = 24
-    LaunchedEffect(waveform.size) {
-        if (waveform.isNotEmpty()) {
-            // Derive ~24 bands from waveform energy + sine envelopes (so the heatmap
-            // animates organically, not as a flat single-color column).
-            val avgEnergy = waveform.takeLast(64).map { abs(it) }.average().toFloat()
-            val rms = sqrt(waveform.takeLast(128).map { it * it }.average().toFloat())
-            val frame = FloatArray(bandCount) { i ->
+private fun SpectrumCard(
+    spectrumHistory: List<FloatArray>,
+    fallbackWaveform: List<Float>,
+) {
+    // Prefer real FFT history from the recorder. If that's still empty (first
+    // ~80ms of recording or perms not granted), fall back to a waveform-derived
+    // animated approximation so the card never looks completely dead.
+    val useReal = spectrumHistory.isNotEmpty()
+    val fallbackFrames = remember { mutableStateListOf<FloatArray>() }
+    val fallbackBandCount = 24
+    LaunchedEffect(fallbackWaveform.size, useReal) {
+        if (!useReal && fallbackWaveform.isNotEmpty()) {
+            val avgEnergy = fallbackWaveform.takeLast(64).map { abs(it) }.average().toFloat()
+            val rms = sqrt(fallbackWaveform.takeLast(128).map { it * it }.average().toFloat())
+            val frame = FloatArray(fallbackBandCount) { i ->
                 val phase = (System.currentTimeMillis() / 80.0).toFloat()
                 val mix = sin((i * 0.32f + phase * 0.1f).toDouble()).toFloat() * 0.5f + 0.5f
-                val falloff = 1f - (i / bandCount.toFloat()) * 0.3f
+                val falloff = 1f - (i / fallbackBandCount.toFloat()) * 0.3f
                 ((avgEnergy * 4f + rms * 2f) * mix * falloff).coerceIn(0f, 1f)
             }
-            frames.add(frame)
-            while (frames.size > 80) frames.removeAt(0)
+            fallbackFrames.add(frame)
+            while (fallbackFrames.size > 80) fallbackFrames.removeAt(0)
         }
     }
+
+    val frames: List<FloatArray> = if (useReal) spectrumHistory else fallbackFrames
+    val bandCount: Int = frames.firstOrNull()?.size ?: fallbackBandCount
 
     CardWithLabel(label = "SPECTRUM") {
         Canvas(
@@ -250,7 +312,10 @@ private fun SpectrumCard(waveform: List<Float>) {
         ) {
             val w = size.width
             val h = size.height
-            if (frames.isEmpty()) return@Canvas
+            if (frames.isEmpty() || bandCount == 0) return@Canvas
+
+            // Find global max so we can normalize each frame to 0..1
+            val gmax = frames.maxOf { f -> f.maxOrNull() ?: 1f }.coerceAtLeast(1e-6f)
 
             val colCount = frames.size
             val colW = w / colCount.toFloat()
@@ -258,9 +323,11 @@ private fun SpectrumCard(waveform: List<Float>) {
 
             for (col in 0 until colCount) {
                 val frame = frames[col]
-                for (band in 0 until bandCount) {
-                    val mag = frame[band]
-                    val color = magnitudeToColor(mag)
+                for (band in 0 until bandCount.coerceAtMost(frame.size)) {
+                    // Normalize + log-compress to keep low energies visible
+                    val raw = (frame[band] / gmax).coerceIn(0f, 1f)
+                    val mag = kotlin.math.ln(1f + raw * 9f) / kotlin.math.ln(10f)
+                    val color = magnitudeToColor(mag.coerceIn(0f, 1f))
                     drawRect(
                         color = color,
                         topLeft = Offset(col * colW, (bandCount - 1 - band) * bandH),
@@ -295,21 +362,7 @@ private fun lerpColor(a: Color, b: Color, t: Float): Color {
 }
 
 @Composable
-private fun PitchCard(waveform: List<Float>) {
-    // Animated pitch — derive a wandering Hz value from waveform energy.
-    val pitchHz by remember(waveform.size) {
-        derivedStateOf {
-            if (waveform.isEmpty()) 0f
-            else {
-                val rms = sqrt(waveform.takeLast(256).map { it * it }.average().toFloat())
-                // Map RMS to a 65-1000 Hz range with some sin wobble for organic feel
-                val basis = 80f + rms * 800f
-                val wobble = sin((System.currentTimeMillis() / 600.0).toFloat()).toFloat() * 30f
-                (basis + wobble).coerceIn(60f, 1000f)
-            }
-        }
-    }
-
+private fun PitchCard(pitchHz: Float) {
     CardWithLabel(label = "PITCH", trailing = {
         Text(
             text = if (pitchHz > 0f) "${pitchHz.toInt()} Hz" else "—",
