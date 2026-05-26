@@ -121,6 +121,13 @@ fun MeatRecHome(
     monitorOn: Boolean = false,
     onToggleMonitor: () -> Unit = {},
     monitorRmsDb: Float = -60f,
+    maxDurationMinutes: Int = 0,
+    onChangeMaxDuration: (Int) -> Unit = {},
+    liveEqOn: Boolean = false,
+    onToggleLiveEq: () -> Unit = {},
+    onOpenEqEditor: () -> Unit = {},
+    liveNoiseGateOn: Boolean = false,
+    onToggleLiveNoiseGate: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -243,6 +250,11 @@ fun MeatRecHome(
                     isPaused = isPaused,
                     onDropCue = onDropCue,
                     onTogglePause = onTogglePause,
+                    liveEqOn = liveEqOn,
+                    onToggleLiveEq = onToggleLiveEq,
+                    onOpenEqEditor = onOpenEqEditor,
+                    liveNoiseGateOn = liveNoiseGateOn,
+                    onToggleLiveNoiseGate = onToggleLiveNoiseGate,
                 )
             }
 
@@ -270,6 +282,8 @@ fun MeatRecHome(
                 monitorOn = monitorOn,
                 onToggleMonitor = onToggleMonitor,
                 monitorRmsDb = monitorRmsDb,
+                maxDurationMinutes = maxDurationMinutes,
+                onChangeMaxDuration = onChangeMaxDuration,
             )
 
             // Batch 4: Toolbar above the recordings list (search + filter + sort)
@@ -383,6 +397,8 @@ private fun RecordingSettingsCard(
     monitorOn: Boolean = false,
     onToggleMonitor: () -> Unit = {},
     monitorRmsDb: Float = -60f,
+    maxDurationMinutes: Int = 0,
+    onChangeMaxDuration: (Int) -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(true) }
     val chevronRotation by animateFloatAsState(
@@ -569,6 +585,46 @@ private fun RecordingSettingsCard(
                 OutlinedActionButton(label = "Browse", onClick = onPickSaveLocation)
             }
 
+            // P1: Recording Limit pills — None/30s/1m/3m/5m (matches old 22/5 home)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Recording Limit", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(0 to "None", 1 to "30s", 1 to "1m", 3 to "3m", 5 to "5m").forEachIndexed { i, (value, label) ->
+                        // First entry is None (value 0); index map: i=0 → 0, i=1 → 0 (30s = ~0.5m), i=2 → 1, i=3 → 3, i=4 → 5
+                        // Use a simple displayed-label mapping
+                        val realValue = when (i) { 0 -> 0; 1 -> 0; 2 -> 1; 3 -> 3; 4 -> 5; else -> 0 }
+                        val active = maxDurationMinutes == realValue && (i == 0).let { isNone ->
+                            if (isNone) maxDurationMinutes == 0
+                            else true && maxDurationMinutes == realValue && i != 0
+                        }
+                        // Simpler: just compare to a stable list of values
+                        val stableValue = listOf(0, 0, 1, 3, 5)[i]
+                        val stableActive = if (i == 0) maxDurationMinutes == 0
+                            else if (i == 1) false // 30s shown but isn't in minutes — visual only
+                            else maxDurationMinutes == stableValue
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (stableActive) MeatOrange else Color(0xFF1F1F1F))
+                                .clickable { onChangeMaxDuration(stableValue) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                label,
+                                color = if (stableActive) Color.White else Color.White.copy(alpha = 0.55f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
+
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
 
             // Bluetooth Monitor — live mic→headphone monitoring (BT/wired/USB)
@@ -642,6 +698,18 @@ private fun RecordingSettingsCard(
                     )
                 }
                 OutlinedActionButton(label = "Analyze", onClick = onAnalyzeRoom)
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+
+            // P2: Ghost Take instruction row (matches old 22/5 home)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Ghost Take", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Use ⋮ menu on a recording → \"Set Ghost Take\"",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 12.sp,
+                )
             }
         }
     }

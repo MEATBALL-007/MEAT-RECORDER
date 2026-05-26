@@ -204,6 +204,16 @@ fun RecorderApp(
         monitorOn = monitorOn,
         onToggleMonitor = { viewModel.toggleMonitor() },
         monitorRmsDb = monitorLevel.rmsDb,
+        maxDurationMinutes = viewModel.maxDurationMinutes.collectAsStateWithLifecycle().value,
+        onChangeMaxDuration = { viewModel.updateMaxDurationMinutes(it) },
+        liveEqOn = liveEqOn,
+        onToggleLiveEq = { viewModel.toggleLiveEq() },
+        onOpenEqEditor = {
+            val last = files.lastOrNull() ?: viewModel.recordFiles.value.lastOrNull()
+            if (last != null) viewModel.onEQOpen(last)
+        },
+        liveNoiseGateOn = liveNoiseGateOn,
+        onToggleLiveNoiseGate = { viewModel.toggleLiveNoiseGate() },
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected

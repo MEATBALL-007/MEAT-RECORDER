@@ -68,6 +68,7 @@ fun MeatRecSettings(
     currentTheme: AppTheme,
     onChangeTheme: (AppTheme) -> Unit,
     onBack: () -> Unit,
+    onChangeMode: () -> Unit = {},
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
@@ -136,6 +137,37 @@ fun MeatRecSettings(
                 .padding(top = 24.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            // P4: Mode reset row — back to mode selector
+            val currentMode = viewModel.recorderMode.collectAsStateWithLifecycle().value
+            SectionHeader("RECORDING MODE")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF161616))
+                    .clickable(onClick = onChangeMode)
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 4.dp, height = 18.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(currentMode.accent),
+                    )
+                    Column {
+                        Text(currentMode.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(currentMode.shortHelp, color = Color.White.copy(alpha = 0.45f), fontSize = 11.sp)
+                    }
+                }
+                Text("Change →", color = MeatOrange, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+
             SectionHeader("APPEARANCE")
             ThemeGrid(currentTheme = currentTheme, onChange = onChangeTheme)
 

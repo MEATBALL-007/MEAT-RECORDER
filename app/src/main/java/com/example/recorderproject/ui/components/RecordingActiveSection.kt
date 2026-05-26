@@ -81,6 +81,11 @@ fun RecordingActiveSection(
     isPaused: Boolean = false,
     onDropCue: () -> Unit = {},
     onTogglePause: () -> Unit = {},
+    liveEqOn: Boolean = false,
+    onToggleLiveEq: () -> Unit = {},
+    onOpenEqEditor: () -> Unit = {},
+    liveNoiseGateOn: Boolean = false,
+    onToggleLiveNoiseGate: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -104,6 +109,31 @@ fun RecordingActiveSection(
                 label = if (cueCount == 0) "Drop cue" else "Cue · $cueCount",
                 icon = "◆",
                 onClick = onDropCue,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        // P3: Live EQ + NR Gate + Edit EQ — adjust the recording chain mid-take
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ActiveChip(
+                label = if (liveEqOn) "Live EQ ON" else "Live EQ",
+                active = liveEqOn,
+                onClick = onToggleLiveEq,
+                modifier = Modifier.weight(1f),
+            )
+            ActiveChip(
+                label = if (liveNoiseGateOn) "NR Gate ON" else "NR Gate",
+                active = liveNoiseGateOn,
+                onClick = onToggleLiveNoiseGate,
+                modifier = Modifier.weight(1f),
+            )
+            QuickActionChip(
+                label = "Edit EQ",
+                icon = "→",
+                onClick = onOpenEqEditor,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -131,6 +161,31 @@ private fun QuickActionChip(
     ) {
         Text(icon, color = MeatYellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ActiveChip(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) MeatOrange else Color(0xFF1F1F1F))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (active) Color.White else Color.White.copy(alpha = 0.65f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.3.sp,
+        )
     }
 }
 

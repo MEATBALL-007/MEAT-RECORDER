@@ -115,6 +115,13 @@ class MainActivity : ComponentActivity() {
                                     .putString("app_theme", it.displayName).apply()
                             },
                             onBack = { settingsOpen = false },
+                            onChangeMode = {
+                                // Reset the mode-chosen flag → next render shows the selector again
+                                modeChosen = false
+                                getPreferences(MODE_PRIVATE).edit()
+                                    .putBoolean("mode_chosen", false).apply()
+                                settingsOpen = false
+                            },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
