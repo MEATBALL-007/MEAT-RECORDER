@@ -60,7 +60,6 @@ class MainActivity : ComponentActivity() {
             var theme by remember { mutableStateOf("MEATrec") }
             var reduceMotion by remember { mutableStateOf(false) }
             RecorderProjectTheme(reduceMotion = reduceMotion) {
-                val noiseReductionEnabled by viewModel.noiseReductionEnabled.collectAsStateWithLifecycle()
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
@@ -71,12 +70,12 @@ class MainActivity : ComponentActivity() {
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
                         settingsOpen -> SettingsScreenV2(
+                            viewModel = viewModel,
                             theme = theme,
-                            noiseReductionEnabled = noiseReductionEnabled,
                             reduceMotion = reduceMotion,
                             onChangeTheme = { theme = it },
-                            onToggleNR = { viewModel.toggleNoiseReduction(it) },
                             onToggleReduceMotion = { reduceMotion = it },
+                            onPickSaveLocation = { selectSaveDirectory() },
                             onBack = { settingsOpen = false },
                         )
                         eqOpen -> EQScreen(

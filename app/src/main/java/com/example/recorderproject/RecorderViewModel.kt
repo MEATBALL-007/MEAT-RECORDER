@@ -90,6 +90,21 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateBitDepth(v: Int) { _bitDepth.value = v }
 
+    // Phase A port-back: extended recording settings (from old MEATrec ModeSettings)
+    private val _channelCount = MutableStateFlow(1)
+    val channelCount: StateFlow<Int> = _channelCount
+    fun updateChannelCount(v: Int) { _channelCount.value = v.coerceIn(1, 2) }
+
+    /** Pre-record countdown in seconds (0 = off). */
+    private val _countdownSeconds = MutableStateFlow(0)
+    val countdownSeconds: StateFlow<Int> = _countdownSeconds
+    fun updateCountdownSeconds(v: Int) { _countdownSeconds.value = v.coerceAtLeast(0) }
+
+    /** Auto-stop after this many minutes of recording (0 = off). */
+    private val _maxDurationMinutes = MutableStateFlow(0)
+    val maxDurationMinutes: StateFlow<Int> = _maxDurationMinutes
+    fun updateMaxDurationMinutes(v: Int) { _maxDurationMinutes.value = v.coerceAtLeast(0) }
+
     // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop
     private val _inputGainDb = MutableStateFlow(0f)
     val inputGainDb: StateFlow<Float> = _inputGainDb
