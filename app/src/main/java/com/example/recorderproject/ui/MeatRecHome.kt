@@ -118,6 +118,9 @@ fun MeatRecHome(
     isPaused: Boolean = false,
     onDropCue: () -> Unit = {},
     onTogglePause: () -> Unit = {},
+    monitorOn: Boolean = false,
+    onToggleMonitor: () -> Unit = {},
+    monitorRmsDb: Float = -60f,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -264,6 +267,9 @@ fun MeatRecHome(
                 onOpenSourcePicker = onOpenSourcePicker,
                 onPickSaveLocation = onPickSaveLocation,
                 onAnalyzeRoom = onAnalyzeRoom,
+                monitorOn = monitorOn,
+                onToggleMonitor = onToggleMonitor,
+                monitorRmsDb = monitorRmsDb,
             )
 
             // Batch 4: Toolbar above the recordings list (search + filter + sort)
@@ -374,6 +380,9 @@ private fun RecordingSettingsCard(
     onOpenSourcePicker: () -> Unit,
     onPickSaveLocation: () -> Unit,
     onAnalyzeRoom: () -> Unit,
+    monitorOn: Boolean = false,
+    onToggleMonitor: () -> Unit = {},
+    monitorRmsDb: Float = -60f,
 ) {
     var expanded by remember { mutableStateOf(true) }
     val chevronRotation by animateFloatAsState(
@@ -558,6 +567,62 @@ private fun RecordingSettingsCard(
                     Text("Default (app storage)", color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
                 }
                 OutlinedActionButton(label = "Browse", onClick = onPickSaveLocation)
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+
+            // Bluetooth Monitor — live mic→headphone monitoring (BT/wired/USB)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "Bluetooth Monitor",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (monitorOn) {
+                            // Tiny pulse dot + dB readout when active
+                            Box(
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MeatOrange),
+                            )
+                            Text(
+                                if (monitorRmsDb <= -59f) "—" else "%.0f dB".format(monitorRmsDb),
+                                color = MeatYellow,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            )
+                        }
+                    }
+                    Text(
+                        if (monitorOn)
+                            "Routing mic → BT / wired earphone (live, ~50 ms latency)"
+                        else
+                            "Route mic audio to BT / wired earphone",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = monitorOn,
+                    onCheckedChange = { onToggleMonitor() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = MeatOrange,
+                        uncheckedThumbColor = Color.White.copy(alpha = 0.8f),
+                        uncheckedTrackColor = Color(0xFF2A2A2A),
+                    ),
+                )
             }
 
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))

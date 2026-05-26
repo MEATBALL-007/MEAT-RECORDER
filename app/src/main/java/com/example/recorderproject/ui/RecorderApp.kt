@@ -201,6 +201,9 @@ fun RecorderApp(
         isPaused = viewModel.isPaused.collectAsStateWithLifecycle().value,
         onDropCue = { viewModel.dropCueMarker() },
         onTogglePause = { viewModel.togglePause() },
+        monitorOn = monitorOn,
+        onToggleMonitor = { viewModel.toggleMonitor() },
+        monitorRmsDb = monitorLevel.rmsDb,
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
