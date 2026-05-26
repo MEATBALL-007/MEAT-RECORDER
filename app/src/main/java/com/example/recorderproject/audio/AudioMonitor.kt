@@ -27,10 +27,16 @@ class AudioMonitor(
     private val tag = "AudioMonitor"
     @Volatile private var running = false
     @Volatile private var chain: EQChain = EQChain.empty()
+    @Volatile private var levelListener: ((rmsDb: Float, peakDb: Float) -> Unit)? = null
     private var thread: Thread? = null
 
     fun setChain(newChain: EQChain) {
         chain = newChain
+    }
+
+    /** Set or clear the per-buffer (rmsDb, peakDb) callback. Pass null to clear. */
+    fun setLevelListener(cb: ((rmsDb: Float, peakDb: Float) -> Unit)?) {
+        levelListener = cb
     }
 
     @SuppressLint("MissingPermission") // permission gated at the caller layer
@@ -95,6 +101,24 @@ class AudioMonitor(
                 }
 
                 track.write(buf, 0, read)
+
+                // Compute level for any registered meter listener (~5-15µs per buffer)
+                val cb = levelListener
+                if (cb != null && read > 0) {
+                    var sumSq = 0.0
+                    var peakAbs = 0
+                    for (i in 0 until read) {
+                        val s = buf[i].toInt()
+                        sumSq += s.toDouble() * s.toDouble()
+                        val a = if (s < 0) -s else s
+                        if (a > peakAbs) peakAbs = a
+                    }
+                    val rms = kotlin.math.sqrt(sumSq / read) / Short.MAX_VALUE.toDouble()
+                    val pk  = peakAbs.toDouble() / Short.MAX_VALUE.toDouble()
+                    val rmsDb  = if (rms <= 0.0) -60f else (20.0 * kotlin.math.log10(rms)).toFloat().coerceAtLeast(-60f)
+                    val peakDb = if (pk  <= 0.0) -60f else (20.0 * kotlin.math.log10(pk )).toFloat().coerceAtLeast(-60f)
+                    cb(rmsDb, peakDb)
+                }
             }
         } catch (e: Exception) {
             Log.e(tag, "Monitor loop crashed: ${e.message}", e)
