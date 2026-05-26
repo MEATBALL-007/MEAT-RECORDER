@@ -19,8 +19,11 @@ import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.RecorderAppWithIntro
+import com.example.recorderproject.ui.RoomProfilerScreen
+import com.example.recorderproject.ui.SceneSlicerScreen
 import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.TranscriptScreen
+import com.example.recorderproject.ui.components.PitchShiftDialog
 import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
@@ -70,6 +73,9 @@ class MainActivity : ComponentActivity() {
                 val portraitFile by viewModel.portraitFile.collectAsStateWithLifecycle()
                 val multiTakeOpen by viewModel.multiTakeOpen.collectAsStateWithLifecycle()
                 val transcriptFile by viewModel.transcriptFile.collectAsStateWithLifecycle()
+                val pitchShiftFile by viewModel.pitchShiftFile.collectAsStateWithLifecycle()
+                val roomProfilerOpen by viewModel.roomProfilerOpen.collectAsStateWithLifecycle()
+                val sceneSliceFile by viewModel.sceneSliceFile.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -108,6 +114,13 @@ class MainActivity : ComponentActivity() {
                             file = transcriptFile!!,
                             onBack = { viewModel.closeTranscript() },
                         )
+                        roomProfilerOpen -> RoomProfilerScreen(
+                            onBack = { viewModel.closeRoomProfiler() },
+                        )
+                        sceneSliceFile != null -> SceneSlicerScreen(
+                            file = sceneSliceFile!!,
+                            onBack = { viewModel.closeSceneSlicer() },
+                        )
                         else -> RecorderApp(
                             viewModel = viewModel,
                             onStartRecording = { requestRecordingPermissions() },
@@ -122,6 +135,23 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onOpenSettings = { settingsOpen = true },
+                        )
+                    }
+
+                    // Phase E pitch-shift dialog — floats over the current route
+                    // (typically RecorderApp). Closes itself on apply/cancel.
+                    pitchShiftFile?.let { f ->
+                        PitchShiftDialog(
+                            file = f,
+                            onApply = { semitones ->
+                                val out = viewModel.shiftFilePitch(f, semitones)
+                                Toast.makeText(
+                                    this,
+                                    if (out != null) "Saved ${out.name}" else "Pitch shift failed",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                            onDismiss = { viewModel.closePitchShift() },
                         )
                     }
                 }

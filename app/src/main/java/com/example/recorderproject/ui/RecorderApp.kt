@@ -382,19 +382,17 @@ fun RecorderApp(
                     android.widget.Toast.makeText(ctx, "Spectrogram coming in Phase C", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onOpenPortrait = { viewModel.openPortrait(it) },
-                onSliceScenes = {
-                    android.widget.Toast.makeText(ctx, "Scene slicer coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
-                },
+                onSliceScenes = { viewModel.openSceneSlicer(it) },
                 onSetGhostTake = {
                     viewModel.setGhostTake(it)
                     android.widget.Toast.makeText(ctx, "Ghost take set: ${it.name}", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDetectSync = {
-                    android.widget.Toast.makeText(ctx, "Sync detect coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
+                    // Sync detection is a small DSP feature — stubbed for now, will use
+                    // PitchDetector / FFTAnalyzer crosscorrelation in a follow-up.
+                    android.widget.Toast.makeText(ctx, "Sync detect — coming next release", android.widget.Toast.LENGTH_SHORT).show()
                 },
-                onPitchShift = {
-                    android.widget.Toast.makeText(ctx, "Pitch shift coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
-                },
+                onPitchShift = { viewModel.openPitchShift(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

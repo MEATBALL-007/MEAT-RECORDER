@@ -316,6 +316,50 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openTranscript(file: RecordFile) { _transcriptFile.value = file }
     fun closeTranscript() { _transcriptFile.value = null }
 
+    /** Phase E: which file's pitch-shift dialog is open (null = none). */
+    private val _pitchShiftFile = MutableStateFlow<RecordFile?>(null)
+    val pitchShiftFile: StateFlow<RecordFile?> = _pitchShiftFile
+    fun openPitchShift(file: RecordFile) { _pitchShiftFile.value = file }
+    fun closePitchShift() { _pitchShiftFile.value = null }
+
+    /** Phase E: room profiler screen open? */
+    private val _roomProfilerOpen = MutableStateFlow(false)
+    val roomProfilerOpen: StateFlow<Boolean> = _roomProfilerOpen
+    fun openRoomProfiler() { _roomProfilerOpen.value = true }
+    fun closeRoomProfiler() { _roomProfilerOpen.value = false }
+
+    /** Phase E: which file's scene-slicer screen is open (null = none). */
+    private val _sceneSliceFile = MutableStateFlow<RecordFile?>(null)
+    val sceneSliceFile: StateFlow<RecordFile?> = _sceneSliceFile
+    fun openSceneSlicer(file: RecordFile) { _sceneSliceFile.value = file }
+    fun closeSceneSlicer() { _sceneSliceFile.value = null }
+
+    /**
+     * Phase E: Run PitchShifter on [file] at [semitones]. Output saved alongside
+     * original with `_pitch+N` suffix. Returns the resulting File or null on error.
+     */
+    fun shiftFilePitch(file: RecordFile, semitones: Float): java.io.File? {
+        if (file.path.startsWith("content://")) return null
+        return try {
+            val src = java.io.File(file.path)
+            if (!src.exists()) return null
+            val suffix = "_pitch${if (semitones >= 0) "+" else ""}${"%.1f".format(semitones)}"
+            val out = java.io.File(src.parentFile, "${src.nameWithoutExtension}$suffix.wav")
+            com.example.recorderproject.audio.PitchShifter.shift(src.absolutePath, out.absolutePath, semitones)
+            // Best-effort: add the new file to the in-memory list so the user sees it.
+            val newRecord = file.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                name = out.name,
+                path = out.absolutePath,
+            )
+            _recordFiles.value = _recordFiles.value + newRecord
+            out
+        } catch (e: Exception) {
+            Log.e(TAG, "Pitch shift failed: ${e.message}", e)
+            null
+        }
+    }
+
     /**
      * Phase D: transcribed text per file (keyed by RecordFile.id).
      * Populated by [requestTranscribe] when an STT engine is hooked up.
