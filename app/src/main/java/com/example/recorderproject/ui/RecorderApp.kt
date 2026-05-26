@@ -9,17 +9,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AssignmentLate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -99,6 +111,8 @@ fun RecorderApp(
     var slateOpen by remember { mutableStateOf(false) }
     var sourcePickerOpen by remember { mutableStateOf(false) }
     var splashTrigger by remember { mutableStateOf(0) }
+    var editingFileName by remember { mutableStateOf(false) }
+    val fileNameFocus = remember { FocusRequester() }
     val sceneName by viewModel.sceneName.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val monitorOn by viewModel.monitorEnabled.collectAsStateWithLifecycle()
@@ -169,7 +183,49 @@ fun RecorderApp(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text("FILE", style = LocalAppTypography.current.labelTiny, color = RecorderBlueGrey)
-                    Text(fileName, color = Color_white(), fontWeight = FontWeight.SemiBold)
+                    // File name — clickable to enter edit mode (idle only); shows BasicTextField when editing
+                    if (editingFileName && !isRecording) {
+                        LaunchedEffect(Unit) { fileNameFocus.requestFocus() }
+                        BasicTextField(
+                            value = fileName,
+                            onValueChange = { viewModel.updateFileName(it) },
+                            textStyle = LocalTextStyle.current.copy(
+                                color = Color_white(),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp,
+                            ),
+                            singleLine = true,
+                            cursorBrush = SolidColor(RecorderOrange),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { editingFileName = false }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(fileNameFocus),
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                fileName,
+                                color = Color_white(),
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .then(
+                                        if (!isRecording)
+                                            Modifier.clickable { editingFileName = true }
+                                        else Modifier
+                                    ),
+                            )
+                            if (!isRecording) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit file name",
+                                    tint = RecorderBlueGrey,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                    }
                     Row(
                         Modifier.fillMaxWidth().padding(top = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
