@@ -18,6 +18,7 @@ import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.RecorderAppWithIntro
 import com.example.recorderproject.ui.SettingsScreenV2
+import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
 
@@ -57,9 +58,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
-            var theme by remember { mutableStateOf("MEATrec") }
+            // Persist theme by display name across launches so user's pick survives restart.
+            val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
+            var appTheme by remember { mutableStateOf(AppTheme.fromName(savedThemeName)) }
             var reduceMotion by remember { mutableStateOf(false) }
-            RecorderProjectTheme(reduceMotion = reduceMotion) {
+            RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
@@ -71,9 +74,13 @@ class MainActivity : ComponentActivity() {
                         })
                         settingsOpen -> SettingsScreenV2(
                             viewModel = viewModel,
-                            theme = theme,
+                            theme = appTheme,
                             reduceMotion = reduceMotion,
-                            onChangeTheme = { theme = it },
+                            onChangeTheme = {
+                                appTheme = it
+                                getPreferences(MODE_PRIVATE).edit()
+                                    .putString("app_theme", it.displayName).apply()
+                            },
                             onToggleReduceMotion = { reduceMotion = it },
                             onPickSaveLocation = { selectSaveDirectory() },
                             onBack = { settingsOpen = false },

@@ -1,5 +1,7 @@
 package com.example.recorderproject.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -16,36 +18,44 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
-private val RecorderDarkColors = darkColorScheme(
+/**
+ * Build a darkColorScheme for the given [AppTheme].
+ *
+ * Brand accents (primary = Orange, secondary = Yellow, tertiary = BlueGrey) stay
+ * constant across all 10 themes — only the dark surface ramp shifts per palette.
+ */
+private fun darkSchemeFor(theme: AppTheme) = darkColorScheme(
     primary              = RecorderOrange,
-    onPrimary            = RecorderCharcoal,
+    onPrimary            = theme.background,
     primaryContainer     = Color(0xFF7A1F00),
     onPrimaryContainer   = Color(0xFFFFD9CC),
     secondary            = RecorderYellow,
-    onSecondary          = RecorderCharcoal,
+    onSecondary          = theme.background,
     secondaryContainer   = Color(0xFF665000),
     onSecondaryContainer = Color(0xFFFFF1C2),
     tertiary             = RecorderBlueGrey,
-    onTertiary           = RecorderCharcoal,
-    background           = RecorderCharcoal,
+    onTertiary           = theme.background,
+    background           = theme.background,
     onBackground         = OnSurfaceDark,
-    surface              = RecorderCharcoal,
+    surface              = theme.surface,
     onSurface            = OnSurfaceDark,
-    surfaceVariant       = SurfaceContainerHigh,
+    surfaceVariant       = theme.surfaceElevated,
     onSurfaceVariant     = OnSurfaceVariantDark,
-    surfaceContainerLowest  = SurfaceContainerLowest,
-    surfaceContainerLow     = SurfaceContainerLow,
-    surfaceContainer        = SurfaceContainer,
-    surfaceContainerHigh    = SurfaceContainerHigh,
-    surfaceContainerHighest = SurfaceContainerHighest,
+    // The 5-tier surface ramp interpolates from background → surfaceElevated.
+    surfaceContainerLowest  = theme.background,
+    surfaceContainerLow     = theme.surface,
+    surfaceContainer        = theme.surfaceElevated,
+    surfaceContainerHigh    = theme.surfaceElevated,
+    surfaceContainerHighest = theme.surfaceElevated,
     error                = SemanticError,
-    onError              = RecorderCharcoal,
+    onError              = theme.background,
     outline              = RecorderBlueGrey,
     outlineVariant       = Color(0xFF3A3D42),
 )
@@ -58,13 +68,39 @@ private val RecorderLightColors = lightColorScheme(
     // Light scheme is functional but not the polish target this round.
 )
 
+/**
+ * App theme wrapper. Pass an [AppTheme] (default MIDNIGHT) — the background /
+ * surface colors are interpolated with animateColorAsState when the user picks
+ * a different theme in Settings, giving a smooth ~280ms color fade.
+ *
+ * Pass [darkTheme] = false to opt into the light scheme; theme picker only
+ * applies in dark mode (light mode is a single neutral baseline).
+ */
 @Composable
 fun RecorderProjectTheme(
+    appTheme: AppTheme = AppTheme.Default,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    reduceMotion: Boolean = false,   // caller (MainActivity) wires from SettingsDataStore once that toggle exists; default false until then
+    reduceMotion: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) RecorderDarkColors else RecorderLightColors
+    // Smoothly fade between palettes when the user switches themes.
+    val durationMs = if (reduceMotion) 0 else 280
+    val animBackground by animateColorAsState(appTheme.background, tween(durationMs), label = "themeBg")
+    val animSurface by animateColorAsState(appTheme.surface, tween(durationMs), label = "themeSurface")
+    val animSurfaceElev by animateColorAsState(appTheme.surfaceElevated, tween(durationMs), label = "themeSurfaceElev")
+
+    val darkScheme = darkSchemeFor(appTheme).copy(
+        background = animBackground,
+        surface = animSurface,
+        surfaceVariant = animSurfaceElev,
+        surfaceContainerLowest = animBackground,
+        surfaceContainerLow = animSurface,
+        surfaceContainer = animSurfaceElev,
+        surfaceContainerHigh = animSurfaceElev,
+        surfaceContainerHighest = animSurfaceElev,
+    )
+
+    val colors = if (darkTheme) darkScheme else RecorderLightColors
     CompositionLocalProvider(
         LocalReduceMotion provides reduceMotion,
         LocalAppTypography provides RecorderAppTypography,

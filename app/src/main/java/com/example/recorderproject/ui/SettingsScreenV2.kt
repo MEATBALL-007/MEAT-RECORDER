@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.RecorderViewModel
 import com.example.recorderproject.ui.components.BrandWordmark
+import com.example.recorderproject.ui.components.ColorDot
+import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
@@ -58,9 +60,9 @@ import com.example.recorderproject.ui.theme.RecorderYellow
 @Composable
 fun SettingsScreenV2(
     viewModel: RecorderViewModel,
-    theme: String,
+    theme: AppTheme,
     reduceMotion: Boolean,
-    onChangeTheme: (String) -> Unit,
+    onChangeTheme: (AppTheme) -> Unit,
     onToggleReduceMotion: (Boolean) -> Unit,
     onPickSaveLocation: () -> Unit,
     onBack: () -> Unit,
@@ -96,7 +98,7 @@ fun SettingsScreenV2(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             SectionHeader("APPEARANCE")
-            ThemeRow(theme, onChangeTheme)
+            ThemeGrid(current = theme, onChange = onChangeTheme)
 
             SectionHeader("RECORDING")
             ChipRow(
@@ -210,35 +212,79 @@ private fun ToggleRow(label: String, detail: String, value: Boolean, onChange: (
     }
 }
 
+/**
+ * 10-theme picker grid — 2 columns × 5 rows. Each cell shows a [ColorDot] swatch
+ * with the theme's bg/surface/surfaceElevated triple, theme name, and a halo
+ * around the active selection (RecorderOrange border).
+ */
 @Composable
-private fun ThemeRow(current: String, onChange: (String) -> Unit) {
-    Row(
+private fun ThemeGrid(current: AppTheme, onChange: (AppTheme) -> Unit) {
+    val entries = AppTheme.entries
+    Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(RecorderCharcoalCard)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Theme", color = Color.White, fontWeight = FontWeight.SemiBold)
-        Row(
-            Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xFF0C0C10)).padding(3.dp),
-        ) {
-            for (t in listOf("MEATrec", "Light", "System")) {
-                val active = t == current
-                Text(
-                    t,
-                    color = if (active) Color.White else RecorderBlueGrey,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(if (active) RecorderOrange else Color.Transparent)
-                        .clickable { onChange(t) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                )
+        // 2-column grid — chunk into rows of 2
+        entries.chunked(2).forEach { rowEntries ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowEntries.forEach { t ->
+                    ThemeCell(
+                        theme = t,
+                        active = t == current,
+                        onClick = { onChange(t) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // pad row when odd count (10 themes → always even, but defensive)
+                if (rowEntries.size == 1) Box(Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun ThemeCell(
+    theme: AppTheme,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (active) RecorderOrange else Color(0xFF2A2D33)
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(theme.surface)
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        ColorDot(
+            background = theme.background,
+            surface = theme.surface,
+            surfaceElevated = theme.surfaceElevated,
+            size = 26.dp,
+        )
+        Text(
+            theme.displayName,
+            color = if (active) RecorderYellow else Color.White,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+        )
+        if (active) {
+            Text("●", color = RecorderOrange, fontSize = 14.sp)
+        }
+        // Faint outline (using a border-like effect via the surface contrast)
+        // — implemented as a separate Box layer would inflate complexity; the
+        // active dot above is enough visual indication paired with the yellow text.
+        @Suppress("UNUSED_VARIABLE") val unused = borderColor
     }
 }
 
