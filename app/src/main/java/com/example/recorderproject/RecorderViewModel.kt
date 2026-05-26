@@ -13,11 +13,15 @@ import com.example.recorderproject.model.EQChain
 import com.example.recorderproject.model.EQEditMode
 import com.example.recorderproject.model.EQViewMode
 import com.example.recorderproject.model.RecordFile
+import com.example.recorderproject.model.SortOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.util.Log
@@ -33,6 +37,29 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     private val _recordFiles = MutableStateFlow<List<RecordFile>>(emptyList())
     val recordFiles: StateFlow<List<RecordFile>> = _recordFiles
+
+    private val _sortOrder = MutableStateFlow(SortOrder.Default)
+    val sortOrder: StateFlow<SortOrder> = _sortOrder
+
+    /**
+     * Files sorted per `sortOrder`. UI should observe this, not `recordFiles`.
+     * Date sort uses insertion order as a proxy (`_recordFiles` appends on new takes);
+     * `RecordFile` has no explicit timestamp field today.
+     */
+    val sortedRecordFiles: StateFlow<List<RecordFile>> = combine(_recordFiles, _sortOrder) { files, order ->
+        applySort(files, order)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun setSortOrder(order: SortOrder) { _sortOrder.value = order }
+
+    private fun applySort(files: List<RecordFile>, order: SortOrder): List<RecordFile> = when (order) {
+        SortOrder.DATE_NEWEST    -> files.asReversed()
+        SortOrder.DATE_OLDEST    -> files
+        SortOrder.NAME_ASC       -> files.sortedBy { it.name.lowercase() }
+        SortOrder.NAME_DESC      -> files.sortedByDescending { it.name.lowercase() }
+        SortOrder.DURATION_LONG  -> files.sortedByDescending { it.durationSeconds }
+        SortOrder.DURATION_SHORT -> files.sortedBy { it.durationSeconds }
+    }
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording

@@ -63,6 +63,7 @@ import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 import com.example.recorderproject.ui.components.BrandWordmark
+import com.example.recorderproject.ui.components.SortPicker
 import com.example.recorderproject.ui.theme.LocalAppTypography
 import com.example.recorderproject.ui.theme.Spacing
 
@@ -77,7 +78,8 @@ fun RecorderApp(
     onOpenSettings: () -> Unit = {},
 ) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
-    val files by viewModel.recordFiles.collectAsStateWithLifecycle()
+    val files by viewModel.sortedRecordFiles.collectAsStateWithLifecycle()
+    val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
@@ -282,7 +284,13 @@ fun RecorderApp(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text("RECORDINGS", style = LocalAppTypography.current.labelTiny, color = RecorderBlueGrey)
-                Text("${files.size}", style = LocalAppTypography.current.labelTiny, color = RecorderYellow)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    Text("${files.size}", style = LocalAppTypography.current.labelTiny, color = RecorderYellow)
+                    SortPicker(current = sortOrder, onChange = { viewModel.setSortOrder(it) })
+                }
             }
 
             RecordingFileList(
