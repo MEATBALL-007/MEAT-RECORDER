@@ -139,30 +139,35 @@ fun RecorderApp(
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
 
+    val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxSize()) {
-    AppleHomeScreen(
-        files = files,
+    // Faithful rebuild of 22 May APK home — see recovery/screenshots/04-after-skip.png
+    MeatRecHome(
         isRecording = isRecording,
-        elapsedSeconds = elapsed,
-        searchQuery = searchQuery,
-        onSearchChange = { viewModel.setSearchQuery(it) },
-        selectedFile = selectedPlayFile,
-        isPlaying = isPlaying,
-        onTapFile = {
-            viewModel.selectFile(it)
-            playerExpanded = false
-        },
-        onStartRecording = {
+        fileName = fileName,
+        sceneName = sceneName,
+        notes = notes,
+        noiseReductionEnabled = viewModel.noiseReductionEnabled.collectAsStateWithLifecycle().value,
+        sampleRate = sampleRate,
+        bitDepth = bitDepth,
+        channelCount = channelCount,
+        onFileNameChange = { viewModel.updateFileName(it) },
+        onSceneNameChange = { viewModel.updateSceneName(it) },
+        onNotesChange = { viewModel.updateNotes(it) },
+        onToggleNR = { viewModel.toggleNoiseReduction(it) },
+        onChangeSampleRate = { viewModel.updateSampleRate(it) },
+        onChangeBitDepth = { viewModel.updateBitDepth(it) },
+        onChangeChannelCount = { viewModel.updateChannelCount(it) },
+        onTapRecord = {
             splashTrigger++
-            onStartRecording()
+            if (isRecording) viewModel.stopRecording() else onStartRecording()
         },
-        onStopRecording = {
-            splashTrigger++
-            viewModel.stopRecording()
-        },
-        onExpandRecording = { /* TODO: open full recording sheet (Phase H+1) */ },
-        onOpenMenu = { viewModel.openMenu() },
         onOpenSettings = onOpenSettings,
+        onOpenSourcePicker = { sourcePickerOpen = true },
+        onPickSaveLocation = onSelectSaveLocation,
+        onAnalyzeRoom = { viewModel.openRoomProfiler() },
+        files = files,
+        onTapFile = { viewModel.selectFile(it) },
     )
 
     // Spectrum-splash overlay — erupts when Record/Stop is pressed
