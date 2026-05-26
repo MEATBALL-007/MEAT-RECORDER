@@ -171,7 +171,32 @@ fun RecorderApp(
         elapsedSeconds = elapsed,
         waveform = waveform,
         inputLevelPercent = (monitorLevel.rmsDb + 60f).coerceIn(0f, 60f).let { (it / 60f * 100f).toInt() },
+        selectedFileId = selectedPlayFile?.id,
+        isPlaying = isPlaying,
+        onShareFile = { viewModel.shareRecording(it) },
+        onRenameFile = { f, newName -> viewModel.renameRecording(f, newName) },
+        onToggleStarFile = { viewModel.toggleStarRecording(it) },
+        onToggleLockFile = { viewModel.toggleLockRecording(it) },
+        onDeleteFile = { viewModel.deleteRecording(it) },
+        onTrimFile = { viewModel.openTrim(it) },
+        onEQFile = { viewModel.onEQOpen(it) },
     )
+
+    // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+    ) {
+        com.example.recorderproject.ui.components.MeatRecMiniPlayer(
+            file = selectedPlayFile,
+            isPlaying = isPlaying,
+            positionMs = playPosMs,
+            durationMs = playDurMs,
+            onPlayPause = { viewModel.playPause() },
+            onSeek = { viewModel.seekTo(it) },
+            onClose = { viewModel.closePlayer() },
+        )
+    }
 
     // Spectrum-splash overlay — erupts when Record/Stop is pressed
     SpectrumSplash(

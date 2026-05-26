@@ -95,6 +95,15 @@ fun MeatRecHome(
     elapsedSeconds: Int = 0,
     waveform: List<Float> = emptyList(),
     inputLevelPercent: Int = 0,
+    selectedFileId: String? = null,
+    isPlaying: Boolean = false,
+    onShareFile: (RecordFile) -> Unit = {},
+    onRenameFile: (RecordFile, String) -> Unit = { _, _ -> },
+    onToggleStarFile: (RecordFile) -> Unit = {},
+    onToggleLockFile: (RecordFile) -> Unit = {},
+    onDeleteFile: (RecordFile) -> Unit = {},
+    onTrimFile: (RecordFile) -> Unit = {},
+    onEQFile: (RecordFile) -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -212,6 +221,24 @@ fun MeatRecHome(
                 onPickSaveLocation = onPickSaveLocation,
                 onAnalyzeRoom = onAnalyzeRoom,
             )
+
+            // L1: Recordings list card — Batch 1, file library
+            com.example.recorderproject.ui.components.RecordingsListCard(
+                files = files,
+                selectedId = selectedFileId,
+                isPlaying = isPlaying,
+                onTap = onTapFile,
+                onShare = onShareFile,
+                onRename = onRenameFile,
+                onToggleStar = onToggleStarFile,
+                onToggleLock = onToggleLockFile,
+                onDelete = onDeleteFile,
+                onOpenTrim = onTrimFile,
+                onOpenEQ = onEQFile,
+            )
+
+            // Padding at the bottom so the MiniPlayer doesn't cover the last row
+            Box(modifier = Modifier.height(80.dp))
         }
     }
 }
