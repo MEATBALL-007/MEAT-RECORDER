@@ -82,6 +82,23 @@ class AudioRecorderManager(private val context: Context) {
     @Volatile private var paused: Boolean = false
     fun setPaused(p: Boolean) { paused = p }
 
+    // G9: AGC — track running peak; slowly bring it toward target.
+    @Volatile private var agcOn: Boolean = false
+    @Volatile private var agcGain: Float = 1f
+    private val agcTargetRms = 0.18f
+    fun setAgc(enabled: Boolean) { agcOn = enabled; if (!enabled) agcGain = 1f }
+
+    // G10: Hi-pass filter (rumble removal) — single-pole 80 Hz cutoff. Skipped when off.
+    @Volatile private var hiPassOn: Boolean = false
+    @Volatile private var hiPassY1: Double = 0.0
+    @Volatile private var hiPassX1: Double = 0.0
+    fun setHiPass(enabled: Boolean) { hiPassOn = enabled }
+
+    // G11: Anti-clipping auto-attenuator — when peak hits ≥0.98, drop gain by 1 dB.
+    @Volatile private var antiClipOn: Boolean = false
+    @Volatile private var antiClipGain: Float = 1f
+    fun setAntiClip(enabled: Boolean) { antiClipOn = enabled; if (!enabled) antiClipGain = 1f }
+
     fun setLiveEqChain(chain: EQChain?, sr: Float) {
         if (chain == null) {
             liveEqActive = false
@@ -181,13 +198,46 @@ class AudioRecorderManager(private val context: Context) {
                         val biquads = liveEqBiquads
                         val eqOn = liveEqActive && biquads.isNotEmpty()
                         val gainOn = kotlin.math.abs(gain - 1.0f) > 0.01f
-                        if (eqOn || gainOn) {
+                        // G9/G10/G11: extra DSP stages — only enter inner loop if any toggle is on.
+                        val needsExtras = eqOn || gainOn || agcOn || hiPassOn || antiClipOn
+                        if (needsExtras) {
+                            // Hi-pass coefficient: ~80 Hz @ 48k → a = exp(-2π * 80 / 48000)
+                            val hpAlpha = 0.98955  // ≈ matches 80 Hz cutoff at 48k
+                            var peak = 0.0
+                            var sumSq = 0.0
                             for (i in 0 until read) {
                                 var x = audioBuffer[i].toDouble() / Short.MAX_VALUE
                                 if (gainOn) x *= gain
+                                if (hiPassOn) {
+                                    // y[n] = α·(y[n-1] + x[n] − x[n-1])
+                                    val y = hpAlpha * (hiPassY1 + x - hiPassX1)
+                                    hiPassX1 = x
+                                    hiPassY1 = y
+                                    x = y
+                                }
                                 if (eqOn) for (b in biquads) x = b.process(x)
+                                if (agcOn) x *= agcGain
+                                if (antiClipOn) x *= antiClipGain
                                 if (x > 0.999 || x < -0.999) x = kotlin.math.tanh(x)
+                                if (kotlin.math.abs(x) > peak) peak = kotlin.math.abs(x)
+                                sumSq += x * x
                                 audioBuffer[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+                            }
+                            // AGC slew: ease toward target every buffer
+                            if (agcOn) {
+                                val rms = kotlin.math.sqrt(sumSq / read).toFloat()
+                                if (rms > 1e-5f) {
+                                    val targetGain = (agcTargetRms / rms).coerceIn(0.25f, 4f)
+                                    agcGain = (agcGain * 0.95f + targetGain * 0.05f).coerceIn(0.25f, 4f)
+                                }
+                            }
+                            // Anti-clip: nudge gain down when peak nears clip; recover slowly.
+                            if (antiClipOn) {
+                                antiClipGain = if (peak >= 0.98) {
+                                    (antiClipGain * 0.891f).coerceAtLeast(0.1f) // -1 dB
+                                } else {
+                                    (antiClipGain * 1.001f).coerceAtMost(1f) // creep back
+                                }
                             }
                         }
                         // F13: Live noise gate — zero out samples in buffers whose RMS

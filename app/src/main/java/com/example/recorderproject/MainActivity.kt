@@ -23,6 +23,7 @@ import com.example.recorderproject.ui.RecorderAppWithIntro
 import com.example.recorderproject.ui.RoomProfilerScreen
 import com.example.recorderproject.ui.SceneSlicerScreen
 import com.example.recorderproject.ui.SettingsScreenV2
+import com.example.recorderproject.ui.StatisticsScreen
 import com.example.recorderproject.ui.TranscriptScreen
 import com.example.recorderproject.ui.components.PitchShiftDialog
 import com.example.recorderproject.ui.theme.AppTheme
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
                 val roomProfilerOpen by viewModel.roomProfilerOpen.collectAsStateWithLifecycle()
                 val sceneSliceFile by viewModel.sceneSliceFile.collectAsStateWithLifecycle()
                 val menuOpen by viewModel.menuOpen.collectAsStateWithLifecycle()
+                val statsOpen by viewModel.statsOpen.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -135,6 +137,11 @@ class MainActivity : ComponentActivity() {
                             },
                             onOpenRoomProfiler = { viewModel.closeMenu(); viewModel.openRoomProfiler() },
                             onOpenMultiTake = { viewModel.closeMenu(); viewModel.openMultiTake() },
+                            onOpenStats = { viewModel.closeMenu(); viewModel.openStats() },
+                        )
+                        statsOpen -> StatisticsScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeStats() },
                         )
                         else -> RecorderApp(
                             viewModel = viewModel,

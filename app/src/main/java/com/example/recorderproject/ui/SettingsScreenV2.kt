@@ -74,6 +74,11 @@ fun SettingsScreenV2(
     val countdownSeconds by viewModel.countdownSeconds.collectAsStateWithLifecycle()
     val maxDurationMinutes by viewModel.maxDurationMinutes.collectAsStateWithLifecycle()
     val saveDirectoryUri by viewModel.saveDirectoryUri.collectAsStateWithLifecycle()
+    val agcOn by viewModel.agcOn.collectAsStateWithLifecycle()
+    val hiPassOn by viewModel.hiPassOn.collectAsStateWithLifecycle()
+    val antiClipOn by viewModel.antiClipOn.collectAsStateWithLifecycle()
+    val vadOn by viewModel.vadOn.collectAsStateWithLifecycle()
+    val quality by viewModel.quality.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -101,6 +106,13 @@ fun SettingsScreenV2(
             ThemeGrid(current = theme, onChange = onChangeTheme)
 
             SectionHeader("RECORDING")
+            // G8 quality preset chip row
+            ChipRow(
+                label = "Quality preset",
+                options = com.example.recorderproject.model.RecordingQuality.entries.map { it to it.displayName },
+                current = quality,
+                onChange = { viewModel.setQuality(it) },
+            )
             ChipRow(
                 label = "Sample rate",
                 options = listOf(44100 to "44.1 k", 48000 to "48 k", 96000 to "96 k"),
@@ -124,6 +136,31 @@ fun SettingsScreenV2(
                 detail = "Runs noise gate after each take",
                 value = noiseReductionEnabled,
                 onChange = { viewModel.toggleNoiseReduction(it) },
+            )
+            // G9 / G10 / G11 / G13 live DSP toggles
+            ToggleRow(
+                label = "Auto gain control (AGC)",
+                detail = "Smooths input level toward target during record",
+                value = agcOn,
+                onChange = { viewModel.toggleAgc() },
+            )
+            ToggleRow(
+                label = "Hi-pass filter (rumble cut)",
+                detail = "Removes content below ~80 Hz",
+                value = hiPassOn,
+                onChange = { viewModel.toggleHiPass() },
+            )
+            ToggleRow(
+                label = "Anti-clipping attenuator",
+                detail = "Auto-drops gain when peak approaches 0 dBFS",
+                value = antiClipOn,
+                onChange = { viewModel.toggleAntiClip() },
+            )
+            ToggleRow(
+                label = "Voice activation start (VAD)",
+                detail = "Auto-arms recording when voice detected",
+                value = vadOn,
+                onChange = { viewModel.toggleVad() },
             )
 
             SectionHeader("TIMING")

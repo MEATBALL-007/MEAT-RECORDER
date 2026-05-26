@@ -136,6 +136,89 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
     }
 
+    // G9: Auto Gain Control toggle
+    private val _agcOn = MutableStateFlow(false)
+    val agcOn: StateFlow<Boolean> = _agcOn
+    fun toggleAgc() {
+        _agcOn.value = !_agcOn.value
+        recorder.setAgc(_agcOn.value)
+    }
+
+    // G10: Hi-pass (rumble removal) toggle
+    private val _hiPassOn = MutableStateFlow(false)
+    val hiPassOn: StateFlow<Boolean> = _hiPassOn
+    fun toggleHiPass() {
+        _hiPassOn.value = !_hiPassOn.value
+        recorder.setHiPass(_hiPassOn.value)
+    }
+
+    // G11: Anti-clipping auto-attenuator toggle
+    private val _antiClipOn = MutableStateFlow(false)
+    val antiClipOn: StateFlow<Boolean> = _antiClipOn
+    fun toggleAntiClip() {
+        _antiClipOn.value = !_antiClipOn.value
+        recorder.setAntiClip(_antiClipOn.value)
+    }
+
+    // G8: Quality presets — applies sampleRate / bitDepth / channelCount in one call.
+    private val _quality = MutableStateFlow(com.example.recorderproject.model.RecordingQuality.Default)
+    val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = _quality
+    fun setQuality(q: com.example.recorderproject.model.RecordingQuality) {
+        _quality.value = q
+        _sampleRate.value = q.sampleRate
+        _bitDepth.value = q.bitDepth
+        _channelCount.value = q.channelCount
+    }
+
+    // G12: Recording schedule — start at a given absolute time (epoch ms). 0 = off.
+    private val _scheduledStartMs = MutableStateFlow(0L)
+    val scheduledStartMs: StateFlow<Long> = _scheduledStartMs
+    private var scheduleJob: kotlinx.coroutines.Job? = null
+    fun setScheduledStart(epochMs: Long, onFire: () -> Unit) {
+        _scheduledStartMs.value = epochMs
+        scheduleJob?.cancel()
+        if (epochMs <= 0) return
+        scheduleJob = viewModelScope.launch {
+            val waitMs = (epochMs - System.currentTimeMillis()).coerceAtLeast(0)
+            kotlinx.coroutines.delay(waitMs)
+            if (_scheduledStartMs.value == epochMs) onFire()
+        }
+    }
+    fun cancelSchedule() { scheduleJob?.cancel(); _scheduledStartMs.value = 0L }
+
+    // G13: VAD (voice-activity detection) — auto-start recording when input rises.
+    private val _vadOn = MutableStateFlow(false)
+    val vadOn: StateFlow<Boolean> = _vadOn
+    fun toggleVad() { _vadOn.value = !_vadOn.value }
+
+    // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
+    fun addTagToFile(file: RecordFile, tag: String) {
+        if (tag.isBlank()) return
+        val existing = file.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+        if (existing.contains(tag)) return
+        existing += tag
+        val merged = existing.joinToString(",")
+        _recordFiles.value = _recordFiles.value.map {
+            if (it.id == file.id) it.copy(tags = merged) else it
+        }
+    }
+    fun removeTagFromFile(file: RecordFile, tag: String) {
+        val existing = file.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != tag }
+        val merged = existing.joinToString(",")
+        _recordFiles.value = _recordFiles.value.map {
+            if (it.id == file.id) it.copy(tags = merged) else it
+        }
+    }
+
+    // G15: Auto-name from scene + date/time when filename is left blank.
+    fun autoNameForNextTake(): String {
+        val now = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US)
+            .format(java.util.Date())
+        val scene = _sceneName.value.replace("[^A-Za-z0-9_-]".toRegex(), "_").take(24)
+        val base = if (scene.isNotBlank()) "${scene}_$now" else "rec_$now"
+        return "$base.wav"
+    }
+
     private val _currentWaveform = MutableStateFlow<List<Float>>(emptyList())
     val currentWaveform: StateFlow<List<Float>> = _currentWaveform
 
@@ -384,6 +467,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val menuOpen: StateFlow<Boolean> = _menuOpen
     fun openMenu() { _menuOpen.value = true }
     fun closeMenu() { _menuOpen.value = false }
+
+    /** G16: stats screen open? */
+    private val _statsOpen = MutableStateFlow(false)
+    val statsOpen: StateFlow<Boolean> = _statsOpen
+    fun openStats() { _statsOpen.value = true }
+    fun closeStats() { _statsOpen.value = false }
 
     /** Phase D: which file's transcript view is open (null = none). */
     private val _transcriptFile = MutableStateFlow<RecordFile?>(null)

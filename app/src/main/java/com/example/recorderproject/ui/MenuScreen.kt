@@ -76,6 +76,7 @@ fun MenuScreen(
     onOpenEQOnLast: () -> Unit,
     onOpenRoomProfiler: () -> Unit,
     onOpenMultiTake: () -> Unit,
+    onOpenStats: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
     val scrollFrac = (scrollState.value.toFloat() / 600f).coerceIn(0f, 1f)
@@ -129,7 +130,7 @@ fun MenuScreen(
                     if (last != null) viewModel.openSceneSlicer(last)
                 },
                 MenuItem("⚙️", "Settings", "Theme · sample rate · etc.", onOpenSettings),
-                MenuItem("📊", "Statistics", "Total time · file count") {},
+                MenuItem("📊", "Statistics", "Total time · file count", onOpenStats),
             )
 
             Column(
