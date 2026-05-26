@@ -125,6 +125,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun togglePause() {
         if (!_isRecording.value) return
         _isPaused.value = !_isPaused.value
+        recorder.setPaused(_isPaused.value)
+    }
+
+    // G2: Live noise gate while recording — toggle from the feature chips.
+    private val _liveNoiseGateOn = MutableStateFlow(false)
+    val liveNoiseGateOn: StateFlow<Boolean> = _liveNoiseGateOn
+    fun toggleLiveNoiseGate() {
+        _liveNoiseGateOn.value = !_liveNoiseGateOn.value
+        recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
     }
 
     private val _currentWaveform = MutableStateFlow<List<Float>>(emptyList())
@@ -369,6 +378,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val multiTakeOpen: StateFlow<Boolean> = _multiTakeOpen
     fun openMultiTake() { _multiTakeOpen.value = true }
     fun closeMultiTake() { _multiTakeOpen.value = false }
+
+    /** G4: menu screen open? */
+    private val _menuOpen = MutableStateFlow(false)
+    val menuOpen: StateFlow<Boolean> = _menuOpen
+    fun openMenu() { _menuOpen.value = true }
+    fun closeMenu() { _menuOpen.value = false }
 
     /** Phase D: which file's transcript view is open (null = none). */
     private val _transcriptFile = MutableStateFlow<RecordFile?>(null)
@@ -767,6 +782,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _playbackDuration.value = mp.duration
                 _currentPlaybackPosition.value = 0
                 _isPlayerReady.value = true
+                // G1: auto-start on selectFile so tapping a row plays immediately
+                try {
+                    mp.start()
+                    _isPlaying.value = true
+                    startPositionUpdates()
+                } catch (_: Exception) {}
             }
             if (file.path.startsWith("content://")) {
                 mediaPlayer.setDataSource(app, android.net.Uri.parse(file.path))
@@ -804,6 +825,43 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun seekTo(position: Int) {
         mediaPlayer.seekTo(position)
         _currentPlaybackPosition.value = position
+    }
+
+    fun closePlayer() {
+        try { mediaPlayer.reset() } catch (_: Exception) {}
+        _isPlaying.value = false
+        _selectedFile.value = null
+        _currentPlaybackPosition.value = 0
+        positionUpdateJob?.cancel()
+    }
+
+    // G5: playback speed
+    private val _playbackSpeed = MutableStateFlow(1f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed
+    fun setPlaybackSpeed(speed: Float) {
+        _playbackSpeed.value = speed
+        try {
+            val params = mediaPlayer.playbackParams
+            params.speed = speed
+            mediaPlayer.playbackParams = params
+        } catch (_: Exception) {}
+    }
+
+    // G6: loop playback
+    private val _playbackLoop = MutableStateFlow(false)
+    val playbackLoop: StateFlow<Boolean> = _playbackLoop
+    fun toggleLoop() {
+        _playbackLoop.value = !_playbackLoop.value
+        mediaPlayer.isLooping = _playbackLoop.value
+    }
+
+    // G7: playback volume (0..1)
+    private val _playbackVolume = MutableStateFlow(1f)
+    val playbackVolume: StateFlow<Float> = _playbackVolume
+    fun setPlaybackVolume(v: Float) {
+        val vv = v.coerceIn(0f, 1f)
+        _playbackVolume.value = vv
+        mediaPlayer.setVolume(vv, vv)
     }
 
     private fun startPositionUpdates() {

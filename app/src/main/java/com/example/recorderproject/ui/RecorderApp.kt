@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AssignmentLate
 import androidx.compose.material3.Icon
@@ -98,6 +99,18 @@ fun RecorderApp(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val fileFilter by viewModel.fileFilter.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedFileIds.collectAsStateWithLifecycle()
+    // G1 playback bar state
+    val selectedPlayFile by viewModel.selectedFile.collectAsStateWithLifecycle()
+    val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+    val isPlayerReady by viewModel.isPlayerReady.collectAsStateWithLifecycle()
+    val playPosMs by viewModel.currentPlaybackPosition.collectAsStateWithLifecycle()
+    val playDurMs by viewModel.playbackDuration.collectAsStateWithLifecycle()
+    val playSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val playLoop by viewModel.playbackLoop.collectAsStateWithLifecycle()
+    val playVolume by viewModel.playbackVolume.collectAsStateWithLifecycle()
+    var playerExpanded by remember { mutableStateOf(false) }
+    // G2 live noise gate state
+    val liveNoiseGateOn by viewModel.liveNoiseGateOn.collectAsStateWithLifecycle()
     val fileName by viewModel.fileName.collectAsStateWithLifecycle()
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
@@ -134,6 +147,11 @@ fun RecorderApp(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MeatrecMark(size = 32.dp)
                         BrandWordmark()
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { viewModel.openMenu() }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = RecorderYellow)
                     }
                 },
                 actions = {
@@ -281,13 +299,15 @@ fun RecorderApp(
                 onChange = { viewModel.updateInputGainDb(it) },
             )
 
-            // Feature chips row: Monitor (BT earphone) · Live EQ · Mic source
+            // Feature chips row: Monitor (BT earphone) · Live EQ · Mic source · NR gate
             RecorderFeatureChips(
                 monitorOn = monitorOn,
                 liveEqOn = liveEqOn,
+                liveNoiseGateOn = liveNoiseGateOn,
                 micSourceLabel = micSource,
                 onToggleMonitor = { viewModel.toggleMonitor() },
                 onToggleLiveEq = { viewModel.toggleLiveEq() },
+                onToggleLiveNoiseGate = { viewModel.toggleLiveNoiseGate() },
                 onOpenSourcePicker = { sourcePickerOpen = true },
             )
 
@@ -427,9 +447,33 @@ fun RecorderApp(
             }
 
             val ctx = androidx.compose.ui.platform.LocalContext.current
+            // G1: persistent mini player — appears when a file is selected for playback
+            com.example.recorderproject.ui.components.MiniPlayerBar(
+                file = selectedPlayFile,
+                isPlaying = isPlaying,
+                isReady = isPlayerReady,
+                positionMs = playPosMs,
+                durationMs = playDurMs,
+                speed = playSpeed,
+                loop = playLoop,
+                volume = playVolume,
+                onPlayPause = { viewModel.playPause() },
+                onSeek = { viewModel.seekTo(it) },
+                onClose = { viewModel.closePlayer() },
+                onToggleLoop = { viewModel.toggleLoop() },
+                onChangeSpeed = { viewModel.setPlaybackSpeed(it) },
+                onChangeVolume = { viewModel.setPlaybackVolume(it) },
+                expanded = playerExpanded,
+                onToggleExpand = { playerExpanded = !playerExpanded },
+            )
+
             RecordingFileList(
                 files = files,
-                onTapFile = { viewModel.selectFile(it) },
+                onTapFile = {
+                    viewModel.selectFile(it)
+                    // Auto-play when user picks a file
+                    playerExpanded = false
+                },
                 onTapEQ = { viewModel.onEQOpen(it) },
                 onShare = { viewModel.shareRecording(it) },
                 onDelete = { viewModel.deleteRecording(it) },

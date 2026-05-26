@@ -28,38 +28,59 @@ import com.example.recorderproject.ui.theme.RecorderYellow
 fun RecorderFeatureChips(
     monitorOn: Boolean,
     liveEqOn: Boolean,
+    liveNoiseGateOn: Boolean = false,
     micSourceLabel: String,
     onToggleMonitor: () -> Unit,
     onToggleLiveEq: () -> Unit,
+    onToggleLiveNoiseGate: () -> Unit = {},
     onOpenSourcePicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    androidx.compose.foundation.Canvas(modifier = Modifier) {}
+    androidx.compose.foundation.layout.Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Chip(
-            icon = "🎧",
-            label = if (monitorOn) "Monitor ON" else "Monitor",
-            active = monitorOn,
-            onClick = onToggleMonitor,
-            modifier = Modifier.weight(1f),
-        )
-        Chip(
-            icon = "⚡",
-            label = if (liveEqOn) "Live EQ" else "Live EQ",
-            active = liveEqOn,
-            onClick = onToggleLiveEq,
-            modifier = Modifier.weight(1f),
-        )
-        Chip(
-            icon = "🎤",
-            label = micSourceLabel.take(10),
-            active = false,
-            onClick = onOpenSourcePicker,
-            modifier = Modifier.weight(1.1f),
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Chip(
+                icon = "🎧",
+                label = if (monitorOn) "Monitor ON" else "Monitor",
+                active = monitorOn,
+                onClick = onToggleMonitor,
+                modifier = Modifier.weight(1f),
+            )
+            Chip(
+                icon = "⚡",
+                label = "Live EQ",
+                active = liveEqOn,
+                onClick = onToggleLiveEq,
+                modifier = Modifier.weight(1f),
+            )
+            Chip(
+                icon = "🎤",
+                label = micSourceLabel.take(10),
+                active = false,
+                onClick = onOpenSourcePicker,
+                modifier = Modifier.weight(1.1f),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Chip(
+                icon = "🚫",
+                label = if (liveNoiseGateOn) "NR Gate ON" else "NR Gate",
+                active = liveNoiseGateOn,
+                onClick = onToggleLiveNoiseGate,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 

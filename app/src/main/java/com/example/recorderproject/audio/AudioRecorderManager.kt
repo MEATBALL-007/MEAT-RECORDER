@@ -67,6 +67,21 @@ class AudioRecorderManager(private val context: Context) {
     fun setInputGain(v: Float) { inputGain = v.coerceIn(0.0f, 8.0f) }
 
     /** Push a new EQ chain into the recording loop. Pass null to disable. */
+    // F13: Live noise gate — drops samples whose RMS is below threshold while recording.
+    // The gate is RMS-windowed (4096 samples) so it doesn't chop syllables mid-word.
+    @Volatile private var liveNoiseGateOn: Boolean = false
+    @Volatile private var liveNoiseGateThreshold: Float = 0.005f // ~-46 dBFS
+
+    fun setLiveNoiseGate(enabled: Boolean, thresholdDb: Float = -46f) {
+        liveNoiseGateOn = enabled
+        // dB → linear 0..1
+        liveNoiseGateThreshold = Math.pow(10.0, (thresholdDb / 20.0).toDouble()).toFloat()
+    }
+
+    // F2: Live pause — when true, the recording loop skips writePcmData (timer keeps going).
+    @Volatile private var paused: Boolean = false
+    fun setPaused(p: Boolean) { paused = p }
+
     fun setLiveEqChain(chain: EQChain?, sr: Float) {
         if (chain == null) {
             liveEqActive = false
@@ -174,6 +189,26 @@ class AudioRecorderManager(private val context: Context) {
                                 if (x > 0.999 || x < -0.999) x = kotlin.math.tanh(x)
                                 audioBuffer[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
                             }
+                        }
+                        // F13: Live noise gate — zero out samples in buffers whose RMS
+                        // sits below the gate threshold (background-only stretches).
+                        if (liveNoiseGateOn) {
+                            var sumSq = 0.0
+                            for (i in 0 until read) {
+                                val s = audioBuffer[i].toDouble() / Short.MAX_VALUE
+                                sumSq += s * s
+                            }
+                            val rms = kotlin.math.sqrt(sumSq / read).toFloat()
+                            if (rms < liveNoiseGateThreshold) {
+                                for (i in 0 until read) audioBuffer[i] = 0
+                            }
+                        }
+                        // F2: Live pause — skip writing while paused (still drain the mic
+                        // so the AudioRecord buffer doesn't overflow).
+                        if (paused) {
+                            val levels = List(read) { 0f }
+                            onAudioFrame(levels)
+                            continue
                         }
                         writePcmData(audioBuffer, read)
                         val levels = audioBuffer.take(read).map { it / 32768f }

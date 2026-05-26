@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
+import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
@@ -76,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 val pitchShiftFile by viewModel.pitchShiftFile.collectAsStateWithLifecycle()
                 val roomProfilerOpen by viewModel.roomProfilerOpen.collectAsStateWithLifecycle()
                 val sceneSliceFile by viewModel.sceneSliceFile.collectAsStateWithLifecycle()
+                val menuOpen by viewModel.menuOpen.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -120,6 +122,19 @@ class MainActivity : ComponentActivity() {
                         sceneSliceFile != null -> SceneSlicerScreen(
                             file = sceneSliceFile!!,
                             onBack = { viewModel.closeSceneSlicer() },
+                        )
+                        menuOpen -> MenuScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeMenu() },
+                            onOpenSettings = { viewModel.closeMenu(); settingsOpen = true },
+                            onOpenEQOnLast = {
+                                viewModel.closeMenu()
+                                val last = viewModel.recordFiles.value.lastOrNull()
+                                if (last != null) viewModel.onEQOpen(last)
+                                else Toast.makeText(this, "No recordings yet", Toast.LENGTH_SHORT).show()
+                            },
+                            onOpenRoomProfiler = { viewModel.closeMenu(); viewModel.openRoomProfiler() },
+                            onOpenMultiTake = { viewModel.closeMenu(); viewModel.openMultiTake() },
                         )
                         else -> RecorderApp(
                             viewModel = viewModel,
