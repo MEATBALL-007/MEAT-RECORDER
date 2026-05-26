@@ -99,7 +99,7 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             BrandWordmark(style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 2.sp,
+                                letterSpacing = 2.5.sp,
                             ))
                             Text("EQ", color = RecorderYellow, fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.titleMedium)

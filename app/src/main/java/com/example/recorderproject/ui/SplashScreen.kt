@@ -36,8 +36,6 @@ import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
-import com.example.recorderproject.ui.theme.RecorderOrange
-import com.example.recorderproject.ui.theme.RecorderYellow
 
 @Composable
 fun SplashScreen(onDone: () -> Unit) {

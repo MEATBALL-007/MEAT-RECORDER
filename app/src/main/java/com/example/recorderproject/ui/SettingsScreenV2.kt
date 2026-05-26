@@ -95,7 +95,7 @@ fun SettingsScreenV2(
                 Column {
                     BrandWordmark(style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp,
+                        letterSpacing = 2.5.sp,
                     ))
                     Text("Audio · field-grade · live EQ", color = RecorderBlueGrey, fontSize = 12.sp)
                     Text("Version 1.0 · Phase 1+", color = RecorderBlueGrey, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))

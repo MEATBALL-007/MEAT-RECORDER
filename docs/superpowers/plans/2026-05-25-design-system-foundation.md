@@ -59,11 +59,11 @@ mkdir -p app/src/main/res/font
 cd /Users/meatball_mac/RECORDER_PROJECT/app/src/main/res/font
 
 curl -fSL -o plus_jakarta_sans_regular.ttf \
-  https://raw.githubusercontent.com/itfoundry/Plus-Jakarta-Sans/master/fonts/ttf/PlusJakartaSans-Regular.ttf
+  https://raw.githubusercontent.com/tokotype/PlusJakartaSans/master/fonts/ttf/PlusJakartaSans-Regular.ttf
 curl -fSL -o plus_jakarta_sans_semibold.ttf \
-  https://raw.githubusercontent.com/itfoundry/Plus-Jakarta-Sans/master/fonts/ttf/PlusJakartaSans-SemiBold.ttf
+  https://raw.githubusercontent.com/tokotype/PlusJakartaSans/master/fonts/ttf/PlusJakartaSans-SemiBold.ttf
 curl -fSL -o plus_jakarta_sans_bold.ttf \
-  https://raw.githubusercontent.com/itfoundry/Plus-Jakarta-Sans/master/fonts/ttf/PlusJakartaSans-Bold.ttf
+  https://raw.githubusercontent.com/tokotype/PlusJakartaSans/master/fonts/ttf/PlusJakartaSans-Bold.ttf
 curl -fSL -o jetbrains_mono_regular.ttf \
   https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Regular.ttf
 curl -fSL -o jetbrains_mono_medium.ttf \
@@ -1164,7 +1164,7 @@ fun MyScreen() {
 
 ## Font licenses
 
-Plus Jakarta Sans — SIL Open Font License 1.1 (https://github.com/itfoundry/Plus-Jakarta-Sans).
+Plus Jakarta Sans — SIL Open Font License 1.1 (https://github.com/tokotype/PlusJakartaSans).
 JetBrains Mono — SIL Open Font License 1.1 (https://github.com/JetBrains/JetBrainsMono).
 
 Neither requires runtime attribution; license texts live in the upstream repos.

@@ -73,7 +73,7 @@ fun OnboardingOverlay(onDone: () -> Unit) {
             Box(modifier = Modifier.padding(top = 8.dp)) {
                 BrandWordmark(style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
+                    letterSpacing = 2.5.sp,
                 ))
             }
 
