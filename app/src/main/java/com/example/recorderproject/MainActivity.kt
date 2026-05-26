@@ -16,8 +16,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
+import com.example.recorderproject.ui.RecorderAppWithIntro
 import com.example.recorderproject.ui.SettingsScreenV2
-import com.example.recorderproject.ui.SplashScreen
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
 
@@ -55,7 +55,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var splashDone by remember { mutableStateOf(false) }
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
             var theme by remember { mutableStateOf("MEATrec") }
@@ -63,40 +62,43 @@ class MainActivity : ComponentActivity() {
             RecorderProjectTheme(reduceMotion = reduceMotion) {
                 val noiseReductionEnabled by viewModel.noiseReductionEnabled.collectAsStateWithLifecycle()
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
-                when {
-                    !splashDone -> SplashScreen(onDone = { splashDone = true })
-                    !onboardingDone -> OnboardingOverlay(onDone = {
-                        onboardingDone = true
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
-                    })
-                    settingsOpen -> SettingsScreenV2(
-                        theme = theme,
-                        noiseReductionEnabled = noiseReductionEnabled,
-                        reduceMotion = reduceMotion,
-                        onChangeTheme = { theme = it },
-                        onToggleNR = { viewModel.toggleNoiseReduction(it) },
-                        onToggleReduceMotion = { reduceMotion = it },
-                        onBack = { settingsOpen = false },
-                    )
-                    eqOpen -> EQScreen(
-                        viewModel = viewModel,
-                        onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
-                    )
-                    else -> RecorderApp(
-                        viewModel = viewModel,
-                        onStartRecording = { requestRecordingPermissions() },
-                        onSelectSaveLocation = { selectSaveDirectory() },
-                        onRequestPermission = { requestRecordingPermissions() },
-                        onOpenEQOnLast = {
-                            val last = viewModel.recordFiles.value.lastOrNull()
-                            if (last != null) {
-                                viewModel.onEQOpen(last)
-                            } else {
-                                Toast.makeText(this, "No recordings yet — record something first", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onOpenSettings = { settingsOpen = true },
-                    )
+                // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
+                // route is active — port-back of old MEATrec intro wrapper API.
+                RecorderAppWithIntro {
+                    when {
+                        !onboardingDone -> OnboardingOverlay(onDone = {
+                            onboardingDone = true
+                            getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
+                        })
+                        settingsOpen -> SettingsScreenV2(
+                            theme = theme,
+                            noiseReductionEnabled = noiseReductionEnabled,
+                            reduceMotion = reduceMotion,
+                            onChangeTheme = { theme = it },
+                            onToggleNR = { viewModel.toggleNoiseReduction(it) },
+                            onToggleReduceMotion = { reduceMotion = it },
+                            onBack = { settingsOpen = false },
+                        )
+                        eqOpen -> EQScreen(
+                            viewModel = viewModel,
+                            onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
+                        )
+                        else -> RecorderApp(
+                            viewModel = viewModel,
+                            onStartRecording = { requestRecordingPermissions() },
+                            onSelectSaveLocation = { selectSaveDirectory() },
+                            onRequestPermission = { requestRecordingPermissions() },
+                            onOpenEQOnLast = {
+                                val last = viewModel.recordFiles.value.lastOrNull()
+                                if (last != null) {
+                                    viewModel.onEQOpen(last)
+                                } else {
+                                    Toast.makeText(this, "No recordings yet — record something first", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onOpenSettings = { settingsOpen = true },
+                        )
+                    }
                 }
             }
         }
