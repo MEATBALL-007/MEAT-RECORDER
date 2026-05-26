@@ -293,6 +293,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _eqOpen = MutableStateFlow(false)
     val eqOpen: StateFlow<Boolean> = _eqOpen
 
+    /** Phase C: which file's harmonic portrait is currently open (null = none). */
+    private val _portraitFile = MutableStateFlow<RecordFile?>(null)
+    val portraitFile: StateFlow<RecordFile?> = _portraitFile
+    fun openPortrait(file: RecordFile) { _portraitFile.value = file }
+    fun closePortrait() { _portraitFile.value = null }
+
     /** Undo / redo stacks for the chain. Capped at EQ_HISTORY_CAP. */
     private val eqHistory = ArrayDeque<EQChain>()
     private val eqRedo = ArrayDeque<EQChain>()

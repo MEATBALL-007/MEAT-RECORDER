@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import com.example.recorderproject.ui.components.BrandWordmark
+import com.example.recorderproject.ui.components.LiquidBlobCanvas
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
@@ -74,6 +75,9 @@ fun SplashScreen(onDone: () -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
+        // Liquid-blob backdrop — port-back of old splash visual
+        LiquidBlobCanvas(modifier = Modifier.fillMaxSize().alpha(0.6f * markAlpha.value))
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),

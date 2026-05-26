@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
+import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.OnboardingOverlay
 import com.example.recorderproject.ui.RecorderApp
 import com.example.recorderproject.ui.RecorderAppWithIntro
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
             var reduceMotion by remember { mutableStateOf(false) }
             RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
+                val portraitFile by viewModel.portraitFile.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -88,6 +90,10 @@ class MainActivity : ComponentActivity() {
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
                             onBack = { /* viewModel.onEQClose() already toggles eqOpen=false */ },
+                        )
+                        portraitFile != null -> HarmonicPortraitScreen(
+                            file = portraitFile!!,
+                            onBack = { viewModel.closePortrait() },
                         )
                         else -> RecorderApp(
                             viewModel = viewModel,

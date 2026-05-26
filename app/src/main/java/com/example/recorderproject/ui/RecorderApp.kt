@@ -381,9 +381,7 @@ fun RecorderApp(
                 onOpenSpectrogram = {
                     android.widget.Toast.makeText(ctx, "Spectrogram coming in Phase C", android.widget.Toast.LENGTH_SHORT).show()
                 },
-                onOpenPortrait = {
-                    android.widget.Toast.makeText(ctx, "Harmonic portrait coming in Phase C", android.widget.Toast.LENGTH_SHORT).show()
-                },
+                onOpenPortrait = { viewModel.openPortrait(it) },
                 onSliceScenes = {
                     android.widget.Toast.makeText(ctx, "Scene slicer coming in Phase E", android.widget.Toast.LENGTH_SHORT).show()
                 },
