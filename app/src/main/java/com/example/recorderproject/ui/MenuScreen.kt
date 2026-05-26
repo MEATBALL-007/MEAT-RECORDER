@@ -73,6 +73,7 @@ fun MenuScreen(
     onOpenRoomProfiler: () -> Unit,
     onOpenMultiTake: () -> Unit,
     onOpenStats: () -> Unit = {},
+    onOpenDesignPicker: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
     val scrollFrac = (scrollState.value.toFloat() / 480f).coerceIn(0f, 1f)
@@ -125,6 +126,7 @@ fun MenuScreen(
                 },
                 MenuItem("⚙️", "Settings", "Theme · sample rate · etc.", AccentSpec(Color(0xFF7B8189), Color(0xFFAAB1BA)), onOpenSettings),
                 MenuItem("📊", "Statistics", "Total time · file count", AccentSpec(Color(0xFFFFC72C), Color(0xFFFA9112)), onOpenStats),
+                MenuItem("◐", "Design Studio", "Preview 4 design directions", AccentSpec(Color(0xFFFA4616), Color(0xFFFFC72C)), onOpenDesignPicker),
             )
 
             Column(

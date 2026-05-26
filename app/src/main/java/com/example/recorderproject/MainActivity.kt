@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
+import com.example.recorderproject.ui.DesignPickerScreen
 import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
@@ -82,6 +83,7 @@ class MainActivity : ComponentActivity() {
                 val menuOpen by viewModel.menuOpen.collectAsStateWithLifecycle()
                 val statsOpen by viewModel.statsOpen.collectAsStateWithLifecycle()
                 val trimFile by viewModel.trimFile.collectAsStateWithLifecycle()
+                val designPickerOpen by viewModel.designPickerOpen.collectAsStateWithLifecycle()
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -140,10 +142,14 @@ class MainActivity : ComponentActivity() {
                             onOpenRoomProfiler = { viewModel.closeMenu(); viewModel.openRoomProfiler() },
                             onOpenMultiTake = { viewModel.closeMenu(); viewModel.openMultiTake() },
                             onOpenStats = { viewModel.closeMenu(); viewModel.openStats() },
+                            onOpenDesignPicker = { viewModel.closeMenu(); viewModel.openDesignPicker() },
                         )
                         statsOpen -> StatisticsScreen(
                             viewModel = viewModel,
                             onBack = { viewModel.closeStats() },
+                        )
+                        designPickerOpen -> DesignPickerScreen(
+                            onBack = { viewModel.closeDesignPicker() },
                         )
                         trimFile != null -> TrimScreen(
                             file = trimFile!!,

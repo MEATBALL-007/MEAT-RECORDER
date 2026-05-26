@@ -474,6 +474,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openStats() { _statsOpen.value = true }
     fun closeStats() { _statsOpen.value = false }
 
+    /** Design picker (temporary): swipe-through mockups of 4 design directions. */
+    private val _designPickerOpen = MutableStateFlow(false)
+    val designPickerOpen: StateFlow<Boolean> = _designPickerOpen
+    fun openDesignPicker() { _designPickerOpen.value = true }
+    fun closeDesignPicker() { _designPickerOpen.value = false }
+
     /** G17: trim editor open for which file (null = none). */
     private val _trimFile = MutableStateFlow<RecordFile?>(null)
     val trimFile: StateFlow<RecordFile?> = _trimFile
