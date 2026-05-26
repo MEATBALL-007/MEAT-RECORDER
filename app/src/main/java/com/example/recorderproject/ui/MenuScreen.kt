@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,23 +50,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.RecorderViewModel
 import com.example.recorderproject.ui.components.BrandWordmark
+import com.example.recorderproject.ui.components.LiquidBlobCanvas
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.theme.LocalAppTypography
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
-import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 
 /**
- * Menu screen — Apple-style hub of all secondary destinations.
- *
- * Large hero header (parallaxes on scroll), then a 2-col grid of action cards
- * for: EQ, Spectrogram (Harmonic Portrait), Multi-take, Transcript, Room
- * profiler, Scene slicer, Settings.
- *
- * Each card has spring-bounce on tap and emoji+title+subtitle layout that
- * reads as a clear menu of features rather than a wall of buttons.
+ * Menu screen redesigned (H4): hero with LiquidBlob backdrop + parallax,
+ * 2-col grid of glass cards. Each card has its own accent gradient — visual
+ * variety instead of every card being the same orange.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,13 +75,12 @@ fun MenuScreen(
     onOpenStats: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
-    val scrollFrac = (scrollState.value.toFloat() / 600f).coerceIn(0f, 1f)
+    val scrollFrac = (scrollState.value.toFloat() / 480f).coerceIn(0f, 1f)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    // Title fades in once the user scrolls past the hero
                     Text(
                         "MENU",
                         color = RecorderYellow.copy(alpha = scrollFrac),
@@ -98,7 +93,7 @@ fun MenuScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = RecorderBlueGrey)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = RecorderCharcoal.copy(alpha = scrollFrac)),
             )
         },
         containerColor = RecorderCharcoal,
@@ -109,42 +104,40 @@ fun MenuScreen(
                 .padding(padding)
                 .verticalScroll(scrollState),
         ) {
-            // Hero — large title with parallax fade-out as you scroll
             HeroHeader(scrollFrac = scrollFrac)
 
-            // 2-column grid of action cards
+            // Accent palette — each card gets its own visual tint
             val items = listOf(
-                MenuItem("⚡", "Live EQ", "30-band biquad on last take", onOpenEQOnLast),
-                MenuItem("🌈", "Spectrum", "Harmonic portrait viewer") {
+                MenuItem("⚡", "Live EQ", "30-band biquad on last take", AccentSpec(Color(0xFFFA4616), Color(0xFFFA9112)), onOpenEQOnLast),
+                MenuItem("🌈", "Spectrum", "Harmonic portrait viewer", AccentSpec(Color(0xFFFFC72C), Color(0xFFFFE3C3))) {
                     val last = viewModel.recordFiles.value.lastOrNull()
                     if (last != null) viewModel.openPortrait(last)
                 },
-                MenuItem("🎬", "Multi-take", "Ghost-take comparison", onOpenMultiTake),
-                MenuItem("📝", "Transcript", "Speech-to-text view") {
+                MenuItem("🎬", "Multi-take", "Ghost-take comparison", AccentSpec(Color(0xFF3DC399), Color(0xFF7FE5C8)), onOpenMultiTake),
+                MenuItem("📝", "Transcript", "Speech-to-text view", AccentSpec(Color(0xFF7B8189), Color(0xFFB0B7BF))) {
                     val last = viewModel.recordFiles.value.lastOrNull()
                     if (last != null) viewModel.openTranscript(last)
                 },
-                MenuItem("🏠", "Room profile", "Acoustic noise floor / RT60", onOpenRoomProfiler),
-                MenuItem("✂️", "Scene slicer", "Detect silence-bounded scenes") {
+                MenuItem("🏠", "Room profile", "Acoustic noise floor · RT60", AccentSpec(Color(0xFFE65F39), Color(0xFFFB8D6B)), onOpenRoomProfiler),
+                MenuItem("✂️", "Scene slicer", "Detect silence-bounded scenes", AccentSpec(Color(0xFFFA4616), Color(0xFFFFC72C))) {
                     val last = viewModel.recordFiles.value.lastOrNull()
                     if (last != null) viewModel.openSceneSlicer(last)
                 },
-                MenuItem("⚙️", "Settings", "Theme · sample rate · etc.", onOpenSettings),
-                MenuItem("📊", "Statistics", "Total time · file count", onOpenStats),
+                MenuItem("⚙️", "Settings", "Theme · sample rate · etc.", AccentSpec(Color(0xFF7B8189), Color(0xFFAAB1BA)), onOpenSettings),
+                MenuItem("📊", "Statistics", "Total time · file count", AccentSpec(Color(0xFFFFC72C), Color(0xFFFA9112)), onOpenStats),
             )
 
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items.chunked(2).forEachIndexed { rowIdx, rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         rowItems.forEachIndexed { colIdx, item ->
                             val idx = rowIdx * 2 + colIdx
-                            // Stagger entrance for each card
                             var visible by remember { mutableStateOf(false) }
                             LaunchedEffect(Unit) {
                                 kotlinx.coroutines.delay(40L * idx)
@@ -152,7 +145,7 @@ fun MenuScreen(
                             }
                             AnimatedVisibility(
                                 visible = visible,
-                                enter = fadeIn(tween(220)) + slideInVertically(initialOffsetY = { it / 6 }, animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)),
+                                enter = fadeIn(tween(280)) + slideInVertically(initialOffsetY = { it / 6 }, animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)),
                                 modifier = Modifier.weight(1f),
                             ) {
                                 MenuCard(item, modifier = Modifier.fillMaxWidth())
@@ -171,7 +164,7 @@ private fun HeroHeader(scrollFrac: Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .height(260.dp)
             .background(
                 brush = Brush.verticalGradient(
                     0f to RecorderCharcoal,
@@ -180,14 +173,19 @@ private fun HeroHeader(scrollFrac: Float) {
             ),
         contentAlignment = Alignment.Center,
     ) {
+        // Subtle LiquidBlob behind the wordmark (≈20% strength so it doesn't overpower)
+        Box(modifier = Modifier.fillMaxWidth().height(260.dp).alpha(0.22f * (1f - scrollFrac))) {
+            LiquidBlobCanvas(modifier = Modifier.fillMaxWidth().height(260.dp))
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .alpha(1f - scrollFrac)
                 .scale(1f - scrollFrac * 0.1f),
         ) {
-            MeatrecMark(size = 72.dp)
+            MeatrecMark(size = 84.dp)
             BrandWordmark(style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 3.sp,
@@ -203,10 +201,13 @@ private fun HeroHeader(scrollFrac: Float) {
     }
 }
 
+private data class AccentSpec(val from: Color, val to: Color)
+
 private data class MenuItem(
     val icon: String,
     val title: String,
     val subtitle: String,
+    val accent: AccentSpec,
     val onClick: () -> Unit,
 )
 
@@ -214,33 +215,81 @@ private data class MenuItem(
 private fun MenuCard(item: MenuItem, modifier: Modifier = Modifier) {
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
+        targetValue = if (pressed) 0.94f else 1f,
         animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
         label = "menuCardScale",
     )
-    Column(
+    Box(
         modifier = modifier
             .scale(scale)
-            .height(120.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(RecorderCharcoalCard)
+            .height(140.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1A1A20),
+                        Color(0xFF111116),
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        item.accent.from.copy(alpha = 0.35f),
+                        item.accent.to.copy(alpha = 0.05f),
+                    ),
+                ),
+                shape = RoundedCornerShape(20.dp),
+            )
             .clickable {
                 pressed = true
                 item.onClick()
             }
-            .padding(14.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .padding(16.dp),
     ) {
-        Text(item.icon, fontSize = 30.sp)
-        Column {
-            Text(item.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text(item.subtitle, color = RecorderBlueGrey, fontSize = 10.sp, maxLines = 2)
+        // Halo glow behind the icon — uses the card's accent
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .size(56.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            item.accent.from.copy(alpha = 0.30f),
+                            item.accent.to.copy(alpha = 0.05f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(item.icon, fontSize = 30.sp)
         }
+        Column(
+            Modifier.align(Alignment.BottomStart),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(item.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(item.subtitle, color = RecorderBlueGrey, fontSize = 10.sp, maxLines = 2, letterSpacing = 0.4.sp)
+        }
+        // Accent line at the bottom edge — varies card to card
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(width = 32.dp, height = 3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(item.accent.from, item.accent.to),
+                    ),
+                ),
+        )
     }
-    // Release the press scale after a frame so it bounces back
     LaunchedEffect(pressed) {
         if (pressed) {
-            kotlinx.coroutines.delay(140)
+            kotlinx.coroutines.delay(160)
             pressed = false
         }
     }

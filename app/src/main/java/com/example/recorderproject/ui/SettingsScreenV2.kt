@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -108,10 +109,10 @@ fun SettingsScreenV2(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionHeader("APPEARANCE")
+            SectionHeader("APPEARANCE", accent = RecorderYellow)
             ThemeGrid(current = theme, onChange = onChangeTheme)
 
-            SectionHeader("RECORDING")
+            SectionHeader("RECORDING", accent = RecorderOrange)
             // G8 quality preset chip row
             ChipRow(
                 label = "Quality preset",
@@ -187,7 +188,7 @@ fun SettingsScreenV2(
                 onChange = { viewModel.setAutoStopMinutes(it) },
             )
 
-            SectionHeader("ORGANIZATION")
+            SectionHeader("ORGANIZATION", accent = Color(0xFF7B8189))
             ToggleRow(
                 label = "Group recordings by scene",
                 detail = "Visual folder grouping by sceneName tag",
@@ -207,7 +208,7 @@ fun SettingsScreenV2(
                 onChange = { viewModel.toggleLockScreenControls() },
             )
 
-            SectionHeader("TIMING")
+            SectionHeader("TIMING", accent = Color(0xFF3DC399))
             ChipRow(
                 label = "Pre-roll countdown",
                 options = listOf(0 to "Off", 3 to "3 s", 5 to "5 s", 10 to "10 s"),
@@ -221,13 +222,13 @@ fun SettingsScreenV2(
                 onChange = { viewModel.updateMaxDurationMinutes(it) },
             )
 
-            SectionHeader("STORAGE")
+            SectionHeader("STORAGE", accent = RecorderYellow)
             SaveLocationRow(
                 uri = saveDirectoryUri?.toString(),
                 onPick = onPickSaveLocation,
             )
 
-            SectionHeader("ACCESSIBILITY")
+            SectionHeader("ACCESSIBILITY", accent = Color(0xFF7B8189))
             ToggleRow(
                 label = "Reduce motion",
                 detail = "Disables splash intro and non-essential animations",
@@ -235,20 +236,50 @@ fun SettingsScreenV2(
                 onChange = onToggleReduceMotion,
             )
 
-            SectionHeader("ABOUT")
+            SectionHeader("ABOUT", accent = RecorderOrange)
             Box(
                 Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(RecorderCharcoalCard)
-                    .padding(16.dp),
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF1A1A20),
+                                Color(0xFF111116),
+                            ),
+                        ),
+                    )
+                    .padding(20.dp),
             ) {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BrandWordmark(style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.5.sp,
                     ))
-                    Text("Audio · field-grade · live EQ", color = RecorderBlueGrey, fontSize = 12.sp)
-                    Text("Version 1.0 · Phase 1+", color = RecorderBlueGrey, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(
+                        "Audio · field-grade · live EQ",
+                        color = RecorderBlueGrey,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 6.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(RecorderYellow),
+                        )
+                        Text(
+                            "Version 1.0 · 50+ features",
+                            color = RecorderYellow,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.5.sp,
+                        )
+                    }
                 }
             }
         }
@@ -256,15 +287,27 @@ fun SettingsScreenV2(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        color = RecorderBlueGrey,
-        fontSize = 11.sp,
-        letterSpacing = 1.5.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-    )
+private fun SectionHeader(text: String, accent: Color = RecorderOrange) {
+    // iOS-style section header — small caps + a tiny accent bar.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 2.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 3.dp, height = 12.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent),
+        )
+        Text(
+            text,
+            color = Color.White,
+            fontSize = 11.sp,
+            letterSpacing = 2.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 @Composable

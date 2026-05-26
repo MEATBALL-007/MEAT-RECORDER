@@ -196,7 +196,25 @@ fun RecorderApp(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Status row
+            // H1: Hero record zone — dominant visual on the home screen
+            com.example.recorderproject.ui.components.HeroRecordSection(
+                isRecording = isRecording,
+                elapsedSeconds = elapsed,
+                fileName = fileName,
+                sampleRateLabel = "${sampleRate / 1000} kHz",
+                bitDepthLabel = "${bitDepth}-bit",
+                recordButton = {
+                    CircleRecordButton(
+                        isRecording = isRecording,
+                        onTap = {
+                            splashTrigger++
+                            if (isRecording) viewModel.stopRecording() else onStartRecording()
+                        },
+                    )
+                },
+            )
+
+            // Compact status row — file name (tap to edit) + sample rate / bit depth selectors
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -276,21 +294,6 @@ fun RecorderApp(
                         )
                     }
                 }
-            }
-
-            // Centered circular Record / Stop button — moved to TOP per UX request
-            // so the primary action is always within thumb-reach from the status row.
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircleRecordButton(
-                    isRecording = isRecording,
-                    onTap = {
-                        splashTrigger++
-                        if (isRecording) viewModel.stopRecording() else onStartRecording()
-                    },
-                )
             }
 
             // Input gain slider — drag from -12 to +24 dB, applies in real time
