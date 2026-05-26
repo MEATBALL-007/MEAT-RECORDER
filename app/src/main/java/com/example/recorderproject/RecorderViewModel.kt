@@ -489,6 +489,21 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openDesignPicker() { _designPickerOpen.value = true }
     fun closeDesignPicker() { _designPickerOpen.value = false }
 
+    /** N2: currently selected recording mode + auto-apply preset on change. */
+    private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
+    val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = _recorderMode
+
+    fun selectRecorderMode(mode: com.example.recorderproject.model.RecorderMode) {
+        _recorderMode.value = mode
+        // Apply preset (except for CUSTOM — user controls those themselves)
+        if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
+            _sampleRate.value = mode.sampleRate
+            _bitDepth.value = mode.bitDepth
+            _channelCount.value = mode.channelCount
+            _noiseReductionEnabled.value = mode.noiseReduction
+        }
+    }
+
     /** G17: trim editor open for which file (null = none). */
     private val _trimFile = MutableStateFlow<RecordFile?>(null)
     val trimFile: StateFlow<RecordFile?> = _trimFile

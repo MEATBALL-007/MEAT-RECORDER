@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.DesignPickerScreen
+import com.example.recorderproject.ui.MeatRecModeSelector
 import com.example.recorderproject.ui.MeatRecSettings
 import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
+            var modeChosen by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("mode_chosen", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
             // Persist theme by display name across launches so user's pick survives restart.
             val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
@@ -89,6 +91,17 @@ class MainActivity : ComponentActivity() {
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
                     when {
+                        !modeChosen -> MeatRecModeSelector(
+                            onSelectMode = { mode ->
+                                viewModel.selectRecorderMode(mode)
+                                modeChosen = true
+                                getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", true).apply()
+                            },
+                            onSkip = {
+                                modeChosen = true
+                                getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", true).apply()
+                            },
+                        )
                         !onboardingDone -> OnboardingOverlay(onDone = {
                             onboardingDone = true
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
