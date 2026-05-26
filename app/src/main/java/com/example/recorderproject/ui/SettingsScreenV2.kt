@@ -21,6 +21,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
 import com.example.recorderproject.ui.theme.RecorderCharcoalCard
@@ -91,7 +93,10 @@ fun SettingsScreenV2(
                     .padding(16.dp),
             ) {
                 Column {
-                    Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    BrandWordmark(style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                    ))
                     Text("Audio · field-grade · live EQ", color = RecorderBlueGrey, fontSize = 12.sp)
                     Text("Version 1.0 · Phase 1+", color = RecorderBlueGrey, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }

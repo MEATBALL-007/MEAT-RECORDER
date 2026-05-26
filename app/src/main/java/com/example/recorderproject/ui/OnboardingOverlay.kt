@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
@@ -69,7 +71,10 @@ fun OnboardingOverlay(onDone: () -> Unit) {
         ) {
             MeatrecMark(size = 72.dp)
             Box(modifier = Modifier.padding(top = 8.dp)) {
-                Text("MEATrec", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 28.sp, letterSpacing = 2.sp)
+                BrandWordmark(style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                ))
             }
 
             HorizontalPager(

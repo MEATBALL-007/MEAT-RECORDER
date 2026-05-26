@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MaterialTheme
+import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.SaveCustomPresetDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -52,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
 import com.example.recorderproject.model.EQBand
@@ -93,10 +96,17 @@ fun EQScreen(viewModel: RecorderViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = {
                     Column {
-                        Text("MEATrec EQ", color = RecorderYellow, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BrandWordmark(style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 2.sp,
+                            ))
+                            Text("EQ", color = RecorderYellow, fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium)
+                        }
                         sourceFile?.let {
                             Text(it.name, color = RecorderBlueGrey, fontWeight = FontWeight.Normal,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                                style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 },

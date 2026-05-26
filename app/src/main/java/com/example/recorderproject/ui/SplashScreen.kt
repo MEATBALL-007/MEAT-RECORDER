@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.MeatrecMark
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
@@ -88,14 +90,10 @@ fun SplashScreen(onDone: () -> Unit) {
             }
 
             Box(modifier = Modifier.alpha(titleAlpha.value).padding(top = 4.dp)) {
-                Text(
-                    text = "MEATrec",
-                    color = RecorderYellow,
-                    fontSize = 40.sp,
+                BrandWordmark(style = MaterialTheme.typography.displayMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    letterSpacing = 2.sp,
-                )
+                    letterSpacing = 2.5.sp,
+                ))
             }
             Box(modifier = Modifier.alpha(titleAlpha.value * 0.9f)) {
                 Text(
