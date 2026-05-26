@@ -55,12 +55,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            RecorderProjectTheme {
-                var splashDone by remember { mutableStateOf(false) }
-                var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
-                var settingsOpen by remember { mutableStateOf(false) }
-                var theme by remember { mutableStateOf("MEATrec") }
-                var reduceMotion by remember { mutableStateOf(false) }
+            var splashDone by remember { mutableStateOf(false) }
+            var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
+            var settingsOpen by remember { mutableStateOf(false) }
+            var theme by remember { mutableStateOf("MEATrec") }
+            var reduceMotion by remember { mutableStateOf(false) }
+            RecorderProjectTheme(reduceMotion = reduceMotion) {
                 val noiseReductionEnabled by viewModel.noiseReductionEnabled.collectAsStateWithLifecycle()
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 when {
