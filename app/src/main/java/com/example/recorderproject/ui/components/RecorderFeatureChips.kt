@@ -104,6 +104,7 @@ private fun Chip(
     )
     Row(
         modifier = modifier
+            .interactiveScale()
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .clickable(onClick = onClick)
