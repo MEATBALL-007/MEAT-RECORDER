@@ -106,6 +106,18 @@ fun MeatRecHome(
     onDeleteFile: (RecordFile) -> Unit = {},
     onTrimFile: (RecordFile) -> Unit = {},
     onEQFile: (RecordFile) -> Unit = {},
+    searchQuery: String = "",
+    onSearchChange: (String) -> Unit = {},
+    fileFilter: com.example.recorderproject.RecorderViewModel.FileFilter = com.example.recorderproject.RecorderViewModel.FileFilter.ALL,
+    onFilterChange: (com.example.recorderproject.RecorderViewModel.FileFilter) -> Unit = {},
+    sortOrder: com.example.recorderproject.model.SortOrder = com.example.recorderproject.model.SortOrder.Default,
+    onSortChange: (com.example.recorderproject.model.SortOrder) -> Unit = {},
+    currentMode: com.example.recorderproject.model.RecorderMode = com.example.recorderproject.model.RecorderMode.Default,
+    onChangeMode: () -> Unit = {},
+    cueCount: Int = 0,
+    isPaused: Boolean = false,
+    onDropCue: () -> Unit = {},
+    onTogglePause: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -130,7 +142,7 @@ fun MeatRecHome(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                 Text(
                     "MeatRec",
                     color = Color.White,
@@ -144,6 +156,30 @@ fun MeatRecHome(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.3.sp,
+                )
+            }
+            // Mode chip — taps to re-open the mode selector
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .clickable(onClick = onChangeMode)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 3.dp, height = 12.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(currentMode.accent),
+                )
+                Text(
+                    currentMode.displayName,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
                 )
             }
             Box(
@@ -200,6 +236,10 @@ fun MeatRecHome(
                     inputLevelPercent = inputLevelPercent,
                     spectrumHistory = spectrumHistory,
                     pitchHz = pitchHz,
+                    cueCount = cueCount,
+                    isPaused = isPaused,
+                    onDropCue = onDropCue,
+                    onTogglePause = onTogglePause,
                 )
             }
 
@@ -225,6 +265,18 @@ fun MeatRecHome(
                 onPickSaveLocation = onPickSaveLocation,
                 onAnalyzeRoom = onAnalyzeRoom,
             )
+
+            // Batch 4: Toolbar above the recordings list (search + filter + sort)
+            if (files.isNotEmpty() || searchQuery.isNotEmpty()) {
+                com.example.recorderproject.ui.components.RecordingsToolbar(
+                    searchQuery = searchQuery,
+                    onSearchChange = onSearchChange,
+                    currentFilter = fileFilter,
+                    onFilterChange = onFilterChange,
+                    currentSort = sortOrder,
+                    onSortChange = onSortChange,
+                )
+            }
 
             // L1: Recordings list card — Batch 1, file library
             com.example.recorderproject.ui.components.RecordingsListCard(

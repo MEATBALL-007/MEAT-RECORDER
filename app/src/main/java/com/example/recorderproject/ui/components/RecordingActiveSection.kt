@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,14 +77,36 @@ fun RecordingActiveSection(
     inputLevelPercent: Int,
     spectrumHistory: List<FloatArray> = emptyList(),
     pitchHz: Float = 0f,
+    cueCount: Int = 0,
+    isPaused: Boolean = false,
+    onDropCue: () -> Unit = {},
+    onTogglePause: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        RecBadge(elapsedSeconds = elapsedSeconds)
+        RecBadge(elapsedSeconds = elapsedSeconds, isPaused = isPaused)
         InputLevelBar(percent = inputLevelPercent)
+        // Quick action row: pause/resume + drop cue
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            QuickActionChip(
+                label = if (isPaused) "Resume" else "Pause",
+                icon = if (isPaused) "▶" else "❚❚",
+                onClick = onTogglePause,
+                modifier = Modifier.weight(1f),
+            )
+            QuickActionChip(
+                label = if (cueCount == 0) "Drop cue" else "Cue · $cueCount",
+                icon = "◆",
+                onClick = onDropCue,
+                modifier = Modifier.weight(1f),
+            )
+        }
         LiveWaveformCard(waveform = waveform)
         SpectrumCard(spectrumHistory = spectrumHistory, fallbackWaveform = waveform)
         PitchCard(pitchHz = pitchHz)
@@ -91,7 +114,28 @@ fun RecordingActiveSection(
 }
 
 @Composable
-private fun RecBadge(elapsedSeconds: Int) {
+private fun QuickActionChip(
+    label: String,
+    icon: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF1F1F1F))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(icon, color = MeatYellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun RecBadge(elapsedSeconds: Int, isPaused: Boolean = false) {
     val pulse by rememberInfiniteTransition(label = "recPulse").animateFloat(
         initialValue = 0.4f,
         targetValue = 1f,
@@ -111,8 +155,8 @@ private fun RecBadge(elapsedSeconds: Int) {
         )
         Box(modifier = Modifier.size(width = 8.dp, height = 0.dp))
         Text(
-            "REC",
-            color = RecRed,
+            if (isPaused) "PAUSE" else "REC",
+            color = if (isPaused) MeatYellow else RecRed,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp,

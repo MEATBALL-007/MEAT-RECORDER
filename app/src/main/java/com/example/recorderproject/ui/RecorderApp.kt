@@ -189,6 +189,18 @@ fun RecorderApp(
         onDeleteFile = { viewModel.deleteRecording(it) },
         onTrimFile = { viewModel.openTrim(it) },
         onEQFile = { viewModel.onEQOpen(it) },
+        searchQuery = searchQuery,
+        onSearchChange = { viewModel.setSearchQuery(it) },
+        fileFilter = fileFilter,
+        onFilterChange = { viewModel.setFileFilter(it) },
+        sortOrder = sortOrder,
+        onSortChange = { viewModel.setSortOrder(it) },
+        currentMode = viewModel.recorderMode.collectAsStateWithLifecycle().value,
+        onChangeMode = onOpenSettings,
+        cueCount = viewModel.liveCueCount.collectAsStateWithLifecycle().value,
+        isPaused = viewModel.isPaused.collectAsStateWithLifecycle().value,
+        onDropCue = { viewModel.dropCueMarker() },
+        onTogglePause = { viewModel.togglePause() },
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
