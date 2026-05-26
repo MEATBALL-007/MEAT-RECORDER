@@ -28,6 +28,26 @@ val KmuttGold = LegacyGold
 val MeatYellow = RecorderYellow
 val MeatOrange = RecorderOrange
 val MeatRed = Color(0xFFC0392B)
+
+// Semantic — for status indicators, badges, and toast accents
+val SemanticSuccess = Color(0xFF3DDC97)   // mint — recording saved, render complete
+val SemanticWarning = Color(0xFFFFC72C)   // = RecorderYellow — clip, caution
+val SemanticError   = Color(0xFFFF5A5F)   // recording failed, permission denied
+val SemanticInfo    = Color(0xFF7AB7FF)   // tips, neutral notifications
+
+// Surface elevation tiers (Material3 surfaceContainer pattern, charcoal-tinted)
+val SurfaceContainerLowest  = Color(0xFF09090C)
+val SurfaceContainerLow     = Color(0xFF111114)
+val SurfaceContainer        = Color(0xFF161618)   // matches RecorderCharcoalCard
+val SurfaceContainerHigh    = Color(0xFF1C1C20)
+val SurfaceContainerHighest = Color(0xFF222227)
+
+// Spectrum gradient stops — for future data viz (meters, spectrograms, gain readouts)
+val SpectrumLow  = Color(0xFF1E3A5F)   // deep blue
+val SpectrumMid  = RecorderYellow
+val SpectrumHigh = RecorderOrange
+val SpectrumClip = SemanticError
+
 val TextPrimary = OnSurfaceDark
 val TextSecondary = OnSurfaceVariantDark
 
