@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,8 +19,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,15 +36,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,72 +55,103 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Mode selector — pixel-faithful rebuild of the 22 May APK fan-of-cards intro.
+ * Mode selector — 2-column grid (rebuilt per user feedback: the fan animation
+ * stuttered and overlapped labels). Each row holds 2 cards. Top-right has a
+ * [+] action that lets the user save a new custom preset.
  *
- * Reference: recovery/screenshots/03-home.png
- *
- * Layout:
- *  - Black background
- *  - Top: "MEAT" orange + "REC" lighter grey, "SELECT RECORDING MODE" tracked caps
- *  - Bottom: 5 fanned cards (FILM / INTERVIEW / MUSIC / AMBIENCE / CUSTOM)
- *    spread in a slight arc, each rotated and offset. Each card shows:
- *      · large central icon (custom line drawing per mode)
- *      · mode name in tracked caps
- *      · accent color tint per mode
- *      · small pencil edit icon in the top-right
- *  - SKIP → text at the bottom, taps go to home with INTERVIEW default
+ *  ┌─────────────────────────────────────┐
+ *  │      MEAT REC                  [+]  │
+ *  │      SELECT RECORDING MODE          │
+ *  │                                     │
+ *  │  ┌─────────┐   ┌─────────┐         │
+ *  │  │  FILM   │   │INTERVIEW│         │
+ *  │  └─────────┘   └─────────┘         │
+ *  │  ┌─────────┐   ┌─────────┐         │
+ *  │  │ MUSIC   │   │AMBIENCE │         │
+ *  │  └─────────┘   └─────────┘         │
+ *  │  ┌─────────┐                       │
+ *  │  │ CUSTOM  │                       │
+ *  │  └─────────┘                       │
+ *  │                                     │
+ *  │              SKIP →                 │
+ *  └─────────────────────────────────────┘
  */
 @Composable
 fun MeatRecModeSelector(
     onSelectMode: (RecorderMode) -> Unit,
     onSkip: () -> Unit,
+    onCreatePreset: (name: String) -> Unit = {},
 ) {
+    var addOpen by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
-        // Top heading
-        Row {
-            Text(
-                "MEAT",
-                color = Color(0xFFFA4616),
-                fontSize = 42.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-            )
-            Text(
-                "REC",
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
-                modifier = Modifier.padding(top = 14.dp, start = 4.dp),
-            )
+        // Header row: wordmark on left, [+] on right
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "MEAT",
+                        color = Color(0xFFFA4616),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                    )
+                    Text(
+                        "REC",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    )
+                }
+                Text(
+                    "SELECT RECORDING MODE",
+                    color = Color.White.copy(alpha = 0.40f),
+                    fontSize = 11.sp,
+                    letterSpacing = 3.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            PlusButton(onClick = { addOpen = true })
         }
-        Text(
-            "SELECT RECORDING MODE",
-            color = Color.White.copy(alpha = 0.40f),
-            fontSize = 12.sp,
-            letterSpacing = 4.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 12.dp),
-        )
 
-        Box(modifier = Modifier.weight(1f)) {
-            // Fan-of-cards: 5 cards spread in an arc near the bottom
-            FanOfModeCards(
-                onSelectMode = onSelectMode,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 40.dp),
-            )
+        Box(modifier = Modifier.height(28.dp))
+
+        // 2-column grid (no rotation / overlap — just clean cards)
+        val modes = RecorderMode.entries
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            modes.chunked(2).forEach { rowModes ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    rowModes.forEach { mode ->
+                        ModeGridCard(
+                            mode = mode,
+                            onClick = { onSelectMode(mode) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (rowModes.size == 1) Box(Modifier.weight(1f))
+                }
+            }
         }
 
-        // SKIP →
+        Box(modifier = Modifier.height(24.dp))
+
         Text(
             "SKIP  →",
             color = Color.White.copy(alpha = 0.40f),
@@ -119,134 +159,184 @@ fun MeatRecModeSelector(
             letterSpacing = 3.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
+                .align(Alignment.CenterHorizontally)
                 .clickable(onClick = onSkip)
-                .padding(8.dp),
+                .padding(12.dp),
+        )
+    }
+
+    if (addOpen) {
+        var name by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { addOpen = false },
+            containerColor = Color(0xFF161616),
+            titleContentColor = Color(0xFFFFC72C),
+            textContentColor = Color.White,
+            title = { Text("New custom preset") },
+            text = {
+                Column {
+                    Text(
+                        "Saves a copy of the current Custom mode under this name.",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 10.dp),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1F1F1F))
+                            .border(1.dp, Color(0xFFFA4616).copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp),
+                            cursorBrush = SolidColor(Color(0xFFFA4616)),
+                            decorationBox = { inner ->
+                                if (name.isEmpty()) {
+                                    Text("e.g. Voice Memo · Field · …",
+                                        color = Color.White.copy(alpha = 0.40f), fontSize = 16.sp)
+                                }
+                                inner()
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            onCreatePreset(name.trim())
+                            addOpen = false
+                        }
+                    },
+                    enabled = name.isNotBlank(),
+                ) {
+                    Text("Save", color = Color(0xFFFA4616), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { addOpen = false }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            },
         )
     }
 }
 
 @Composable
-private fun FanOfModeCards(
-    onSelectMode: (RecorderMode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val modes = RecorderMode.entries
-    Box(modifier = modifier.fillMaxWidth().height(280.dp)) {
-        // Place cards from back to front (CUSTOM rightmost goes on top of FILM leftmost).
-        // Offsets calibrated so the visible "spread" reads like the screenshot.
-        modes.forEachIndexed { i, mode ->
-            val center = (modes.size - 1) / 2f
-            val offsetIndex = i - center
-            val rotation = offsetIndex * 12f          // -24°, -12°, 0°, 12°, 24°
-            val xOffset = (offsetIndex * 52f).dp       // horizontal spread
-            val yOffset = (kotlin.math.abs(offsetIndex) * 14f).dp // arc dip
-            FanCard(
-                mode = mode,
-                rotation = rotation,
-                xOffset = xOffset,
-                yOffset = yOffset,
-                onClick = { onSelectMode(mode) },
-                modifier = Modifier.align(Alignment.BottomCenter),
+private fun PlusButton(onClick: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+        label = "plusPress",
+    )
+    Box(
+        modifier = Modifier
+            .scale(scale)
+            .size(44.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFFFA4616), Color(0xFFE13606)),
+                ),
             )
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "+",
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(140)
+            pressed = false
         }
     }
 }
 
 @Composable
-private fun FanCard(
+private fun ModeGridCard(
     mode: RecorderMode,
-    rotation: Float,
-    xOffset: androidx.compose.ui.unit.Dp,
-    yOffset: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.93f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
         label = "modePress",
     )
 
-    Box(
+    Column(
         modifier = modifier
-            .padding(start = xOffset.let { if (it < 0.dp) -it * 2 else 0.dp })
             .scale(pressScale)
-            .width(108.dp)
-            .height(168.dp)
-            .rotate(rotation)
-            .clip(RoundedCornerShape(14.dp))
+            .aspectRatio(0.85f) // slightly tall
+            .clip(RoundedCornerShape(16.dp))
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        mode.accent.copy(alpha = 0.45f),
-                        mode.accent.copy(alpha = 0.10f),
-                        Color(0xFF111111),
+                        mode.accent.copy(alpha = 0.35f),
+                        mode.accent.copy(alpha = 0.08f),
+                        Color(0xFF0F0F0F),
                     ),
                 ),
             )
             .border(
                 1.dp,
-                Color.White.copy(alpha = 0.18f),
-                RoundedCornerShape(14.dp),
+                mode.accent.copy(alpha = 0.45f),
+                RoundedCornerShape(16.dp),
             )
             .clickable {
                 pressed = true
                 onClick()
             }
-            .padding(10.dp),
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Pencil edit icon top-right
-        Canvas(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(16.dp),
-        ) {
-            val w = size.width; val h = size.height
-            // Simple pencil outline — diagonal stroke
-            val sw = 1.5f * density
-            drawLine(
-                color = mode.accent.copy(alpha = 0.85f),
-                start = Offset(w * 0.18f, h * 0.78f),
-                end = Offset(w * 0.78f, h * 0.18f),
-                strokeWidth = sw * 2.5f, cap = StrokeCap.Round,
-            )
-            // Pencil tip — small triangle at start
-            drawCircle(
-                color = mode.accent,
-                radius = w * 0.10f,
-                center = Offset(w * 0.18f, h * 0.78f),
-            )
-            // Eraser cap — square at end
-            drawRect(
-                color = mode.accent,
-                topLeft = Offset(w * 0.68f, h * 0.08f),
-                size = Size(w * 0.20f, h * 0.20f),
-            )
-        }
-
         // Center icon
         Box(
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier
+                .padding(top = 20.dp)
+                .size(56.dp),
             contentAlignment = Alignment.Center,
         ) {
-            ModeIcon(mode = mode, size = 48.dp)
+            ModeIcon(mode = mode, size = 56.dp)
         }
-
-        // Label at bottom
+        // Mode name
         Text(
             mode.displayName,
             color = mode.accent,
-            fontSize = 11.sp,
-            letterSpacing = 1.5.sp,
+            fontSize = 14.sp,
+            letterSpacing = 2.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        // Short help
+        Text(
+            mode.shortHelp.split("·").firstOrNull()?.trim() ?: "",
+            color = Color.White.copy(alpha = 0.45f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
         )
     }
-
     LaunchedEffect(pressed) {
         if (pressed) {
-            kotlinx.coroutines.delay(160)
+            kotlinx.coroutines.delay(150)
             pressed = false
         }
     }
@@ -262,21 +352,18 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
 
         when (mode) {
             RecorderMode.FILM -> {
-                // Clapperboard: bottom rectangle + tilted top bar with diagonal stripes
                 drawRect(
                     color = tint,
                     topLeft = Offset(w * 0.12f, h * 0.50f),
                     size = Size(w * 0.76f, h * 0.40f),
                     style = Stroke(width = sw, cap = StrokeCap.Round),
                 )
-                // Top hinge bar
                 drawRect(
                     color = tint,
                     topLeft = Offset(w * 0.12f, h * 0.20f),
                     size = Size(w * 0.76f, h * 0.18f),
                     style = Stroke(width = sw, cap = StrokeCap.Round),
                 )
-                // Diagonal stripes inside the top bar
                 for (k in 0..2) {
                     val x = w * (0.20f + k * 0.22f)
                     drawLine(
@@ -288,12 +375,11 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
                 }
             }
             RecorderMode.INTERVIEW -> {
-                // Mic capsule + base
                 drawRoundRect(
                     color = tint,
                     topLeft = Offset(w * 0.35f, h * 0.15f),
                     size = Size(w * 0.30f, h * 0.45f),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.15f, w * 0.15f),
+                    cornerRadius = CornerRadius(w * 0.15f, w * 0.15f),
                     style = Stroke(width = sw, cap = StrokeCap.Round),
                 )
                 drawArc(
@@ -309,7 +395,6 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
                     strokeWidth = sw, cap = StrokeCap.Round)
             }
             RecorderMode.MUSIC -> {
-                // 8th note: filled head + flag stem
                 drawCircle(
                     color = tint,
                     radius = w * 0.13f,
@@ -321,7 +406,6 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
                     end = Offset(w * 0.45f, h * 0.18f),
                     strokeWidth = sw * 1.5f, cap = StrokeCap.Round,
                 )
-                // Flag — curve from top of stem
                 val flag = Path().apply {
                     moveTo(w * 0.45f, h * 0.18f)
                     cubicTo(
@@ -333,7 +417,6 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
                 drawPath(flag, tint, style = Stroke(width = sw, cap = StrokeCap.Round))
             }
             RecorderMode.AMBIENCE -> {
-                // Leaf: pointed oval with central vein
                 val leaf = Path().apply {
                     moveTo(w * 0.5f, h * 0.10f)
                     cubicTo(
@@ -349,14 +432,12 @@ private fun ModeIcon(mode: RecorderMode, size: androidx.compose.ui.unit.Dp) {
                     close()
                 }
                 drawPath(leaf, tint, style = Stroke(width = sw, cap = StrokeCap.Round))
-                // Central vein
                 drawLine(tint,
                     start = Offset(w * 0.50f, h * 0.15f),
                     end = Offset(w * 0.50f, h * 0.88f),
                     strokeWidth = sw, cap = StrokeCap.Round)
             }
             RecorderMode.CUSTOM -> {
-                // Gear: 8-tooth ring
                 val cx = w / 2; val cy = h / 2
                 val rOuter = w * 0.32f; val rInner = w * 0.12f
                 val teeth = 8

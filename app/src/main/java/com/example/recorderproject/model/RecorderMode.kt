@@ -71,7 +71,7 @@ enum class RecorderMode(
     ;
 
     companion object {
-        val Default = INTERVIEW
+        val Default = CUSTOM
         fun fromName(name: String?): RecorderMode =
             entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Default
     }

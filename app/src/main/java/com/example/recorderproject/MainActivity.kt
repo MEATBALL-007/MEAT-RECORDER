@@ -98,8 +98,26 @@ class MainActivity : ComponentActivity() {
                                 getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", true).apply()
                             },
                             onSkip = {
+                                // Default-on-skip is now CUSTOM (was INTERVIEW)
+                                viewModel.selectRecorderMode(com.example.recorderproject.model.RecorderMode.CUSTOM)
                                 modeChosen = true
                                 getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", true).apply()
+                            },
+                            onCreatePreset = { name ->
+                                // Save the preset name + lock in CUSTOM mode + go home.
+                                // Full preset storage (gains, NR, etc.) is a follow-up;
+                                // for now we persist the chosen name so it's recoverable.
+                                viewModel.selectRecorderMode(com.example.recorderproject.model.RecorderMode.CUSTOM)
+                                val prefs = getPreferences(MODE_PRIVATE)
+                                val existing = prefs.getStringSet("custom_presets", emptySet()) ?: emptySet()
+                                val merged = (existing + name).toSet()
+                                prefs.edit()
+                                    .putStringSet("custom_presets", merged)
+                                    .putString("active_preset", name)
+                                    .putBoolean("mode_chosen", true)
+                                    .apply()
+                                modeChosen = true
+                                Toast.makeText(this, "Saved preset: $name", Toast.LENGTH_SHORT).show()
                             },
                         )
                         !onboardingDone -> OnboardingOverlay(onDone = {
