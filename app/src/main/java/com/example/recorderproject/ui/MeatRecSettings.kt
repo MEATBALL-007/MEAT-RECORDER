@@ -24,8 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +76,7 @@ fun MeatRecSettings(
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
+    var showResetDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -240,6 +245,77 @@ fun MeatRecSettings(
                     onChange = { viewModel.updateSampleRate(it) },
                 )
             }
+
+            // Faint divider before RESET
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.08f)),
+            )
+
+            SectionHeader("RESET")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF161616))
+                    .clickable { showResetDialog = true }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Reset to factory defaults",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Wipes all settings. Recordings & presets safe.",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                    )
+                }
+                Text("→", color = MeatOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = {
+                    Text(
+                        "Reset all settings?",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                text = {
+                    Text(
+                        "Recordings, custom presets, and your theme won't be touched.",
+                        color = Color.White.copy(alpha = 0.75f),
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.resetFactory()
+                            showResetDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MeatOrange),
+                    ) {
+                        Text("Reset", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                    }
+                },
+                containerColor = Color(0xFF161616),
+            )
         }
     }
 }
