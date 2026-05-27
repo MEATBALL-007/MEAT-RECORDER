@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class)
+
 package com.example.recorderproject
 
 import android.app.Application
@@ -28,10 +30,12 @@ import com.example.recorderproject.model.applyDecayTick
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +51,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val mediaPlayer = MediaPlayer()
     private val settings = SettingsDataStore(application)
     private val hydrated = MutableStateFlow(false)
+
+    private val gainDbPersist = MutableSharedFlow<Float>(extraBufferCapacity = 64)
+    private val eqBandGainsPersist = MutableSharedFlow<FloatArray>(extraBufferCapacity = 64)
 
     init {
         viewModelScope.launch {
@@ -74,6 +81,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             } finally {
                 hydrated.value = true
             }
+        }
+
+        // Debounced persistence for hot-path slider setters — UI state updates instantly,
+        // disk write is coalesced to at most one per 150 ms of quiet time.
+        viewModelScope.launch {
+            gainDbPersist
+                .debounce(150)
+                .collect { settings.setInputGainDb(it) }
+        }
+        viewModelScope.launch {
+            eqBandGainsPersist
+                .debounce(150)
+                .collect { settings.setLiveEqBandGains(it) }
         }
     }
 
@@ -353,6 +373,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _inputGainDb.value = clamped
         val linear = kotlin.math.exp(kotlin.math.ln(10.0) * clamped / 20.0).toFloat()
         recorder.setInputGain(linear)
+        if (hydrated.value) gainDbPersist.tryEmit(clamped)
     }
 
     // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
@@ -579,6 +600,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (band in arr.indices) {
             arr[band] = gainDb.coerceIn(-12f, 12f)
             _liveEqBandGains.value = arr
+            if (hydrated.value) eqBandGainsPersist.tryEmit(arr.copyOf())
             // Build an EQChain and push to recorder if recording.
             if (_isRecording.value) {
                 val freqs = floatArrayOf(60f, 200f, 500f, 1000f, 3000f, 10000f)
