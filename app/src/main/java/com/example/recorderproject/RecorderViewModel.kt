@@ -48,6 +48,35 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val settings = SettingsDataStore(application)
     private val hydrated = MutableStateFlow(false)
 
+    init {
+        viewModelScope.launch {
+            try {
+                val snapshot = settings.snapshot()
+                applySnapshot(snapshot)
+                // Re-claim SAF URI grant if we have one persisted
+                snapshot.saveDirectoryUri?.let { uriStr ->
+                    try {
+                        val uri = Uri.parse(uriStr)
+                        app.contentResolver.takePersistableUriPermission(
+                            uri,
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                    } catch (e: SecurityException) {
+                        Log.w(TAG, "Persisted SAF URI no longer granted, clearing: ${e.message}")
+                        _saveDirectoryUri.value = null
+                        settings.setSaveDirectoryUri(null)
+                    }
+                }
+                rewireRecorderFromState()
+            } catch (e: Exception) {
+                Log.e(TAG, "Settings hydration failed: ${e.message}", e)
+            } finally {
+                hydrated.value = true
+            }
+        }
+    }
+
     private val _recordFiles = MutableStateFlow<List<RecordFile>>(emptyList())
     val recordFiles: StateFlow<List<RecordFile>> = _recordFiles
 
@@ -1426,6 +1455,26 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 eqFile.delete()
             }
         }
+    }
+
+    /**
+     * Push current in-memory recorder-related state into `AudioRecorderManager`.
+     * Called after hydration (to restore native state on next record) and after
+     * `resetFactory()` (to push default values into the native recorder).
+     *
+     * The monitor toggle is intentionally NOT auto-resumed here — `monitor_enabled`
+     * is not persisted (see spec § Things NOT persisted).
+     */
+    private fun rewireRecorderFromState() {
+        val gainLinear = kotlin.math.exp(
+            kotlin.math.ln(10.0) * _inputGainDb.value / 20.0,
+        ).toFloat()
+        recorder.setInputGain(gainLinear)
+        recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
+        recorder.setAgc(_agcOn.value)
+        recorder.setHiPass(_hiPassOn.value)
+        recorder.setAntiClip(_antiClipOn.value)
+        // Live EQ chain is pushed on demand in startRecording(); no need here.
     }
 
     /**
