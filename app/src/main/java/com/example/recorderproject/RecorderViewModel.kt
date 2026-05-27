@@ -8,12 +8,20 @@ import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
 import com.example.recorderproject.audio.NoiseReductionProcessor
 import com.example.recorderproject.audio.StaticSpectrum
+import com.example.recorderproject.data.Defaults
+import com.example.recorderproject.data.SettingsDataStore
+import com.example.recorderproject.data.SettingsSnapshot
 import com.example.recorderproject.model.ApplySaveMode
+import com.example.recorderproject.model.EQBand
+import com.example.recorderproject.model.EQBandType
 import com.example.recorderproject.model.EQChain
+import com.example.recorderproject.model.EQChainJson
 import com.example.recorderproject.model.EQEditMode
 import com.example.recorderproject.model.EQViewMode
 import com.example.recorderproject.model.MonitorLevel
 import com.example.recorderproject.model.RecordFile
+import com.example.recorderproject.model.RecorderMode
+import com.example.recorderproject.model.RecordingQuality
 import com.example.recorderproject.model.SortOrder
 import com.example.recorderproject.model.applyAudioSample
 import com.example.recorderproject.model.applyDecayTick
@@ -37,6 +45,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val recorder = AudioRecorderManager(application.applicationContext)
     private val noiseProcessor = NoiseReductionProcessor()
     private val mediaPlayer = MediaPlayer()
+    private val settings = SettingsDataStore(application)
+    private val hydrated = MutableStateFlow(false)
 
     private val _recordFiles = MutableStateFlow<List<RecordFile>>(emptyList())
     val recordFiles: StateFlow<List<RecordFile>> = _recordFiles
@@ -1416,6 +1426,67 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 eqFile.delete()
             }
         }
+    }
+
+    /**
+     * Reassign every in-memory persisted-setting StateFlow to its declared default.
+     * Used by both `applySnapshot(SettingsSnapshot())` and `resetFactory()`.
+     *
+     * NOTE: This sets the StateFlows only — it does NOT push state into
+     * `AudioRecorderManager`. Call `rewireRecorderFromState()` after this if you
+     * need the native recorder to pick up the new state.
+     */
+    private fun applyDefaults() = applySnapshot(SettingsSnapshot())
+
+    /** Apply a SettingsSnapshot to the in-memory StateFlows. */
+    private fun applySnapshot(s: SettingsSnapshot) {
+        _recorderMode.value = runCatching { RecorderMode.valueOf(s.recorderMode) }
+            .getOrDefault(RecorderMode.CUSTOM)
+        _audioSourceName.value = s.audioSourceName
+        _micSourceLabel.value = s.micSourceLabel
+        // Look up audio source ID by name (mirrors updateAudioSource())
+        AudioRecorderManager.AUDIO_SOURCES.find { it.first == s.audioSourceName }?.let {
+            _audioSource.value = it.second
+        }
+        _inputGainDb.value = s.inputGainDb
+        _noiseReductionEnabled.value = s.noiseReduction
+        _sampleRate.value = s.sampleRate
+        _bitDepth.value = s.bitDepth
+        _channelCount.value = s.channelCount
+        _countdownSeconds.value = s.countdownSec
+        _maxDurationMinutes.value = s.maxDurationMin
+        _autoStopMinutes.value = s.autoStopMin
+        _quality.value = runCatching { RecordingQuality.valueOf(s.qualityPreset) }
+            .getOrDefault(RecordingQuality.Default)
+        _sceneName.value = s.sceneName
+
+        _liveNoiseGateOn.value = s.liveNoiseGate
+        _agcOn.value = s.agc
+        _hiPassOn.value = s.hiPass
+        _antiClipOn.value = s.antiClip
+        _compressorOn.value = s.compressor
+        _stereoWidenerOn.value = s.stereoWidener
+        _vadOn.value = s.vad
+        _liveEqEnabled.value = s.liveEqEnabled
+        _liveEqBandGains.value = s.liveEqBandGains.copyOf()
+
+        _currentEQChain.value = runCatching {
+            EQChainJson.fromJsonString(s.currentEqChainJson)
+        }.getOrNull() ?: EQChain.empty()
+        _eqMode.value = runCatching { EQEditMode.valueOf(s.eqMode) }.getOrDefault(EQEditMode.PARAMETRIC)
+        _eqViewMode.value = runCatching { EQViewMode.valueOf(s.eqViewMode) }.getOrDefault(EQViewMode.TWO_D)
+        _eqApplySaveMode.value = runCatching { ApplySaveMode.valueOf(s.eqApplySaveMode) }
+            .getOrDefault(ApplySaveMode.BOTH)
+        _currentEQChain.value = _currentEQChain.value.copy(bypassed = s.eqBypassed)
+
+        _playbackSpeed.value = s.playbackSpeed
+        _playbackLoop.value = s.playbackLoop
+        _playbackVolume.value = s.playbackVolume
+
+        _saveDirectoryUri.value = s.saveDirectoryUri?.let { Uri.parse(it) }
+        _groupByScene.value = s.groupByScene
+        _lockScreenControlsOn.value = s.lockScreenControls
+        _cloudBackupOn.value = s.cloudBackup
     }
 
     override fun onCleared() {
