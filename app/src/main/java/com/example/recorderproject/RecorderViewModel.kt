@@ -1666,6 +1666,54 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _cloudBackupOn.value = s.cloudBackup
     }
 
+    /**
+     * Reset every persisted setting to its declared default. Does NOT touch:
+     *  - SharedPreferences (onboarding_done, mode_chosen, app_theme, custom_presets,
+     *    active_preset, sort_order, file_filter)
+     *  - Recorded WAV files or their sidecars
+     *  - CustomPresetStore (user-named EQ presets)
+     *  - The in-memory _recordFiles list
+     */
+    fun resetFactory() {
+        viewModelScope.launch {
+            try {
+                settings.clear()
+                // Tear down monitor if running — opening the mic is a session-local
+                // side effect that should not persist past reset.
+                if (_monitorEnabled.value) {
+                    try {
+                        audioMonitor.stop()
+                        monitorDecayJob?.cancel()
+                        monitorDecayJob = null
+                        audioMonitor.setLevelListener(null)
+                        monitorClipUntilMs = 0L
+                        _monitorLevel.value = MonitorLevel.Silent
+                        val am = app.getSystemService(android.content.Context.AUDIO_SERVICE)
+                            as android.media.AudioManager
+                        @Suppress("DEPRECATION")
+                        am.isBluetoothScoOn = false
+                        @Suppress("DEPRECATION")
+                        am.stopBluetoothSco()
+                    } catch (_: Exception) {}
+                    _monitorEnabled.value = false
+                }
+                applyDefaults()
+                rewireRecorderFromState()
+                // Clear EQ undo/redo so post-reset history doesn't reference old chains
+                eqHistory.clear()
+                eqRedo.clear()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "Settings reset to defaults", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "resetFactory failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "Reset failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         try { audioMonitor.stop() } catch (_: Exception) {}
