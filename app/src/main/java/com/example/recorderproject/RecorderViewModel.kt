@@ -187,6 +187,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleLiveNoiseGate() {
         _liveNoiseGateOn.value = !_liveNoiseGateOn.value
         recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
+        if (hydrated.value) viewModelScope.launch { settings.setLiveNoiseGate(_liveNoiseGateOn.value) }
     }
 
     // G9: Auto Gain Control toggle
@@ -195,6 +196,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleAgc() {
         _agcOn.value = !_agcOn.value
         recorder.setAgc(_agcOn.value)
+        if (hydrated.value) viewModelScope.launch { settings.setAgc(_agcOn.value) }
     }
 
     // G10: Hi-pass (rumble removal) toggle
@@ -203,6 +205,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleHiPass() {
         _hiPassOn.value = !_hiPassOn.value
         recorder.setHiPass(_hiPassOn.value)
+        if (hydrated.value) viewModelScope.launch { settings.setHiPass(_hiPassOn.value) }
     }
 
     // G11: Anti-clipping auto-attenuator toggle
@@ -211,6 +214,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleAntiClip() {
         _antiClipOn.value = !_antiClipOn.value
         recorder.setAntiClip(_antiClipOn.value)
+        if (hydrated.value) viewModelScope.launch { settings.setAntiClip(_antiClipOn.value) }
     }
 
     // G8: Quality presets — applies sampleRate / bitDepth / channelCount in one call.
@@ -221,6 +225,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _sampleRate.value = q.sampleRate
         _bitDepth.value = q.bitDepth
         _channelCount.value = q.channelCount
+        if (hydrated.value) viewModelScope.launch {
+            settings.setQualityPreset(q.name)
+            settings.setSampleRate(q.sampleRate)
+            settings.setBitDepth(q.bitDepth)
+            settings.setChannelCount(q.channelCount)
+        }
     }
 
     // G12: Recording schedule — start at a given absolute time (epoch ms). 0 = off.
@@ -242,7 +252,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // G13: VAD (voice-activity detection) — auto-start recording when input rises.
     private val _vadOn = MutableStateFlow(false)
     val vadOn: StateFlow<Boolean> = _vadOn
-    fun toggleVad() { _vadOn.value = !_vadOn.value }
+    fun toggleVad() {
+        _vadOn.value = !_vadOn.value
+        if (hydrated.value) viewModelScope.launch { settings.setVad(_vadOn.value) }
+    }
 
     // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
     fun addTagToFile(file: RecordFile, tag: String) {
@@ -302,22 +315,34 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _bitDepth = MutableStateFlow(16)
     val bitDepth: StateFlow<Int> = _bitDepth
 
-    fun updateBitDepth(v: Int) { _bitDepth.value = v }
+    fun updateBitDepth(v: Int) {
+        _bitDepth.value = v
+        if (hydrated.value) viewModelScope.launch { settings.setBitDepth(v) }
+    }
 
     // Phase A port-back: extended recording settings (from old MEATrec ModeSettings)
     private val _channelCount = MutableStateFlow(1)
     val channelCount: StateFlow<Int> = _channelCount
-    fun updateChannelCount(v: Int) { _channelCount.value = v.coerceIn(1, 2) }
+    fun updateChannelCount(v: Int) {
+        _channelCount.value = v.coerceIn(1, 2)
+        if (hydrated.value) viewModelScope.launch { settings.setChannelCount(_channelCount.value) }
+    }
 
     /** Pre-record countdown in seconds (0 = off). */
     private val _countdownSeconds = MutableStateFlow(0)
     val countdownSeconds: StateFlow<Int> = _countdownSeconds
-    fun updateCountdownSeconds(v: Int) { _countdownSeconds.value = v.coerceAtLeast(0) }
+    fun updateCountdownSeconds(v: Int) {
+        _countdownSeconds.value = v.coerceAtLeast(0)
+        if (hydrated.value) viewModelScope.launch { settings.setCountdownSec(_countdownSeconds.value) }
+    }
 
     /** Auto-stop after this many minutes of recording (0 = off). */
     private val _maxDurationMinutes = MutableStateFlow(0)
     val maxDurationMinutes: StateFlow<Int> = _maxDurationMinutes
-    fun updateMaxDurationMinutes(v: Int) { _maxDurationMinutes.value = v.coerceAtLeast(0) }
+    fun updateMaxDurationMinutes(v: Int) {
+        _maxDurationMinutes.value = v.coerceAtLeast(0)
+        if (hydrated.value) viewModelScope.launch { settings.setMaxDurationMin(_maxDurationMinutes.value) }
+    }
 
     // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop
     private val _inputGainDb = MutableStateFlow(0f)
@@ -429,11 +454,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             if (_liveEqEnabled.value) "Live EQ on — applied in real time to recording"
             else "Live EQ off",
             Toast.LENGTH_SHORT).show()
+        if (hydrated.value) viewModelScope.launch { settings.setLiveEqEnabled(_liveEqEnabled.value) }
     }
 
     fun setMicSource(label: String) {
         _micSourceLabel.value = label
         updateAudioSource(label)
+        if (hydrated.value) viewModelScope.launch { settings.setMicSourceLabel(label) }
     }
 
     // Save directory
@@ -586,6 +613,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             _channelCount.value = mode.channelCount
             _noiseReductionEnabled.value = mode.noiseReduction
         }
+        if (hydrated.value) viewModelScope.launch {
+            settings.setRecorderMode(mode.name)
+            if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
+                settings.setSampleRate(_sampleRate.value)
+                settings.setBitDepth(_bitDepth.value)
+                settings.setChannelCount(_channelCount.value)
+                settings.setNoiseReduction(_noiseReductionEnabled.value)
+            }
+        }
     }
 
     /** G17: trim editor open for which file (null = none). */
@@ -597,17 +633,26 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** G18: compressor live during record (uses existing MasterLimiter — toggle only). */
     private val _compressorOn = MutableStateFlow(false)
     val compressorOn: StateFlow<Boolean> = _compressorOn
-    fun toggleCompressor() { _compressorOn.value = !_compressorOn.value }
+    fun toggleCompressor() {
+        _compressorOn.value = !_compressorOn.value
+        if (hydrated.value) viewModelScope.launch { settings.setCompressor(_compressorOn.value) }
+    }
 
     /** G19: stereo widener live (only matters when channelCount=2). */
     private val _stereoWidenerOn = MutableStateFlow(false)
     val stereoWidenerOn: StateFlow<Boolean> = _stereoWidenerOn
-    fun toggleStereoWidener() { _stereoWidenerOn.value = !_stereoWidenerOn.value }
+    fun toggleStereoWidener() {
+        _stereoWidenerOn.value = !_stereoWidenerOn.value
+        if (hydrated.value) viewModelScope.launch { settings.setStereoWidener(_stereoWidenerOn.value) }
+    }
 
     /** G20: cloud backup toggle (no real cloud yet — surfaces intent). */
     private val _cloudBackupOn = MutableStateFlow(false)
     val cloudBackupOn: StateFlow<Boolean> = _cloudBackupOn
-    fun toggleCloudBackup() { _cloudBackupOn.value = !_cloudBackupOn.value }
+    fun toggleCloudBackup() {
+        _cloudBackupOn.value = !_cloudBackupOn.value
+        if (hydrated.value) viewModelScope.launch { settings.setCloudBackup(_cloudBackupOn.value) }
+    }
 
     /** G21: device health snapshot — battery % + remaining storage MB. Computed on demand. */
     fun snapshotHealth(context: android.content.Context): Pair<Int, Long> {
@@ -624,6 +669,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private var autoStopJob: kotlinx.coroutines.Job? = null
     fun setAutoStopMinutes(m: Int) {
         _autoStopMinutes.value = m.coerceAtLeast(0)
+        if (hydrated.value) viewModelScope.launch { settings.setAutoStopMin(_autoStopMinutes.value) }
     }
     /** Called by start-recording flow to arm the timer. */
     fun armAutoStop(onFire: () -> Unit) {
@@ -650,12 +696,18 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** G24: group by sceneName? (folders proxy). */
     private val _groupByScene = MutableStateFlow(false)
     val groupByScene: StateFlow<Boolean> = _groupByScene
-    fun toggleGroupByScene() { _groupByScene.value = !_groupByScene.value }
+    fun toggleGroupByScene() {
+        _groupByScene.value = !_groupByScene.value
+        if (hydrated.value) viewModelScope.launch { settings.setGroupByScene(_groupByScene.value) }
+    }
 
     /** G25: lockscreen control intent — placeholder flag for future foreground-service work. */
     private val _lockScreenControlsOn = MutableStateFlow(true)
     val lockScreenControlsOn: StateFlow<Boolean> = _lockScreenControlsOn
-    fun toggleLockScreenControls() { _lockScreenControlsOn.value = !_lockScreenControlsOn.value }
+    fun toggleLockScreenControls() {
+        _lockScreenControlsOn.value = !_lockScreenControlsOn.value
+        if (hydrated.value) viewModelScope.launch { settings.setLockScreenControls(_lockScreenControlsOn.value) }
+    }
 
     /** Phase D: which file's transcript view is open (null = none). */
     private val _transcriptFile = MutableStateFlow<RecordFile?>(null)
@@ -762,6 +814,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateSceneName(value: String) {
         _sceneName.value = value
+        if (hydrated.value) viewModelScope.launch { settings.setSceneName(value) }
     }
 
     fun updateNotes(value: String) {
@@ -770,10 +823,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleNoiseReduction(enabled: Boolean) {
         _noiseReductionEnabled.value = enabled
+        if (hydrated.value) viewModelScope.launch { settings.setNoiseReduction(enabled) }
     }
 
     fun updateSampleRate(value: Int) {
         _sampleRate.value = value
+        if (hydrated.value) viewModelScope.launch { settings.setSampleRate(value) }
     }
 
     fun updateAudioSource(name: String) {
@@ -781,11 +836,23 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (source != null) {
             _audioSource.value = source.second
             _audioSourceName.value = source.first
+            if (hydrated.value) viewModelScope.launch { settings.setAudioSourceName(source.first) }
         }
     }
 
     fun setSaveDirectoryUri(uri: Uri) {
         _saveDirectoryUri.value = uri
+        // Take persistable grant so it survives process death
+        try {
+            app.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Could not take persistable SAF permission: ${e.message}")
+        }
+        if (hydrated.value) viewModelScope.launch { settings.setSaveDirectoryUri(uri.toString()) }
     }
 
     private fun validateRecordingData(): Boolean {
@@ -1157,6 +1224,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             params.speed = speed
             mediaPlayer.playbackParams = params
         } catch (_: Exception) {}
+        if (hydrated.value) viewModelScope.launch { settings.setPlaybackSpeed(speed) }
     }
 
     // G6: loop playback
@@ -1165,6 +1233,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleLoop() {
         _playbackLoop.value = !_playbackLoop.value
         mediaPlayer.isLooping = _playbackLoop.value
+        if (hydrated.value) viewModelScope.launch { settings.setPlaybackLoop(_playbackLoop.value) }
     }
 
     // G7: playback volume (0..1)
@@ -1174,6 +1243,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         val vv = v.coerceIn(0f, 1f)
         _playbackVolume.value = vv
         mediaPlayer.setVolume(vv, vv)
+        if (hydrated.value) viewModelScope.launch { settings.setPlaybackVolume(vv) }
     }
 
     private fun startPositionUpdates() {
@@ -1244,26 +1314,35 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun onEQBandChanged(updated: com.example.recorderproject.model.EQBand) {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = _currentEQChain.value.withBand(updated)
+        persistCurrentEqChain()
         // If Live EQ is engaged, push the updated chain into the recorder immediately.
         if (_liveEqEnabled.value) {
             recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
         }
     }
 
-    fun onEQModeToggle(mode: EQEditMode) { _eqMode.value = mode }
-    fun onEQViewModeToggle(mode: EQViewMode) { _eqViewMode.value = mode }
+    fun onEQModeToggle(mode: EQEditMode) {
+        _eqMode.value = mode
+        if (hydrated.value) viewModelScope.launch { settings.setEqMode(mode.name) }
+    }
+    fun onEQViewModeToggle(mode: EQViewMode) {
+        _eqViewMode.value = mode
+        if (hydrated.value) viewModelScope.launch { settings.setEqViewMode(mode.name) }
+    }
     fun onEQSelectBand(id: Int?) { _eqSelectedBandId.value = id }
 
     fun onEQUndo() {
         val prev = eqHistory.removeLastOrNull() ?: return
         eqRedo.addLast(_currentEQChain.value)
         _currentEQChain.value = prev
+        persistCurrentEqChain()
     }
 
     fun onEQRedo() {
         val next = eqRedo.removeLastOrNull() ?: return
         eqHistory.addLast(_currentEQChain.value)
         _currentEQChain.value = next
+        persistCurrentEqChain()
     }
 
     fun onEQABToggle() {
@@ -1274,17 +1353,20 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             val current = _currentEQChain.value
             _currentEQChain.value = snap
             _eqSnapshot.value = current
+            persistCurrentEqChain()
         }
     }
 
     fun onEQResetAll() {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = EQChain.empty()
+        persistCurrentEqChain()
     }
 
     fun onEQPresetSelected(preset: com.example.recorderproject.model.EQPreset) {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = EQChain(bands = preset.bands)
+        persistCurrentEqChain()
         if (_liveEqEnabled.value) {
             recorder.setLiveEqChain(_currentEQChain.value, _sampleRate.value.toFloat())
         }
@@ -1292,6 +1374,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun onEQToggleBypass() {
         _currentEQChain.value = _currentEQChain.value.copy(bypassed = !_currentEQChain.value.bypassed)
+        if (hydrated.value) viewModelScope.launch {
+            settings.setEqBypassed(_currentEQChain.value.bypassed)
+        }
     }
 
     fun onEQToggleGainCompensation() {
@@ -1308,12 +1393,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             chain = chain.withBand(notch.copy(id = idx + 1))
         }
         _currentEQChain.value = chain
+        persistCurrentEqChain()
         Toast.makeText(app, "Placed ${combNotches.size}-notch hum comb at ${mainsHz.toInt()} Hz", Toast.LENGTH_SHORT).show()
     }
 
     fun onEQRandomPreset() {
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = com.example.recorderproject.model.EQRandomPreset.generate()
+        persistCurrentEqChain()
     }
 
     fun onEQSaveAsCustomPreset(name: String) {
@@ -1359,6 +1446,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _currentEQChain.value = added.copy(
             noiseCutSuggestions = current.noiseCutSuggestions.filter { it.id != band.id }
         )
+        persistCurrentEqChain()
     }
 
     fun onEQRejectSuggestion(band: com.example.recorderproject.model.EQBand) {
@@ -1374,6 +1462,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         pushEqHistory(_currentEQChain.value)
         val padded = bands + (bands.size + 1..8).map { com.example.recorderproject.model.EQBand.defaultForSlot(it) }
         _currentEQChain.value = EQChain(bands = padded.take(8))
+        persistCurrentEqChain()
     }
 
     fun onEQTapNotch(frequencyHz: Float) {
@@ -1391,9 +1480,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
         pushEqHistory(_currentEQChain.value)
         _currentEQChain.value = added
+        persistCurrentEqChain()
     }
 
-    fun onEQSaveModeChange(mode: ApplySaveMode) { _eqApplySaveMode.value = mode }
+    fun onEQSaveModeChange(mode: ApplySaveMode) {
+        _eqApplySaveMode.value = mode
+        if (hydrated.value) viewModelScope.launch { settings.setEqApplySaveMode(mode.name) }
+    }
 
     fun onEQApply() {
         val src = _eqSourceFile.value ?: return
@@ -1485,6 +1578,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * `AudioRecorderManager`. Call `rewireRecorderFromState()` after this if you
      * need the native recorder to pick up the new state.
      */
+    private fun persistCurrentEqChain() {
+        if (!hydrated.value) return
+        viewModelScope.launch {
+            try {
+                settings.setCurrentEqChainJson(
+                    EQChainJson.toJsonString(_currentEQChain.value)
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "EQ chain persist failed: ${e.message}")
+            }
+        }
+    }
+
     private fun applyDefaults() = applySnapshot(SettingsSnapshot())
 
     /** Apply a SettingsSnapshot to the in-memory StateFlows. */
