@@ -1,5 +1,8 @@
 package com.example.recorderproject.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +54,26 @@ fun MonitorLevelMeter(
     level: MonitorLevel,
     modifier: Modifier = Modifier,
 ) {
+    // Spring-animate the fill fractions so the bar eases instead of snapping.
+    val targetRmsFrac = fractionFromDb(level.rmsDb)
+    val targetPeakFrac = fractionFromDb(level.peakDb)
+    val rmsFrac by animateFloatAsState(
+        targetValue = targetRmsFrac,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "monitorRmsFill",
+    )
+    val peakFrac by animateFloatAsState(
+        targetValue = targetPeakFrac,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "monitorPeakFill",
+    )
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         // Top row: caps label + dB readout + (optional) clip dot
         Row(
@@ -93,8 +117,6 @@ fun MonitorLevelMeter(
             Canvas(modifier = Modifier.fillMaxWidth().height(12.dp)) {
                 val w = size.width
                 val h = size.height
-                val rmsFrac = fractionFromDb(level.rmsDb)
-                val peakFrac = fractionFromDb(level.peakDb)
 
                 // Fill — gradient stops positioned so red appears only near 0 dB
                 val gradient = Brush.horizontalGradient(
@@ -109,7 +131,7 @@ fun MonitorLevelMeter(
                 )
                 drawRect(brush = gradient, topLeft = Offset.Zero, size = Size(width = w * rmsFrac, height = h))
 
-                // Peak-hold marker: thin vertical bar
+                // Peak-hold marker: thin vertical bar (spring-eased)
                 if (peakFrac > 0f) {
                     val x = (w * peakFrac).coerceIn(0f, w - 2f)
                     drawRect(

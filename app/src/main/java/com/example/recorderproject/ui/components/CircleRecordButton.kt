@@ -63,8 +63,11 @@ fun CircleRecordButton(
     )
 
     val pressScale by animateFloatAsState(
-        if (pressing) 0.9f else 1f,
-        spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+        if (pressing) 0.88f else 1f,
+        spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
         label = "pressScale",
     )
 
@@ -118,9 +121,15 @@ fun CircleRecordButton(
             }
         }
 
+        // Subtle breathing on the main button body while recording (0.97 → 1.03)
+        val bodyScale = if (isRecording) {
+            1f + 0.03f * kotlin.math.sin(breath * Math.PI.toFloat() * 2f)
+        } else 1f
+
         // Main button surface — radial gradient orange
         Box(
             modifier = Modifier
+                .scale(bodyScale)
                 .size(size * 0.82f)
                 .clip(CircleShape)
                 .background(

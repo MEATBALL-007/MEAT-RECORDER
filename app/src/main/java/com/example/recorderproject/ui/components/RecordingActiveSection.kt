@@ -1,9 +1,12 @@
 package com.example.recorderproject.ui.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -239,7 +242,15 @@ private fun RecBadge(elapsedSeconds: Int, isPaused: Boolean = false) {
 
 @Composable
 private fun InputLevelBar(percent: Int) {
-    val fraction = (percent.coerceIn(0, 100)) / 100f
+    val targetFraction = (percent.coerceIn(0, 100)) / 100f
+    val fraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "inputLevelFill",
+    )
 
     // M3: peak hold — climbs instantly with level, decays slowly
     var peakHold by remember { mutableStateOf(0f) }
@@ -346,6 +357,35 @@ private fun InputLevelBar(percent: Int) {
 
 @Composable
 private fun LiveWaveformCard(waveform: List<Float>) {
+    // Hold a "displayed" buffer that smoothly eases toward each new target value.
+    // Lerp factor 0.35 per 16ms tick → ~60% closure over ~30ms (one or two frames).
+    val displayed = remember { mutableStateListOf<Float>() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(16) // ~60 fps
+            // Resize displayed to match latest waveform length without losing existing values
+            val target = waveform
+            if (target.isEmpty()) {
+                if (displayed.isNotEmpty()) {
+                    // Decay toward zero when no input
+                    for (i in displayed.indices) {
+                        displayed[i] = displayed[i] * 0.85f
+                    }
+                }
+                continue
+            }
+            // Match length
+            while (displayed.size < target.size) displayed.add(0f)
+            while (displayed.size > target.size) displayed.removeAt(displayed.size - 1)
+            // Lerp toward target
+            for (i in target.indices) {
+                val curr = displayed[i]
+                val targ = target[i]
+                displayed[i] = curr + (targ - curr) * 0.35f
+            }
+        }
+    }
+
     CardWithLabel(label = "Live Waveform", dot = true) {
         Canvas(
             modifier = Modifier
@@ -356,7 +396,7 @@ private fun LiveWaveformCard(waveform: List<Float>) {
         ) {
             val w = size.width
             val h = size.height
-            if (waveform.isEmpty()) {
+            if (displayed.isEmpty()) {
                 drawLine(
                     color = Color.White.copy(alpha = 0.10f),
                     start = Offset(0f, h / 2f),
@@ -365,18 +405,49 @@ private fun LiveWaveformCard(waveform: List<Float>) {
                 )
                 return@Canvas
             }
-            // Tight vertical bars in yellow — feel of a digital VU strip
-            val bars = waveform.takeLast(140)
+            // Tight vertical bars with vertical gradient (yellow center → orange peak)
+            val bars = displayed.toList().takeLast(140)
             val barW = w / bars.size.toFloat()
+            val midY = h / 2f
             for ((i, lvl) in bars.withIndex()) {
                 val mag = abs(lvl).coerceIn(0f, 1f)
                 val barH = max(2f, mag * h * 0.92f)
+                val top = (h - barH) / 2f
+                val x = i * barW
+                val width = max(1f, barW - 0.6f)
+
+                // Glow halo for tall bars (mag > 0.55): wider, lower-alpha block behind
+                if (mag > 0.55f) {
+                    val glowAlpha = ((mag - 0.55f) / 0.45f).coerceIn(0f, 1f) * 0.30f
+                    drawRect(
+                        color = MeatOrange.copy(alpha = glowAlpha),
+                        topLeft = Offset(x - 0.8f, top - 1f),
+                        size = Size(width + 1.6f, barH + 2f),
+                    )
+                }
+
+                // Main bar with vertical gradient: yellow at middle, orange at peaks
                 drawRect(
-                    color = MeatYellow,
-                    topLeft = Offset(i * barW, (h - barH) / 2f),
-                    size = Size(max(1f, barW - 0.6f), barH),
+                    brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f to MeatOrange.copy(alpha = 0.7f + 0.3f * mag),
+                            0.5f to MeatYellow,
+                            1.0f to MeatOrange.copy(alpha = 0.7f + 0.3f * mag),
+                        ),
+                        startY = top,
+                        endY = top + barH,
+                    ),
+                    topLeft = Offset(x, top),
+                    size = Size(width, barH),
                 )
             }
+            // Faint center line for visual reference
+            drawLine(
+                color = Color.White.copy(alpha = 0.06f),
+                start = Offset(0f, midY),
+                end = Offset(w, midY),
+                strokeWidth = 1f,
+            )
         }
     }
 }
