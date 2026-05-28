@@ -66,6 +66,7 @@ class SettingsDataStore(private val context: Context) {
     private val groupByScene = booleanPreferencesKey("group_by_scene")
     private val lockScreenControlsKey = booleanPreferencesKey("lockscreen_controls")
     private val cloudBackupKey = booleanPreferencesKey("cloud_backup")
+    private val activeRecordingPathKey = stringPreferencesKey("active_recording_path")
 
     /** Read every key at once and return a snapshot. */
     suspend fun snapshot(): SettingsSnapshot {
@@ -156,6 +157,18 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setGroupByScene(v: Boolean) = context.dataStore.edit { it[groupByScene] = v }
     suspend fun setLockScreenControls(v: Boolean) = context.dataStore.edit { it[lockScreenControlsKey] = v }
     suspend fun setCloudBackup(v: Boolean) = context.dataStore.edit { it[cloudBackupKey] = v }
+
+    /** Path of the currently-active recording, or null if none. Set on start, cleared on stop. */
+    suspend fun setActiveRecordingPath(path: String?) {
+        context.dataStore.edit {
+            if (path == null) it.remove(activeRecordingPathKey)
+            else it[activeRecordingPathKey] = path
+        }
+    }
+
+    suspend fun getActiveRecordingPath(): String? {
+        return context.dataStore.data.first()[activeRecordingPathKey]
+    }
 
     private fun parseCsvFloats(csv: String?, expected: Int): FloatArray {
         if (csv.isNullOrBlank()) return FloatArray(expected)

@@ -121,6 +121,9 @@ class AudioRecorderManager(private val context: Context) {
     /** True iff a chain with at least one active band is currently being applied. */
     fun isLiveEqActive(): Boolean = liveEqActive
 
+    /** Absolute path of the active recording file, or null if not recording. SAF returns null. */
+    fun currentFilePath(): String? = recorderFile?.absolutePath
+
     private fun hasRecordAudioPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             context,

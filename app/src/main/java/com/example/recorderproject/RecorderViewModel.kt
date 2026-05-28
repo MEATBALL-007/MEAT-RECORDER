@@ -75,6 +75,38 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                         settings.setSaveDirectoryUri(null)
                     }
                 }
+                // Recovery: if a previous session died while recording, the WAV is now
+                // playable (PR1 periodic finalize) — surface it in the recordings list.
+                val activePath = settings.getActiveRecordingPath()
+                if (activePath != null) {
+                    val recoveredFile = java.io.File(activePath)
+                    if (recoveredFile.exists() && recoveredFile.length() > 44L) {
+                        // Build a RecordFile entry — best-effort metadata
+                        val durationSeconds = try {
+                            val mmr = android.media.MediaMetadataRetriever()
+                            mmr.setDataSource(activePath)
+                            val ms = mmr.extractMetadata(
+                                android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+                            )?.toLongOrNull() ?: 0L
+                            mmr.release()
+                            (ms / 1000L).toInt()
+                        } catch (_: Exception) { 0 }
+                        val recovered = RecordFile(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = recoveredFile.name,
+                            path = recoveredFile.absolutePath,
+                            durationSeconds = durationSeconds,
+                            sceneName = "Recovered",
+                        )
+                        _recordFiles.value = _recordFiles.value + recovered
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(app, "Recovered take from previous session: ${recoveredFile.name}",
+                                Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    // Clear the marker either way — we've handled it (or the file doesn't exist)
+                    try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
+                }
                 rewireRecorderFromState()
             } catch (e: Exception) {
                 Log.e(TAG, "Settings hydration failed: ${e.message}", e)
@@ -909,6 +941,34 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         return true
     }
 
+    /**
+     * Returns null if there's enough free space to safely start a recording,
+     * or a human-readable error string explaining why we refuse.
+     *
+     * Rule: refuse if free space < bytes-needed-for-60-seconds-at-current-quality.
+     * (60s is a heuristic: long enough that filling disk mid-take would be a
+     * disaster, short enough that we don't block recording on devices that
+     * could comfortably handle a short take.)
+     */
+    private fun checkDiskSpaceOrError(): String? {
+        return try {
+            val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+            val freeBytes = stat.availableBlocksLong * stat.blockSizeLong
+            val bytesPerSec = _sampleRate.value.toLong() *
+                (_bitDepth.value / 8) *
+                _channelCount.value
+            val minBytes = bytesPerSec * 60L
+            if (freeBytes < minBytes) {
+                val freeMb = freeBytes / (1024L * 1024L)
+                val minMb = minBytes / (1024L * 1024L)
+                "Not enough free space (${freeMb} MB free, need at least ${minMb} MB for 60s at current quality)"
+            } else null
+        } catch (e: Exception) {
+            Log.w(TAG, "Disk space check failed: ${e.message}")
+            null  // don't block on failure
+        }
+    }
+
     fun startRecording() {
         Log.d(TAG, "startRecording() called")
         if (_isRecording.value) {
@@ -917,6 +977,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
 
         if (!validateRecordingData()) {
+            return
+        }
+
+        checkDiskSpaceOrError()?.let { msg ->
+            _errorMessage.value = msg
+            Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -966,6 +1032,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             }
             Log.d(TAG, "Recording started successfully")
             Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
+            // Persist active-take path so a crash-then-relaunch can recover it
+            viewModelScope.launch {
+                try {
+                    val activePath = recorder.currentFilePath()
+                    if (activePath != null) settings.setActiveRecordingPath(activePath)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not persist active recording path: ${e.message}")
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start recording: ${e.message}", e)
             _errorMessage.value = "Failed to start recording: ${e.message}"
@@ -1044,6 +1119,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
 
                 _recordFiles.value = _recordFiles.value + finalFile
+                viewModelScope.launch {
+                    try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
+                }
                 _isRecording.value = false
                 _currentWaveform.value = emptyList()
                 Log.d(TAG, "Recording stopped successfully")
