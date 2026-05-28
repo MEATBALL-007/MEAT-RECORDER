@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Permissions denied", Toast.LENGTH_LONG).show()
             viewModel.onPermissionDenied()
         }
+        // POST_NOTIFICATIONS denial is intentionally not blocking — foreground service
+        // still works; the user just won't see the recording notification.
     }
 
     private val directoryLauncher = registerForActivityResult(
@@ -243,17 +245,22 @@ class MainActivity : ComponentActivity() {
         val storageGranted = !needsLegacyStoragePermission ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
                 PackageManager.PERMISSION_GRANTED
+        val notificationsGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
 
-        if (audioGranted && storageGranted) {
+        if (audioGranted && storageGranted && notificationsGranted) {
             Toast.makeText(this, "Starting recording...", Toast.LENGTH_SHORT).show()
             viewModel.startRecording()
         } else {
             Toast.makeText(this, "Requesting permissions...", Toast.LENGTH_SHORT).show()
-            val perms = if (needsLegacyStoragePermission) {
-                arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            } else {
-                arrayOf(Manifest.permission.RECORD_AUDIO)
-            }
+            val perms = buildList {
+                add(Manifest.permission.RECORD_AUDIO)
+                if (needsLegacyStoragePermission) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }.toTypedArray()
             permissionLauncher.launch(perms)
         }
     }

@@ -296,6 +296,19 @@ class AudioRecorderManager(private val context: Context) {
                         if (readCount % 10 == 0) {
                             Log.d(TAG, "Read: $read samples, total written: $totalBytesWritten bytes")
                         }
+                        // Crash-safe checkpoint: every ~1s, flush + rewrite RIFF/data sizes
+                        // so a process kill mid-take still produces a playable WAV.
+                        if (!isUsingSAF && readCount % 16 == 0) {
+                            val f = recorderFile
+                            if (f != null) {
+                                try {
+                                    outputStream?.flush()
+                                    CrashSafeWavFinalizer.finalize(f)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "crash-safe finalize failed: ${e.message}")
+                                }
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in recording thread: ${e.message}", e)
