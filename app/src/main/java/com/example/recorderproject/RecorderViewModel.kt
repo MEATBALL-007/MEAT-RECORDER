@@ -110,6 +110,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     // Clear the marker either way — we've handled it (or the file doesn't exist)
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
                 }
+                // Populate _recordFiles from disk on launch — without this, the user can
+                // only see files created in the current session.
+                scanRecordingsFromDisk()
                 rewireRecorderFromState()
             } catch (e: Exception) {
                 Log.e(TAG, "Settings hydration failed: ${e.message}", e)
@@ -1911,6 +1914,80 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     Toast.makeText(app, "Reset failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    /**
+     * On launch, populate _recordFiles from the recordings directory. Detects
+     * NR (filename ends with _nr.wav) and EQ (matching _eq.json sidecar) flags
+     * so the filter chips behave as expected.
+     *
+     * If both foo.wav and foo_nr.wav exist, only foo_nr.wav is shown — the NR
+     * version is the user-facing artifact, matching what stopRecording() adds
+     * to the list when NR is enabled.
+     */
+    private fun scanRecordingsFromDisk() {
+        val dir = java.io.File(
+            app.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
+            "Recordings",
+        )
+        if (!dir.exists()) return
+        val allWavs = dir.listFiles { f ->
+            f.isFile && f.extension.equals("wav", ignoreCase = true)
+        }?.toList() ?: return
+
+        // Build set of "base names" that have a _nr companion — we'll hide those originals
+        val nrBaseNames = allWavs
+            .filter { it.nameWithoutExtension.lowercase().endsWith("_nr") }
+            .map { it.nameWithoutExtension.dropLast(3) } // strip "_nr"
+            .toSet()
+
+        // Files already in the list (e.g., from PR2 recovery) — don't double-add
+        val existingPaths = _recordFiles.value.map { it.path }.toSet()
+
+        val scanned = allWavs
+            .filter { f ->
+                val base = f.nameWithoutExtension
+                val isOriginalShadowedByNr =
+                    !base.lowercase().endsWith("_nr") && nrBaseNames.contains(base)
+                !isOriginalShadowedByNr && f.absolutePath !in existingPaths
+            }
+            .sortedByDescending { it.lastModified() }
+            .mapNotNull { f ->
+                try {
+                    val nameLower = f.nameWithoutExtension.lowercase()
+                    val hasNr = nameLower.endsWith("_nr")
+                    val eqSidecar = java.io.File(f.parentFile, "${f.nameWithoutExtension}_eq.json")
+                    val hasEq = eqSidecar.exists()
+
+                    val durationSeconds = try {
+                        val mmr = android.media.MediaMetadataRetriever()
+                        mmr.setDataSource(f.absolutePath)
+                        val ms = mmr.extractMetadata(
+                            android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+                        )?.toLongOrNull() ?: 0L
+                        mmr.release()
+                        (ms / 1000L).toInt()
+                    } catch (_: Exception) { 0 }
+
+                    RecordFile(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = f.name,
+                        path = f.absolutePath,
+                        durationSeconds = durationSeconds,
+                        sceneName = "",
+                        hasNoiseReduction = hasNr,
+                        hasEQ = hasEq,
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "scanRecordingsFromDisk: skipping ${f.name}: ${e.message}")
+                    null
+                }
+            }
+
+        if (scanned.isNotEmpty()) {
+            _recordFiles.value = _recordFiles.value + scanned
+            Log.i(TAG, "scanRecordingsFromDisk: added ${scanned.size} files from disk")
         }
     }
 
