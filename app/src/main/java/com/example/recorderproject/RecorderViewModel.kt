@@ -36,9 +36,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import android.util.Log
 import android.widget.Toast
 import java.io.File
@@ -411,6 +414,73 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
 
     private val audioMonitor = com.example.recorderproject.audio.AudioMonitor()
+
+    // ------------- PR3: Audio focus + headphone-unplug handling -------------
+
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
+    private val audioManager by lazy {
+        application.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+    private val focusListener = android.media.AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            android.media.AudioManager.AUDIOFOCUS_LOSS,
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                if (_isRecording.value) {
+                    Log.w(TAG, "Audio focus lost (change=$change) — stopping recording")
+                    Toast.makeText(app, "Recording stopped: another app took audio focus", Toast.LENGTH_LONG).show()
+                    stopRecording()
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val attrs = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            val req = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(attrs)
+                .setOnAudioFocusChangeListener(focusListener)
+                .setAcceptsDelayedFocusGain(false)
+                .build()
+            audioFocusRequest = req
+            audioManager.requestAudioFocus(req) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                focusListener,
+                android.media.AudioManager.STREAM_MUSIC,
+                android.media.AudioManager.AUDIOFOCUS_GAIN,
+            ) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(focusListener)
+        }
+    }
+
+    private val becomingNoisyReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                if (_isRecording.value) {
+                    Log.w(TAG, "Audio output route changed (headphones unplugged) during recording")
+                    Toast.makeText(app, "Headphones unplugged — recording continues on built-in mic", Toast.LENGTH_LONG).show()
+                    // Note: we don't stop recording — the user might want it to continue.
+                    // Just warn so they know the route changed.
+                }
+            }
+        }
+    }
+    private var becomingNoisyRegistered = false
 
     private val _monitorEnabled = MutableStateFlow(false)
     val monitorEnabled: StateFlow<Boolean> = _monitorEnabled
@@ -970,6 +1040,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startRecording() {
+        if (!hydrated.value) {
+            // Hydration races against an early Record tap. Wait up to 500ms.
+            viewModelScope.launch {
+                try {
+                    withTimeout(500) {
+                        hydrated.filter { it }.first()
+                    }
+                    startRecordingInternal()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Hydration timed out — starting with current state")
+                    startRecordingInternal()
+                }
+            }
+            return
+        }
+        startRecordingInternal()
+    }
+
+    private fun startRecordingInternal() {
         Log.d(TAG, "startRecording() called")
         if (_isRecording.value) {
             Log.d(TAG, "Already recording, ignoring")
@@ -987,6 +1076,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
 
         _isRecording.value = true
+        requestAudioFocus() // Best-effort — don't block recording if denied
+        if (!becomingNoisyRegistered) {
+            app.registerReceiver(
+                becomingNoisyReceiver,
+                android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            )
+            becomingNoisyRegistered = true
+        }
         _errorMessage.value = null
         recorder.setAudioSource(_audioSource.value)
         // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
@@ -1030,6 +1127,20 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setPitchListener { hz ->
                 _livePitchHz.value = hz
             }
+            recorder.setErrorListener { err ->
+                viewModelScope.launch(Dispatchers.Main) {
+                    val msg = when (err) {
+                        is SecurityException -> "Recording stopped: save folder permission was revoked"
+                        is java.io.IOException -> "Recording stopped: disk write failed (${err.message})"
+                        else -> "Recording stopped due to error: ${err.message}"
+                    }
+                    Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
+                    _errorMessage.value = msg
+                    if (_isRecording.value) {
+                        try { stopRecording() } catch (_: Exception) {}
+                    }
+                }
+            }
             Log.d(TAG, "Recording started successfully")
             Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
             // Persist active-take path so a crash-then-relaunch can recover it
@@ -1055,9 +1166,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Log.d(TAG, "Not recording, ignoring")
             return
         }
+        abandonAudioFocus()
+        if (becomingNoisyRegistered) {
+            try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
+            becomingNoisyRegistered = false
+        }
+
         // M1/M2: clear listeners + reset live state
         recorder.setSpectrumListener(null)
         recorder.setPitchListener(null)
+        recorder.setErrorListener(null)
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
         _spectrumHistory.value = emptyList()
@@ -1753,6 +1871,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      *  - The in-memory _recordFiles list
      */
     fun resetFactory() {
+        if (_isRecording.value) {
+            Toast.makeText(app, "Stop recording before resetting", Toast.LENGTH_LONG).show()
+            return
+        }
         viewModelScope.launch {
             try {
                 settings.clear()
@@ -1795,6 +1917,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         try { audioMonitor.stop() } catch (_: Exception) {}
+        if (becomingNoisyRegistered) {
+            try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
+        }
+        abandonAudioFocus()
         mediaPlayer.release()
     }
 }

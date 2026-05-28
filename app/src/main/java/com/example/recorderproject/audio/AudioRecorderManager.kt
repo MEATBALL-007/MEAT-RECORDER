@@ -90,6 +90,10 @@ class AudioRecorderManager(private val context: Context) {
     fun setSpectrumListener(cb: ((FloatArray) -> Unit)?) { spectrumListener = cb }
     fun setPitchListener(cb: ((Float) -> Unit)?) { pitchListener = cb }
 
+    // PR3: Error listener — surfaces recording-thread exceptions (SAF revocation, disk full, etc.) to UI.
+    @Volatile private var errorListener: ((Throwable) -> Unit)? = null
+    fun setErrorListener(l: ((Throwable) -> Unit)?) { errorListener = l }
+
     // G9: AGC — track running peak; slowly bring it toward target.
     @Volatile private var agcOn: Boolean = false
     @Volatile private var agcGain: Float = 1f
@@ -315,6 +319,8 @@ class AudioRecorderManager(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in recording thread: ${e.message}", e)
+                    // Surface to UI — important on SAF revocation, low memory write failures, etc.
+                    errorListener?.invoke(e)
                     break
                 }
             }
