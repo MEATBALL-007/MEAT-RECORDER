@@ -8,8 +8,8 @@ class DefaultsTest {
     @Test
     fun `recording defaults match spec`() {
         assertEquals("CUSTOM", Defaults.RECORDER_MODE)
-        assertEquals("Microphone", Defaults.AUDIO_SOURCE_NAME)
-        assertEquals("Microphone", Defaults.MIC_SOURCE_LABEL)
+        assertEquals("Unprocessed", Defaults.AUDIO_SOURCE_NAME)
+        assertEquals("Unprocessed", Defaults.MIC_SOURCE_LABEL)
         assertEquals(0f, Defaults.INPUT_GAIN_DB)
         assertEquals(true, Defaults.NOISE_REDUCTION)
         assertEquals(48000, Defaults.SAMPLE_RATE_HZ)

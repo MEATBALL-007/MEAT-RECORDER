@@ -42,13 +42,36 @@ class AudioRecorderManager(private val context: Context) {
 
     companion object {
         val AUDIO_SOURCES = listOf(
-            "Default" to MediaRecorder.AudioSource.DEFAULT,
-            "Microphone" to MediaRecorder.AudioSource.MIC,
-            "Voice Communication" to MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            // "Unprocessed" is best for music / field recording — bypasses the system
+            // voice DSP chain (AGC, noise suppression, AEC) that makes recordings sound
+            // squishy/muffled. Requires API 24+. Falls back to CAMCORDER at runtime if
+            // the device doesn't actually support it.
+            "Unprocessed" to MediaRecorder.AudioSource.UNPROCESSED,
             "Camcorder" to MediaRecorder.AudioSource.CAMCORDER,
+            "Microphone" to MediaRecorder.AudioSource.MIC,
             "Voice Recognition" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            "Remote Submix" to MediaRecorder.AudioSource.REMOTE_SUBMIX
+            "Voice Communication" to MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            "Default" to MediaRecorder.AudioSource.DEFAULT,
         )
+
+        /**
+         * Returns the best available audio source for high-quality recording.
+         * Prefers UNPROCESSED (raw mic, no system DSP) → CAMCORDER → MIC.
+         *
+         * The AudioManager property PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED
+         * reports whether the device supports UNPROCESSED (API 24+).
+         */
+        fun bestSourceForRecording(context: android.content.Context): Int {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                val am = context.getSystemService(android.content.Context.AUDIO_SERVICE)
+                    as android.media.AudioManager
+                val supported = am.getProperty(
+                    android.media.AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED
+                )?.equals("true", ignoreCase = true) == true
+                if (supported) return MediaRecorder.AudioSource.UNPROCESSED
+            }
+            return MediaRecorder.AudioSource.CAMCORDER
+        }
     }
 
     fun setAudioSource(source: Int) {

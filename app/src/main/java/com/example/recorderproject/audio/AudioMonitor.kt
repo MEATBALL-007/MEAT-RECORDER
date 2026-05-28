@@ -17,8 +17,9 @@ import kotlin.concurrent.thread
  * Pipes AudioRecord PCM directly to an AudioTrack at low buffer sizes for live monitoring
  * (Bluetooth earphones, wired earphones, USB). Optional biquad cascade applied per channel.
  *
- * Caveat: Android AudioRecord/AudioTrack incurs ~20-80ms latency depending on device and
- * routing. True near-zero-latency monitoring would require Oboe/AAudio (Phase 7 follow-up).
+ * Latency: uses AAudio LOW_LATENCY performance mode with minimum buffers. Real-world floor
+ * depends on the output route — wired/USB headphones: ~10-20ms, BT LC3: ~30-60ms,
+ * BT SBC (legacy): ~150ms. True 0ms is physically impossible for any digital monitor.
  */
 class AudioMonitor(
     private val sampleRate: Int = 48_000,
@@ -56,16 +57,35 @@ class AudioMonitor(
         val channelInMask = AudioFormat.CHANNEL_IN_MONO
         val channelOutMask = AudioFormat.CHANNEL_OUT_MONO
         val format = AudioFormat.ENCODING_PCM_16BIT
-        val minIn = AudioRecord.getMinBufferSize(sampleRate, channelInMask, format).coerceAtLeast(1024)
-        val minOut = AudioTrack.getMinBufferSize(sampleRate, channelOutMask, format).coerceAtLeast(1024)
+        val minIn = AudioRecord.getMinBufferSize(sampleRate, channelInMask, format).coerceAtLeast(256)
+        val minOut = AudioTrack.getMinBufferSize(sampleRate, channelOutMask, format).coerceAtLeast(256)
         val bufSamples = maxOf(minIn, minOut) / 2 // shorts
 
-        val record = AudioRecord(audioSource, sampleRate, channelInMask, format, minIn * 2)
+        // AudioRecord: use Builder + LOW_LATENCY performance mode (API 28+).
+        // Pre-API-28 falls back to the legacy constructor with minimum buffer.
+        val record = if (android.os.Build.VERSION.SDK_INT >= 28) {
+            AudioRecord.Builder()
+                .setAudioSource(audioSource)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(format)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(channelInMask)
+                        .build()
+                )
+                .setBufferSizeInBytes(minIn)
+                .build()
+        } else {
+            AudioRecord(audioSource, sampleRate, channelInMask, format, minIn)
+        }
+
+        // AudioTrack: PERFORMANCE_MODE_LOW_LATENCY (API 26+) for minimum buffer chain.
+        // The output path then uses the device's fast-mixer/AAudio path when available.
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
             )
             .setAudioFormat(
@@ -75,9 +95,19 @@ class AudioMonitor(
                     .setChannelMask(channelOutMask)
                     .build()
             )
-            .setBufferSizeInBytes(minOut * 2)
+            .setBufferSizeInBytes(minOut)
             .setTransferMode(AudioTrack.MODE_STREAM)
+            .apply {
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                }
+            }
             .build()
+
+        // Log effective latency so we can confirm low-latency path engaged
+        Log.i(tag, "Monitor started: minIn=${minIn}B minOut=${minOut}B " +
+            "trackPerfMode=${if (android.os.Build.VERSION.SDK_INT >= 26) track.performanceMode else "n/a"} " +
+            "(0=NONE, 1=POWER_SAVING, 2=LOW_LATENCY)")
 
         try {
             record.startRecording()

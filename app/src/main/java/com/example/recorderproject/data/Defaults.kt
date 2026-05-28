@@ -14,8 +14,8 @@ import com.example.recorderproject.model.EQChainJson
 object Defaults {
     // Recording
     const val RECORDER_MODE: String = "CUSTOM"
-    const val AUDIO_SOURCE_NAME: String = "Microphone"
-    const val MIC_SOURCE_LABEL: String = "Microphone"
+    const val AUDIO_SOURCE_NAME: String = "Unprocessed"
+    const val MIC_SOURCE_LABEL: String = "Unprocessed"
     const val INPUT_GAIN_DB: Float = 0f
     const val NOISE_REDUCTION: Boolean = true
     const val SAMPLE_RATE_HZ: Int = 48000
