@@ -23,7 +23,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -252,11 +255,11 @@ private fun PlusButton(onClick: () -> Unit) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            "+",
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Create custom preset",
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
         )
     }
     LaunchedEffect(pressed) {
