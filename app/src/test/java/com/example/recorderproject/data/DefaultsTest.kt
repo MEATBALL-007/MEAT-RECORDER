@@ -11,7 +11,7 @@ class DefaultsTest {
         assertEquals("Unprocessed", Defaults.AUDIO_SOURCE_NAME)
         assertEquals("Unprocessed", Defaults.MIC_SOURCE_LABEL)
         assertEquals(0f, Defaults.INPUT_GAIN_DB)
-        assertEquals(true, Defaults.NOISE_REDUCTION)
+        assertEquals(false, Defaults.NOISE_REDUCTION)
         assertEquals(48000, Defaults.SAMPLE_RATE_HZ)
         assertEquals(16, Defaults.BIT_DEPTH)
         assertEquals(1, Defaults.CHANNEL_COUNT)

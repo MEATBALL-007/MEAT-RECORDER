@@ -93,7 +93,8 @@ class AudioRecorderManager(private val context: Context) {
     // F13: Live noise gate — drops samples whose RMS is below threshold while recording.
     // The gate is RMS-windowed (4096 samples) so it doesn't chop syllables mid-word.
     @Volatile private var liveNoiseGateOn: Boolean = false
-    @Volatile private var liveNoiseGateThreshold: Float = 0.005f // ~-46 dBFS
+    @Volatile private var liveNoiseGateThreshold: Float = 0.005f // ~-46 dBFS, stored as linear fraction
+    @Volatile private var liveNoiseGateGain: Float = 1f
 
     fun setLiveNoiseGate(enabled: Boolean, thresholdDb: Float = -46f) {
         liveNoiseGateOn = enabled
@@ -278,18 +279,24 @@ class AudioRecorderManager(private val context: Context) {
                                 }
                             }
                         }
-                        // F13: Live noise gate — zero out samples in buffers whose RMS
-                        // sits below the gate threshold (background-only stretches).
+                        // F13: Live noise gate — smoothed envelope-following gate so quiet stretches
+                        // fade in/out instead of hard-cutting. Threshold is the runtime config.
                         if (liveNoiseGateOn) {
-                            var sumSq = 0.0
+                            // 5 ms attack, 80 ms release at the current sample rate.
+                            val attackCoef = 1f / (0.005f * sampleRate)
+                            val releaseCoef = 1f / (0.080f * sampleRate)
+                            // liveNoiseGateThreshold is already a linear fraction; convert to short magnitude.
+                            val thresholdShort = (Short.MAX_VALUE * liveNoiseGateThreshold).toInt()
+                            var g = liveNoiseGateGain
                             for (i in 0 until read) {
-                                val s = audioBuffer[i].toDouble() / Short.MAX_VALUE
-                                sumSq += s * s
+                                val absV = kotlin.math.abs(audioBuffer[i].toInt())
+                                val target = if (absV >= thresholdShort) 1f else 0f
+                                g += if (target > g) ((target - g) * attackCoef).coerceAtMost(target - g)
+                                     else ((target - g) * releaseCoef).coerceAtLeast(target - g)
+                                if (g < 0f) g = 0f else if (g > 1f) g = 1f
+                                audioBuffer[i] = (audioBuffer[i] * g).toInt().toShort()
                             }
-                            val rms = kotlin.math.sqrt(sumSq / read).toFloat()
-                            if (rms < liveNoiseGateThreshold) {
-                                for (i in 0 until read) audioBuffer[i] = 0
-                            }
+                            liveNoiseGateGain = g
                         }
                         // F2: Live pause — skip writing while paused (still drain the mic
                         // so the AudioRecord buffer doesn't overflow).

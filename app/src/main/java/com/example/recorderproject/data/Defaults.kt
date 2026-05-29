@@ -17,7 +17,7 @@ object Defaults {
     const val AUDIO_SOURCE_NAME: String = "Unprocessed"
     const val MIC_SOURCE_LABEL: String = "Unprocessed"
     const val INPUT_GAIN_DB: Float = 0f
-    const val NOISE_REDUCTION: Boolean = true
+    const val NOISE_REDUCTION: Boolean = false
     const val SAMPLE_RATE_HZ: Int = 48000
     const val BIT_DEPTH: Int = 16
     const val CHANNEL_COUNT: Int = 1
