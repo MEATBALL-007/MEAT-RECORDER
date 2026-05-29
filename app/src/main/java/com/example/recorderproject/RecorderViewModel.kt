@@ -517,6 +517,34 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleMonitor() {
         val on = !_monitorEnabled.value
         if (on) {
+            // Safeguard: refuse to start monitor when no headphones/earphones/BT/USB output
+            // is connected. Without an external output, the monitor plays through the phone
+            // speaker, which feeds back into the mic and ruins the recording.
+            val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            val devices = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+            val hasExternalOutput = devices.any { d ->
+                val t = d.type
+                t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                t == android.media.AudioDeviceInfo.TYPE_USB_HEADSET ||
+                t == android.media.AudioDeviceInfo.TYPE_USB_DEVICE ||
+                t == android.media.AudioDeviceInfo.TYPE_USB_ACCESSORY ||
+                t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                    t == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET) ||
+                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                    t == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER)
+            }
+            if (!hasExternalOutput) {
+                Toast.makeText(
+                    app,
+                    "Plug in or connect headphones to use monitor — would cause echo through speaker",
+                    Toast.LENGTH_LONG,
+                ).show()
+                // Leave _monitorEnabled at its current value (false)
+                return
+            }
             audioMonitor.setChain(_currentEQChain.value)
             // Wire level callback BEFORE start so the very first buffer is observed
             audioMonitor.setLevelListener(::onMonitorPcm)
@@ -1063,6 +1091,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     private fun startRecordingInternal() {
         Log.d(TAG, "startRecording() called")
+        // Safeguard: if monitor is on, stop it before recording. Monitor while
+        // recording risks an acoustic feedback loop (speaker → mic → speaker)
+        // especially on UNPROCESSED mic which has no echo cancellation.
+        if (_monitorEnabled.value) {
+            try {
+                audioMonitor.stop()
+                monitorDecayJob?.cancel()
+                monitorDecayJob = null
+                audioMonitor.setLevelListener(null)
+                monitorClipUntilMs = 0L
+                _monitorLevel.value = com.example.recorderproject.model.MonitorLevel.Silent
+                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE)
+                    as android.media.AudioManager
+                @Suppress("DEPRECATION") am.isBluetoothScoOn = false
+                @Suppress("DEPRECATION") am.stopBluetoothSco()
+            } catch (_: Exception) {}
+            _monitorEnabled.value = false
+            Toast.makeText(app, "Monitor stopped to prevent echo while recording", Toast.LENGTH_SHORT).show()
+        }
         if (_isRecording.value) {
             Log.d(TAG, "Already recording, ignoring")
             return
