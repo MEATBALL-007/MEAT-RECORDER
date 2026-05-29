@@ -425,6 +425,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // D: live LUFS meter — populated only while recording
     private val _liveLufs = MutableStateFlow(-70f)
     val liveLufs: StateFlow<Float> = _liveLufs
+    // K.2: Stereo phase correlation (-1..1) — populated only while recording stereo
+    private val _phaseCorrelation = MutableStateFlow(0f)
+    val phaseCorrelation: StateFlow<Float> = _phaseCorrelation
     // Rolling window of recent FFT frames so the SPECTRUM heatmap can scroll
     private val _spectrumHistory = MutableStateFlow<List<FloatArray>>(emptyList())
     val spectrumHistory: StateFlow<List<FloatArray>> = _spectrumHistory
@@ -449,6 +452,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateBitDepth(v: Int) {
         _bitDepth.value = v
+        recorder.setBitDepth(v)
         if (hydrated.value) viewModelScope.launch { settings.setBitDepth(v) }
     }
 
@@ -457,6 +461,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val channelCount: StateFlow<Int> = _channelCount
     fun updateChannelCount(v: Int) {
         _channelCount.value = v.coerceIn(1, 2)
+        recorder.setChannelCount(_channelCount.value)
         if (hydrated.value) viewModelScope.launch { settings.setChannelCount(_channelCount.value) }
     }
 
@@ -953,12 +958,37 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setStereoWidener(_stereoWidenerOn.value) }
     }
 
-    /** G20: cloud backup toggle (no real cloud yet — surfaces intent). */
+    /** G20: cloud backup toggle. Turning it on prompts for a folder if none is set. */
     private val _cloudBackupOn = MutableStateFlow(false)
     val cloudBackupOn: StateFlow<Boolean> = _cloudBackupOn
     fun toggleCloudBackup() {
         _cloudBackupOn.value = !_cloudBackupOn.value
+        if (_cloudBackupOn.value && _cloudBackupUri.value == null) {
+            Toast.makeText(app, "Pick a cloud folder in Settings → Cloud Backup Folder", Toast.LENGTH_LONG).show()
+        }
         if (hydrated.value) viewModelScope.launch { settings.setCloudBackup(_cloudBackupOn.value) }
+    }
+
+    /** L.2: Persisted SAF URI for the cloud backup folder. */
+    private val _cloudBackupUri = MutableStateFlow<android.net.Uri?>(null)
+    val cloudBackupUri: StateFlow<android.net.Uri?> = _cloudBackupUri
+
+    fun setCloudBackupUri(uri: android.net.Uri?) {
+        _cloudBackupUri.value = uri
+        if (uri != null) {
+            try {
+                app.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Cloud backup URI grant failed: ${e.message}")
+            }
+        }
+        if (hydrated.value) viewModelScope.launch {
+            settings.setCloudBackupUri(uri?.toString())
+        }
     }
 
     /** G21: device health snapshot — battery % + remaining storage MB. Computed on demand. */
@@ -1402,6 +1432,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setLufsListener { lufs ->
                 _liveLufs.value = lufs
             }
+            recorder.setPhaseListener { c -> _phaseCorrelation.value = c }
             recorder.setErrorListener { err ->
                 viewModelScope.launch(Dispatchers.Main) {
                     val msg = when (err) {
@@ -1451,10 +1482,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setSpectrumListener(null)
         recorder.setPitchListener(null)
         recorder.setLufsListener(null)
+        recorder.setPhaseListener(null)
         recorder.setErrorListener(null)
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
         _liveLufs.value = -70f
+        _phaseCorrelation.value = 0f
         _spectrumHistory.value = emptyList()
 
         // Q2: stop foreground service
@@ -1528,6 +1561,30 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 refreshAutoFileName()
                 Log.d(TAG, "Recording stopped successfully")
                 Toast.makeText(app, "Recording saved: ${finalFile.name}", Toast.LENGTH_SHORT).show()
+                // L.2: Cloud backup — copy the WAV to the chosen SAF folder.
+                val cloudUri = _cloudBackupUri.value
+                if (_cloudBackupOn.value && cloudUri != null && !finalFile.path.startsWith("content://")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            val srcFile = java.io.File(finalFile.path)
+                            val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, cloudUri)
+                            val target = tree?.createFile("audio/wav", srcFile.name)
+                            if (target != null) {
+                                app.contentResolver.openOutputStream(target.uri).use { out ->
+                                    srcFile.inputStream().use { it.copyTo(out!!) }
+                                }
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(app, "Backed up to cloud folder", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Cloud backup copy failed: ${e.message}", e)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(app, "Cloud backup failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to stop recording: ${e.message}", e)
                 _errorMessage.value = "Failed to stop recording: ${e.message}"
@@ -2070,6 +2127,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setAgc(_agcOn.value)
         recorder.setHiPass(_hiPassOn.value)
         recorder.setAntiClip(_antiClipOn.value)
+        recorder.setBitDepth(_bitDepth.value)
+        recorder.setChannelCount(_channelCount.value)
         // Live EQ chain is pushed on demand in startRecording(); no need here.
     }
 
@@ -2145,6 +2204,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _groupByScene.value = s.groupByScene
         _lockScreenControlsOn.value = s.lockScreenControls
         _cloudBackupOn.value = s.cloudBackup
+        _cloudBackupUri.value = s.cloudBackupUri?.let { android.net.Uri.parse(it) }
 
         _preRollEnabled.value = s.preRollEnabled
         if (s.preRollEnabled) {

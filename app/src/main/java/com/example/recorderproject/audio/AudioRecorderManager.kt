@@ -40,6 +40,20 @@ class AudioRecorderManager(private val context: Context) {
     private var targetName = ""
     private var audioSource = MediaRecorder.AudioSource.DEFAULT
 
+    // H.1: Target bit depth (16, 24, or 32). Changed before start(), read in the recording loop.
+    @Volatile private var targetBitDepth: Int = 16
+    fun setBitDepth(bits: Int) {
+        targetBitDepth = when (bits) { 16, 24, 32 -> bits; else -> 16 }
+    }
+
+    // K.1: Channel count (1 = mono, 2 = stereo).
+    @Volatile private var channelCount: Int = 1
+    fun setChannelCount(c: Int) { channelCount = c.coerceIn(1, 2) }
+
+    // K.1: Phase correlation listener — called once per PCM buffer when stereo.
+    private var phaseListener: ((Float) -> Unit)? = null
+    fun setPhaseListener(l: ((Float) -> Unit)?) { phaseListener = l }
+
     // Pre-roll: optional rolling buffer that captures audio BEFORE the user taps Record.
     // Owned by the ViewModel and passed in via setPreRollBuffer(); we drain on start().
     private var preRollBuffer: PreRollBuffer? = null
@@ -147,7 +161,7 @@ class AudioRecorderManager(private val context: Context) {
     @Volatile private var slateToneSamplesRemaining: Int = 0
     @Volatile private var slateTonePhase: Double = 0.0
     private val slateToneFreqHz = 1000.0
-    private val slateToneAmplitude: Float = (32768f * 0.10f) // -20 dBFS (linear 0.1)
+    private val slateToneAmplitude: Float = 0.10f // -20 dBFS amplitude (float, -1..1 scale)
 
     /**
      * Arm a 1 kHz slate tone for the next [durationMs] milliseconds. The next
@@ -185,7 +199,7 @@ class AudioRecorderManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun start(fileName: String, sampleRate: Int = 48000, saveDirectoryUri: Uri? = null, onAudioFrame: (List<Float>) -> Unit) {
-        Log.d(TAG, "start() called with sampleRate=$sampleRate, audioSource=$audioSource")
+        Log.d(TAG, "start() called with sampleRate=$sampleRate, audioSource=$audioSource, bitDepth=$targetBitDepth, channels=$channelCount")
         if (!hasRecordAudioPermission()) {
             val msg = "Audio recording permission is required"
             Log.e(TAG, msg)
@@ -193,10 +207,11 @@ class AudioRecorderManager(private val context: Context) {
         }
 
         this.sampleRate = sampleRate
-        val channelConfig = AudioFormat.CHANNEL_IN_MONO
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        val channelConfig = if (channelCount == 2) AudioFormat.CHANNEL_IN_STEREO else AudioFormat.CHANNEL_IN_MONO
+        // Use ENCODING_PCM_FLOAT for all bit depths — convert to target depth on write.
+        val audioFormat = AudioFormat.ENCODING_PCM_FLOAT
         val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat).coerceAtLeast(2048)
-        Log.d(TAG, "bufferSize=$bufferSize")
+        Log.d(TAG, "bufferSize=$bufferSize, channelConfig=$channelConfig")
 
         targetName = fileName.takeIf { it.isNotBlank() }?.replace("[^A-Za-z0-9_.-]".toRegex(), "_") ?: "recording.wav"
         if (!targetName.endsWith(".wav", ignoreCase = true)) targetName += ".wav"
@@ -226,21 +241,26 @@ class AudioRecorderManager(private val context: Context) {
             outputStream = BufferedOutputStream(recorderFile!!.outputStream())
         }
 
-        writeWavHeader(outputStream!!, 0, 0, sampleRate.toLong(), 1, 2L * sampleRate)
+        val bps = targetBitDepth
+        val wavFmt = if (bps == 32) 3 else 1
+        val channels = channelCount
+        writeWavHeader(
+            outputStream!!,
+            dataSize = 0,
+            riffSize = 0,
+            sampleRate = sampleRate.toLong(),
+            channels = channels,
+            byteRate = sampleRate.toLong() * channels * bps / 8,
+            bitsPerSample = bps,
+            audioFormat = wavFmt,
+        )
 
         // Drain pre-roll buffer (if any) and prepend it to the WAV before live capture begins.
         val preRoll = preRollBuffer?.drainOrdered()
         if (preRoll != null && preRoll.isNotEmpty()) {
-            val prependBytes = ByteArray(preRoll.size * 2)
-            val bb = ByteBuffer.wrap(prependBytes).order(ByteOrder.LITTLE_ENDIAN)
-            for (f in preRoll) {
-                val s = (f.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
-                bb.putShort(s)
-            }
             try {
-                outputStream?.write(prependBytes)
-                totalBytesWritten += prependBytes.size
-                Log.d(TAG, "Pre-roll prepended: ${preRoll.size} samples (${prependBytes.size} bytes)")
+                writePcmFloats(preRoll, preRoll.size)
+                Log.d(TAG, "Pre-roll prepended: ${preRoll.size} samples")
             } catch (e: Exception) {
                 Log.w(TAG, "Pre-roll prepend failed: ${e.message}")
             }
@@ -268,11 +288,12 @@ class AudioRecorderManager(private val context: Context) {
 
         recordingThread = Thread {
             Log.d(TAG, "Recording thread started")
-            val audioBuffer = ShortArray(bufferSize)
+            // Float buffer: 4 bytes per sample in ENCODING_PCM_FLOAT
+            val floats = FloatArray(bufferSize / 4)
             var readCount = 0
             while (isRecordingActive && recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 try {
-                    val read = recorder?.read(audioBuffer, 0, audioBuffer.size) ?: 0
+                    val read = recorder?.read(floats, 0, floats.size, AudioRecord.READ_BLOCKING) ?: 0
                     readCount++
                     if (read > 0) {
                         // Input gain + Real-time EQ: gain first, then biquad cascade, soft-clip.
@@ -284,14 +305,13 @@ class AudioRecorderManager(private val context: Context) {
                         val needsExtras = eqOn || gainOn || agcOn || hiPassOn || antiClipOn
                         if (needsExtras) {
                             // Hi-pass coefficient: ~80 Hz @ 48k → a = exp(-2π * 80 / 48000)
-                            val hpAlpha = 0.98955  // ≈ matches 80 Hz cutoff at 48k
+                            val hpAlpha = 0.98955
                             var peak = 0.0
                             var sumSq = 0.0
                             for (i in 0 until read) {
-                                var x = audioBuffer[i].toDouble() / Short.MAX_VALUE
+                                var x = floats[i].toDouble()
                                 if (gainOn) x *= gain
                                 if (hiPassOn) {
-                                    // y[n] = α·(y[n-1] + x[n] − x[n-1])
                                     val y = hpAlpha * (hiPassY1 + x - hiPassX1)
                                     hiPassX1 = x
                                     hiPassY1 = y
@@ -303,9 +323,8 @@ class AudioRecorderManager(private val context: Context) {
                                 if (x > 0.999 || x < -0.999) x = kotlin.math.tanh(x)
                                 if (kotlin.math.abs(x) > peak) peak = kotlin.math.abs(x)
                                 sumSq += x * x
-                                audioBuffer[i] = (x.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+                                floats[i] = x.coerceIn(-1.0, 1.0).toFloat()
                             }
-                            // AGC slew: ease toward target every buffer
                             if (agcOn) {
                                 val rms = kotlin.math.sqrt(sumSq / read).toFloat()
                                 if (rms > 1e-5f) {
@@ -313,92 +332,126 @@ class AudioRecorderManager(private val context: Context) {
                                     agcGain = (agcGain * 0.95f + targetGain * 0.05f).coerceIn(0.25f, 4f)
                                 }
                             }
-                            // Anti-clip: nudge gain down when peak nears clip; recover slowly.
                             if (antiClipOn) {
                                 antiClipGain = if (peak >= 0.98) {
-                                    (antiClipGain * 0.891f).coerceAtLeast(0.1f) // -1 dB
+                                    (antiClipGain * 0.891f).coerceAtLeast(0.1f)
                                 } else {
-                                    (antiClipGain * 1.001f).coerceAtMost(1f) // creep back
+                                    (antiClipGain * 1.001f).coerceAtMost(1f)
                                 }
                             }
                         }
-                        // F13: Live noise gate — smoothed envelope-following gate so quiet stretches
-                        // fade in/out instead of hard-cutting. Threshold is the runtime config.
+                        // F13: Live noise gate — smoothed envelope-following gate.
                         if (liveNoiseGateOn) {
-                            // 5 ms attack, 80 ms release at the current sample rate.
                             val attackCoef = 1f / (0.005f * sampleRate)
                             val releaseCoef = 1f / (0.080f * sampleRate)
-                            // liveNoiseGateThreshold is already a linear fraction; convert to short magnitude.
-                            val thresholdShort = (Short.MAX_VALUE * liveNoiseGateThreshold).toInt()
+                            val threshold = liveNoiseGateThreshold
                             var g = liveNoiseGateGain
                             for (i in 0 until read) {
-                                val absV = kotlin.math.abs(audioBuffer[i].toInt())
-                                val target = if (absV >= thresholdShort) 1f else 0f
+                                val absV = kotlin.math.abs(floats[i])
+                                val target = if (absV >= threshold) 1f else 0f
                                 g += if (target > g) ((target - g) * attackCoef).coerceAtMost(target - g)
                                      else ((target - g) * releaseCoef).coerceAtLeast(target - g)
                                 if (g < 0f) g = 0f else if (g > 1f) g = 1f
-                                audioBuffer[i] = (audioBuffer[i] * g).toInt().toShort()
+                                floats[i] *= g
                             }
                             liveNoiseGateGain = g
                         }
-                        // F2: Live pause — skip writing while paused (still drain the mic
-                        // so the AudioRecord buffer doesn't overflow).
+                        // F2: Live pause — skip writing while paused.
                         if (paused) {
-                            val levels = List(read) { 0f }
-                            onAudioFrame(levels)
+                            onAudioFrame(List(read) { 0f })
                             continue
                         }
-                        // J.2: Slate tone — overwrite mic samples with 1 kHz sine wave for the armed duration.
+                        // J.2: Slate tone — overwrite mic samples with 1 kHz sine wave.
                         if (slateToneSamplesRemaining > 0) {
                             val twoPi = 2.0 * Math.PI
                             val phaseInc = twoPi * slateToneFreqHz / sampleRate
                             val take = minOf(read, slateToneSamplesRemaining)
                             for (i in 0 until take) {
-                                audioBuffer[i] = (slateToneAmplitude * kotlin.math.sin(slateTonePhase)).toInt().toShort()
+                                floats[i] = (kotlin.math.sin(slateTonePhase) * 0.10).toFloat()
                                 slateTonePhase += phaseInc
                                 if (slateTonePhase > twoPi) slateTonePhase -= twoPi
                             }
                             slateToneSamplesRemaining -= take
                         }
-                        writePcmData(audioBuffer, read)
-                        val levels = audioBuffer.take(read).map { it / 32768f }
+                        // K.1: Stereo phase correlation — before write, while data is still in floats[].
+                        val pl = phaseListener
+                        if (pl != null && channelCount == 2) {
+                            var sumL = 0.0; var sumR = 0.0
+                            var sumLL = 0.0; var sumRR = 0.0; var sumLR = 0.0
+                            val n = read / 2
+                            if (n > 0) {
+                                var i = 0
+                                while (i + 1 < read) {
+                                    val l = floats[i].toDouble()
+                                    val r = floats[i + 1].toDouble()
+                                    sumL += l; sumR += r
+                                    sumLL += l * l; sumRR += r * r; sumLR += l * r
+                                    i += 2
+                                }
+                                val mL = sumL / n; val mR = sumR / n
+                                val varL = sumLL / n - mL * mL
+                                val varR = sumRR / n - mR * mR
+                                val cov = sumLR / n - mL * mR
+                                val denom = kotlin.math.sqrt((varL * varR).coerceAtLeast(1e-12))
+                                val corr = (cov / denom).toFloat().coerceIn(-1f, 1f)
+                                try { pl(corr) } catch (_: Exception) {}
+                            }
+                        }
+                        writePcmFloats(floats, read)
+                        // Level meter for UI — use first channel if stereo
+                        val levels = if (channelCount == 2) {
+                            List(read / 2) { i -> floats[i * 2] }
+                        } else {
+                            List(read) { i -> floats[i] }
+                        }
                         onAudioFrame(levels)
 
                         // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch + LUFS.
-                        // Listeners are best-effort and run on the recording thread.
+                        // FFT/Pitch need ShortArray — convert only what's needed.
                         dspFrameCounter++
                         if (dspFrameCounter % 4 == 0) {
                             val sl = spectrumListener
-                            val pl = pitchListener
+                            val pitchL = pitchListener
                             val ll = lufsListener
                             if (sl != null && read >= FFTAnalyzer.FFT_SIZE) {
                                 try {
-                                    val bands = FFTAnalyzer.frameSpectrum(
-                                        audioBuffer, 0, FFTAnalyzer.FFT_SIZE, sampleRate
-                                    )
+                                    // Extract mono channel for FFT (just take first channel samples)
+                                    val shorts = ShortArray(FFTAnalyzer.FFT_SIZE) { i ->
+                                        if (channelCount == 2) {
+                                            (floats[i * 2].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                                        } else {
+                                            (floats[i].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                                        }
+                                    }
+                                    val bands = FFTAnalyzer.frameSpectrum(shorts, 0, FFTAnalyzer.FFT_SIZE, sampleRate)
                                     sl(bands)
-                                } catch (_: Exception) { /* swallow — never break the loop */ }
+                                } catch (_: Exception) {}
                             }
-                            if (pl != null && read >= 2048) {
+                            if (pitchL != null && read >= 2048) {
                                 try {
-                                    val result = PitchDetector.detect(audioBuffer, 0, read, sampleRate)
-                                    if (result.confidence > 0.30f) pl(result.frequencyHz)
+                                    val shorts = ShortArray(read) { i ->
+                                        (floats[i].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                                    }
+                                    val result = PitchDetector.detect(shorts, 0, read, sampleRate)
+                                    if (result.confidence > 0.30f) pitchL(result.frequencyHz)
                                 } catch (_: Exception) {}
                             }
                             if (ll != null) {
                                 try {
-                                    val floats = FloatArray(read)
-                                    for (i in 0 until read) floats[i] = audioBuffer[i] / 32768f
-                                    val lufs = lufsProcessor.process(floats)
+                                    val monoFloats = if (channelCount == 2) {
+                                        FloatArray(read / 2) { i -> floats[i * 2] }
+                                    } else {
+                                        floats.copyOf(read)
+                                    }
+                                    val lufs = lufsProcessor.process(monoFloats)
                                     ll(lufs)
                                 } catch (_: Exception) {}
                             }
                         }
                         if (readCount % 10 == 0) {
-                            Log.d(TAG, "Read: $read samples, total written: $totalBytesWritten bytes")
+                            Log.d(TAG, "Read: $read floats, total written: $totalBytesWritten bytes")
                         }
-                        // Crash-safe checkpoint: every ~1s, flush + rewrite RIFF/data sizes
-                        // so a process kill mid-take still produces a playable WAV.
+                        // Crash-safe checkpoint: every ~1s, flush + rewrite RIFF/data sizes.
                         if (!isUsingSAF && readCount % 16 == 0) {
                             val f = recorderFile
                             if (f != null) {
@@ -413,7 +466,6 @@ class AudioRecorderManager(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in recording thread: ${e.message}", e)
-                    // Surface to UI — important on SAF revocation, low memory write failures, etc.
                     errorListener?.invoke(e)
                     break
                 }
@@ -436,8 +488,9 @@ class AudioRecorderManager(private val context: Context) {
         outputStream?.close()
         outputStream = null
 
-        val durationSeconds = if (sampleRate > 0) {
-            totalBytesWritten / (sampleRate * 2)
+        val bytesPerSample = targetBitDepth / 8
+        val durationSeconds = if (sampleRate > 0 && bytesPerSample > 0 && channelCount > 0) {
+            totalBytesWritten / (sampleRate * bytesPerSample * channelCount)
         } else {
             0
         }
@@ -480,30 +533,63 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
-    private fun writePcmData(buffer: ShortArray, read: Int) {
-        val byteBuffer = ByteBuffer.allocate(read * 2).order(ByteOrder.LITTLE_ENDIAN)
-        for (i in 0 until read) {
-            byteBuffer.putShort(buffer[i])
+    // H.1: Write float samples as the target bit depth (16, 24, or 32-bit).
+    private fun writePcmFloats(floatBuf: FloatArray, count: Int) {
+        val out: ByteArray = when (targetBitDepth) {
+            32 -> {
+                val bb = ByteArray(count * 4)
+                val bufW = java.nio.ByteBuffer.wrap(bb).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                for (i in 0 until count) bufW.putFloat(floatBuf[i])
+                bb
+            }
+            24 -> {
+                val bb = ByteArray(count * 3)
+                for (i in 0 until count) {
+                    val sample = (floatBuf[i].coerceIn(-1f, 1f) * 8_388_607f).toInt()
+                    bb[i * 3] = (sample and 0xFF).toByte()
+                    bb[i * 3 + 1] = ((sample shr 8) and 0xFF).toByte()
+                    bb[i * 3 + 2] = ((sample shr 16) and 0xFF).toByte()
+                }
+                bb
+            }
+            else -> {
+                val bb = ByteArray(count * 2)
+                val bufW = java.nio.ByteBuffer.wrap(bb).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                for (i in 0 until count) {
+                    val s = (floatBuf[i].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                    bufW.putShort(s)
+                }
+                bb
+            }
         }
-        outputStream?.write(byteBuffer.array())
-        totalBytesWritten += read * 2
+        outputStream?.write(out)
+        totalBytesWritten += out.size
     }
 
-    private fun writeWavHeader(output: BufferedOutputStream, totalAudioLen: Long, totalDataLen: Long, longSampleRate: Long, channels: Int, byteRate: Long) {
+    private fun writeWavHeader(
+        output: BufferedOutputStream,
+        dataSize: Long,
+        riffSize: Long,
+        sampleRate: Long,
+        channels: Int,
+        byteRate: Long,
+        bitsPerSample: Int = 16,
+        audioFormat: Int = 1,
+    ) {
         val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
         header.put("RIFF".toByteArray())
-        header.putInt((totalDataLen + 36).toInt())
+        header.putInt((riffSize + 36).toInt())
         header.put("WAVE".toByteArray())
         header.put("fmt ".toByteArray())
         header.putInt(16)
-        header.putShort(1)
+        header.putShort(audioFormat.toShort())
         header.putShort(channels.toShort())
-        header.putInt(longSampleRate.toInt())
+        header.putInt(sampleRate.toInt())
         header.putInt(byteRate.toInt())
-        header.putShort((channels * 16 / 8).toShort())
-        header.putShort(16)
+        header.putShort((channels * bitsPerSample / 8).toShort())
+        header.putShort(bitsPerSample.toShort())
         header.put("data".toByteArray())
-        header.putInt(totalAudioLen.toInt())
+        header.putInt(dataSize.toInt())
         output.write(header.array())
     }
 

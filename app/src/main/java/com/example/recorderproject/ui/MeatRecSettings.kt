@@ -79,6 +79,7 @@ fun MeatRecSettings(
     onChangeTheme: (AppTheme) -> Unit,
     onBack: () -> Unit,
     onChangeMode: () -> Unit = {},
+    onPickCloudLocation: () -> Unit = {},
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
@@ -223,6 +224,67 @@ fun MeatRecSettings(
                             .size(width = (60 * usedFrac).dp, height = 6.dp)
                             .clip(RoundedCornerShape(3.dp))
                             .background(if (usedFrac > 0.85f) MeatOrange else MeatYellow),
+                    )
+                }
+            }
+
+            // L.3: Cloud Backup Folder picker row
+            val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
+            val cloudBackupUri by viewModel.cloudBackupUri.collectAsStateWithLifecycle()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF161616))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Cloud Backup",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        if (cloudBackupUri != null) "Folder set — tap to change" else "No folder selected",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (cloudBackupUri != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MeatOrange.copy(alpha = 0.15f))
+                                .clickable(onClick = onPickCloudLocation)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Text("Change", color = MeatOrange, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MeatOrange)
+                                .clickable(onClick = onPickCloudLocation)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Text("Pick Folder", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = cloudBackupOn,
+                        onCheckedChange = { viewModel.toggleCloudBackup() },
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MeatOrange,
+                        ),
                     )
                 }
             }

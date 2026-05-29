@@ -69,6 +69,7 @@ class SettingsDataStore(private val context: Context) {
     private val activeRecordingPathKey = stringPreferencesKey("active_recording_path")
     private val preRollEnabledKey = booleanPreferencesKey("pre_roll_enabled")
     private val isRecordingKey = booleanPreferencesKey("is_recording")
+    private val cloudBackupUriKey = stringPreferencesKey("cloud_backup_uri")
 
     suspend fun setIsRecording(v: Boolean) = context.dataStore.edit { it[isRecordingKey] = v }
     suspend fun getIsRecording(): Boolean = context.dataStore.data.first()[isRecordingKey] ?: false
@@ -112,6 +113,7 @@ class SettingsDataStore(private val context: Context) {
             lockScreenControls = p[lockScreenControlsKey] ?: Defaults.LOCKSCREEN_CONTROLS,
             cloudBackup = p[cloudBackupKey] ?: Defaults.CLOUD_BACKUP,
             preRollEnabled = p[preRollEnabledKey] ?: Defaults.PRE_ROLL_ENABLED,
+            cloudBackupUri = p[cloudBackupUriKey],
         )
     }
 
@@ -164,6 +166,9 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setLockScreenControls(v: Boolean) = context.dataStore.edit { it[lockScreenControlsKey] = v }
     suspend fun setCloudBackup(v: Boolean) = context.dataStore.edit { it[cloudBackupKey] = v }
     suspend fun setPreRollEnabled(v: Boolean) = context.dataStore.edit { it[preRollEnabledKey] = v }
+    suspend fun setCloudBackupUri(v: String?) = context.dataStore.edit {
+        if (v == null) it.remove(cloudBackupUriKey) else it[cloudBackupUriKey] = v
+    }
 
     /** Path of the currently-active recording, or null if none. Set on start, cleared on stop. */
     suspend fun setActiveRecordingPath(path: String?) {

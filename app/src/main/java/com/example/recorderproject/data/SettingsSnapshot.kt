@@ -49,4 +49,5 @@ data class SettingsSnapshot(
     val lockScreenControls: Boolean = Defaults.LOCKSCREEN_CONTROLS,
     val cloudBackup: Boolean = Defaults.CLOUD_BACKUP,
     val preRollEnabled: Boolean = Defaults.PRE_ROLL_ENABLED,
+    val cloudBackupUri: String? = null,
 )

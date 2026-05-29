@@ -101,6 +101,8 @@ fun RecordingActiveSection(
     sceneName: String = "",
     fileName: String = "",
     micSource: String = "",
+    phaseCorrelation: Float = 0f,
+    channelCount: Int = 1,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -202,6 +204,10 @@ fun RecordingActiveSection(
                 onClick = onToggleVad,
                 modifier = Modifier.weight(1f),
             )
+        }
+        // K.3: Phase correlation meter — only shown in stereo mode
+        if (channelCount == 2) {
+            PhaseMeter(correlation = phaseCorrelation)
         }
         LiveWaveformCard(waveform = waveform)
         // Q1: 6-band live EQ — only shown when Live EQ is toggled on
@@ -805,6 +811,62 @@ private fun SlateHeader(
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
             )
+        }
+    }
+}
+
+@Composable
+private fun PhaseMeter(correlation: Float) {
+    val target = correlation.coerceIn(-1f, 1f)
+    val animated by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = target,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+        ),
+        label = "phaseCorr",
+    )
+    CardWithLabel(label = "PHASE", trailing = {
+        Text(
+            text = "%.2f".format(animated),
+            color = if (animated < 0f) Color(0xFFEA4F30) else MeatYellow,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+        )
+    }) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(28.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF0A0A0A)),
+        ) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(28.dp)) {
+                val w = size.width
+                val h = size.height
+                drawLine(
+                    color = Color.White.copy(alpha = 0.18f),
+                    start = Offset(w / 2f, 0f),
+                    end = Offset(w / 2f, h),
+                    strokeWidth = 1f,
+                )
+                val xFrac = (animated + 1f) / 2f
+                val x = (w * xFrac).coerceIn(2f, w - 4f)
+                val color = if (animated < 0f) Color(0xFFEA4F30) else MeatYellow
+                drawRect(
+                    color = color,
+                    topLeft = Offset(x - 2f, 0f),
+                    size = Size(4f, h),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("−1 out of phase", color = Color.White.copy(alpha = 0.45f), fontSize = 10.sp)
+            Text("+1 in phase", color = Color.White.copy(alpha = 0.45f), fontSize = 10.sp)
         }
     }
 }

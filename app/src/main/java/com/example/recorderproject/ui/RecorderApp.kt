@@ -228,6 +228,7 @@ fun RecorderApp(
         onBulkCompareAb = { viewModel.openAbCompareFromSelection() },
         onSlateTone = { viewModel.fireSlateTone() },
         micSource = micSource,
+        phaseCorrelation = viewModel.phaseCorrelation.collectAsStateWithLifecycle().value,
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected

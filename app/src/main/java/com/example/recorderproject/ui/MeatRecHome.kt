@@ -149,6 +149,7 @@ fun MeatRecHome(
     lufsDb: Float = -70f,
     onSlateTone: () -> Unit = {},
     micSource: String = "",
+    phaseCorrelation: Float = 0f,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -296,6 +297,8 @@ fun MeatRecHome(
                     sceneName = sceneName,
                     fileName = fileName,
                     micSource = micSource,
+                    phaseCorrelation = phaseCorrelation,
+                    channelCount = channelCount,
                 )
             }
 

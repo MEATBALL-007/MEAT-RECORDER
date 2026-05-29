@@ -68,6 +68,14 @@ class MainActivity : ComponentActivity() {
         uri?.let { viewModel.setSaveDirectoryUri(it) }
     }
 
+    private val cloudDirectoryLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { viewModel.setCloudBackupUri(it) }
+    }
+
+    fun selectCloudDirectory() { cloudDirectoryLauncher.launch(null) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -144,6 +152,7 @@ class MainActivity : ComponentActivity() {
                                     .putBoolean("mode_chosen", false).apply()
                                 settingsOpen = false
                             },
+                            onPickCloudLocation = { selectCloudDirectory() },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
