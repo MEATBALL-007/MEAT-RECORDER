@@ -143,6 +143,22 @@ class AudioRecorderManager(private val context: Context) {
     @Volatile private var antiClipGain: Float = 1f
     fun setAntiClip(enabled: Boolean) { antiClipOn = enabled; if (!enabled) antiClipGain = 1f }
 
+    // J.1: 1 kHz slate tone — baked into the WAV at -20 dBFS for sync with camera audio.
+    @Volatile private var slateToneSamplesRemaining: Int = 0
+    @Volatile private var slateTonePhase: Double = 0.0
+    private val slateToneFreqHz = 1000.0
+    private val slateToneAmplitude: Float = (32768f * 0.10f) // -20 dBFS (linear 0.1)
+
+    /**
+     * Arm a 1 kHz slate tone for the next [durationMs] milliseconds. The next
+     * audio buffer write will replace the mic samples with sine-wave samples for
+     * the armed duration. Useful for syncing with camera audio.
+     */
+    fun armSlateTone(durationMs: Int = 1000) {
+        slateToneSamplesRemaining = (sampleRate * durationMs / 1000)
+        slateTonePhase = 0.0
+    }
+
     fun setLiveEqChain(chain: EQChain?, sr: Float) {
         if (chain == null) {
             liveEqActive = false
@@ -331,6 +347,18 @@ class AudioRecorderManager(private val context: Context) {
                             val levels = List(read) { 0f }
                             onAudioFrame(levels)
                             continue
+                        }
+                        // J.2: Slate tone — overwrite mic samples with 1 kHz sine wave for the armed duration.
+                        if (slateToneSamplesRemaining > 0) {
+                            val twoPi = 2.0 * Math.PI
+                            val phaseInc = twoPi * slateToneFreqHz / sampleRate
+                            val take = minOf(read, slateToneSamplesRemaining)
+                            for (i in 0 until take) {
+                                audioBuffer[i] = (slateToneAmplitude * kotlin.math.sin(slateTonePhase)).toInt().toShort()
+                                slateTonePhase += phaseInc
+                                if (slateTonePhase > twoPi) slateTonePhase -= twoPi
+                            }
+                            slateToneSamplesRemaining -= take
                         }
                         writePcmData(audioBuffer, read)
                         val levels = audioBuffer.take(read).map { it / 32768f }

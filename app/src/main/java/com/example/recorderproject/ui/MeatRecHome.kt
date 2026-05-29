@@ -117,6 +117,7 @@ fun MeatRecHome(
     onToggleSelect: (RecordFile) -> Unit = {},
     onBulkDelete: () -> Unit = {},
     onClearSelection: () -> Unit = {},
+    onBulkCompareAb: () -> Unit = {},
     searchQuery: String = "",
     onSearchChange: (String) -> Unit = {},
     fileFilter: com.example.recorderproject.RecorderViewModel.FileFilter = com.example.recorderproject.RecorderViewModel.FileFilter.ALL,
@@ -146,6 +147,8 @@ fun MeatRecHome(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    onSlateTone: () -> Unit = {},
+    micSource: String = "",
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -289,6 +292,10 @@ fun MeatRecHome(
                     vadOn = vadOn,
                     onToggleVad = onToggleVad,
                     lufsDb = lufsDb,
+                    onSlateTone = onSlateTone,
+                    sceneName = sceneName,
+                    fileName = fileName,
+                    micSource = micSource,
                 )
             }
 
@@ -349,6 +356,19 @@ fun MeatRecHome(
                                 .clickable(onClick = onClearSelection)
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                         )
+                        if (selectedIds.size == 2) {
+                            Text(
+                                "A/B",
+                                color = Color(0xFFFFC72C),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF1F1F1F))
+                                    .clickable(onClick = onBulkCompareAb)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
                         Text(
                             "Delete",
                             color = Color.White,

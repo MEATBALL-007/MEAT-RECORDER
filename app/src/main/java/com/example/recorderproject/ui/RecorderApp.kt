@@ -225,6 +225,9 @@ fun RecorderApp(
         onToggleSelect = { viewModel.toggleFileSelection(it.id) },
         onBulkDelete = { viewModel.deleteSelected() },
         onClearSelection = { viewModel.clearSelection() },
+        onBulkCompareAb = { viewModel.openAbCompareFromSelection() },
+        onSlateTone = { viewModel.fireSlateTone() },
+        micSource = micSource,
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected

@@ -695,6 +695,74 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
 
+    // A/B compare: two takes selected from the list. Playback plays A, then B, in sequence.
+    private val _abFiles = MutableStateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?>(null)
+    val abFiles: StateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?> = _abFiles
+
+    private val _abPlayingSlot = MutableStateFlow(0) // 0=idle, 1=A playing, 2=B playing
+    val abPlayingSlot: StateFlow<Int> = _abPlayingSlot
+
+    private val _abCompareOpen = MutableStateFlow(false)
+    val abCompareOpen: StateFlow<Boolean> = _abCompareOpen
+
+    fun openAbCompare(a: com.example.recorderproject.model.RecordFile, b: com.example.recorderproject.model.RecordFile) {
+        _abFiles.value = a to b
+        _abCompareOpen.value = true
+        _abPlayingSlot.value = 0
+    }
+
+    fun closeAbCompare() {
+        _abCompareOpen.value = false
+        _abFiles.value = null
+        _abPlayingSlot.value = 0
+        try { mediaPlayer.reset() } catch (_: Exception) {}
+        _isPlaying.value = false
+    }
+
+    /**
+     * Play slot A or B. Stops any current playback then plays the requested file.
+     */
+    fun abPlay(slot: Int) {
+        val pair = _abFiles.value ?: return
+        val file = if (slot == 1) pair.first else pair.second
+        _abPlayingSlot.value = slot
+        try {
+            mediaPlayer.reset()
+            if (file.path.startsWith("content://")) {
+                mediaPlayer.setDataSource(app, android.net.Uri.parse(file.path))
+            } else {
+                mediaPlayer.setDataSource(file.path)
+            }
+            mediaPlayer.setOnCompletionListener {
+                _abPlayingSlot.value = 0
+            }
+            mediaPlayer.prepare()
+            mediaPlayer.start()
+            _isPlaying.value = true
+        } catch (e: Exception) {
+            Log.e(TAG, "abPlay failed: ${e.message}", e)
+        }
+    }
+
+    fun abStop() {
+        try { mediaPlayer.reset() } catch (_: Exception) {}
+        _isPlaying.value = false
+        _abPlayingSlot.value = 0
+    }
+
+    /** Open A/B compare with the two currently selected files. Requires exactly 2. */
+    fun openAbCompareFromSelection() {
+        val ids = _selectedFileIds.value
+        if (ids.size != 2) {
+            Toast.makeText(app, "Select exactly 2 files to compare", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val files = _recordFiles.value.filter { it.id in ids }
+        if (files.size != 2) return
+        openAbCompare(files[0], files[1])
+        clearSelection()
+    }
+
     // Playback states
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
@@ -827,6 +895,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 )
             }
         }
+    }
+
+    /** J.3: Fire a 1 kHz, 1-second slate tone baked into the current recording. */
+    fun fireSlateTone() {
+        if (!_isRecording.value) {
+            Toast.makeText(app, "Start recording first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        recorder.armSlateTone(1000)
+        Toast.makeText(app, "Slate tone 1 kHz, 1s", Toast.LENGTH_SHORT).show()
     }
 
     /** N2: currently selected recording mode + auto-apply preset on change. */

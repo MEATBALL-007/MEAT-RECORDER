@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.recorderproject.ui.AbCompareScreen
 import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.DesignPickerScreen
@@ -80,6 +81,7 @@ class MainActivity : ComponentActivity() {
             RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
                 val portraitFile by viewModel.portraitFile.collectAsStateWithLifecycle()
+                val abCompareOpen by viewModel.abCompareOpen.collectAsStateWithLifecycle()
                 val multiTakeOpen by viewModel.multiTakeOpen.collectAsStateWithLifecycle()
                 val transcriptFile by viewModel.transcriptFile.collectAsStateWithLifecycle()
                 val pitchShiftFile by viewModel.pitchShiftFile.collectAsStateWithLifecycle()
@@ -150,6 +152,10 @@ class MainActivity : ComponentActivity() {
                         portraitFile != null -> HarmonicPortraitScreen(
                             file = portraitFile!!,
                             onBack = { viewModel.closePortrait() },
+                        )
+                        abCompareOpen -> AbCompareScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeAbCompare() },
                         )
                         multiTakeOpen -> MultiTakeScreen(
                             viewModel = viewModel,

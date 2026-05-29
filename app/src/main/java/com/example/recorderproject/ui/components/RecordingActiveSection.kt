@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -96,12 +97,22 @@ fun RecordingActiveSection(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    onSlateTone: () -> Unit = {},
+    sceneName: String = "",
+    fileName: String = "",
+    micSource: String = "",
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        SlateHeader(
+            sceneName = sceneName,
+            fileName = fileName,
+            micSource = micSource,
+            elapsedSeconds = elapsedSeconds,
+        )
         RecBadge(elapsedSeconds = elapsedSeconds, isPaused = isPaused)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             InputLevelBar(percent = inputLevelPercent)
@@ -125,7 +136,7 @@ fun RecordingActiveSection(
                 )
             }
         }
-        // Quick action row: pause/resume + drop cue
+        // Quick action row: pause/resume + drop cue + slate tone
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -140,6 +151,12 @@ fun RecordingActiveSection(
                 label = if (cueCount == 0) "Drop cue" else "Cue · $cueCount",
                 icon = "◆",
                 onClick = onDropCue,
+                modifier = Modifier.weight(1f),
+            )
+            QuickActionChip(
+                label = "Slate",
+                icon = "♪",
+                onClick = onSlateTone,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -708,6 +725,87 @@ private fun CardWithLabel(
             trailing?.invoke()
         }
         content()
+    }
+}
+
+@Composable
+private fun SlateHeader(
+    sceneName: String,
+    fileName: String,
+    micSource: String,
+    elapsedSeconds: Int,
+) {
+    // Extract take number from file name (e.g., "Scene_1_T05.wav" → "05")
+    val takeNum = Regex("_T(\\d+)").find(fileName)?.groupValues?.get(1) ?: "—"
+    val now = remember { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date()) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF1A1A1A), Color(0xFF0A0A0A)),
+                )
+            )
+            .border(1.dp, MeatYellow.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    "SCENE",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 10.sp,
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    sceneName.ifBlank { "—" },
+                    color = MeatYellow,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    "TAKE",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 10.sp,
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    takeNum,
+                    color = MeatOrange,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "MIC: ${micSource.ifBlank { "—" }}",
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 11.sp,
+                letterSpacing = 1.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                now,
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
     }
 }
 
