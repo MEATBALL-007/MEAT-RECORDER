@@ -48,4 +48,5 @@ data class SettingsSnapshot(
     val groupByScene: Boolean = Defaults.GROUP_BY_SCENE,
     val lockScreenControls: Boolean = Defaults.LOCKSCREEN_CONTROLS,
     val cloudBackup: Boolean = Defaults.CLOUD_BACKUP,
+    val preRollEnabled: Boolean = Defaults.PRE_ROLL_ENABLED,
 )

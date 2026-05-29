@@ -40,6 +40,11 @@ class AudioRecorderManager(private val context: Context) {
     private var targetName = ""
     private var audioSource = MediaRecorder.AudioSource.DEFAULT
 
+    // Pre-roll: optional rolling buffer that captures audio BEFORE the user taps Record.
+    // Owned by the ViewModel and passed in via setPreRollBuffer(); we drain on start().
+    private var preRollBuffer: PreRollBuffer? = null
+    fun setPreRollBuffer(buf: PreRollBuffer?) { preRollBuffer = buf }
+
     companion object {
         val AUDIO_SOURCES = listOf(
             // "Unprocessed" is best for music / field recording — bypasses the system
@@ -203,6 +208,25 @@ class AudioRecorderManager(private val context: Context) {
         }
 
         writeWavHeader(outputStream!!, 0, 0, sampleRate.toLong(), 1, 2L * sampleRate)
+
+        // Drain pre-roll buffer (if any) and prepend it to the WAV before live capture begins.
+        val preRoll = preRollBuffer?.drainOrdered()
+        if (preRoll != null && preRoll.isNotEmpty()) {
+            val prependBytes = ByteArray(preRoll.size * 2)
+            val bb = ByteBuffer.wrap(prependBytes).order(ByteOrder.LITTLE_ENDIAN)
+            for (f in preRoll) {
+                val s = (f.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                bb.putShort(s)
+            }
+            try {
+                outputStream?.write(prependBytes)
+                totalBytesWritten += prependBytes.size
+                Log.d(TAG, "Pre-roll prepended: ${preRoll.size} samples (${prependBytes.size} bytes)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Pre-roll prepend failed: ${e.message}")
+            }
+            preRollBuffer?.clear()
+        }
 
         try {
             recorder = AudioRecord(

@@ -56,4 +56,5 @@ object Defaults {
     const val GROUP_BY_SCENE: Boolean = false
     const val LOCKSCREEN_CONTROLS: Boolean = true
     const val CLOUD_BACKUP: Boolean = false
+    const val PRE_ROLL_ENABLED: Boolean = false
 }

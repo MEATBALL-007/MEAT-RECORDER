@@ -51,6 +51,47 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val app = application
     private val recorder = AudioRecorderManager(application.applicationContext)
     private val noiseProcessor = NoiseReductionProcessor()
+
+    // ---- Feature #1: Pre-roll buffer ----
+    private val preRollBuffer = com.example.recorderproject.audio.PreRollBuffer(
+        sampleRate = 48_000, seconds = 5, channels = 1,
+    )
+    private val preRollCapture = com.example.recorderproject.audio.PreRollCapture(
+        buffer = preRollBuffer,
+        sampleRate = 48_000,
+    )
+
+    private val _preRollEnabled = MutableStateFlow(false)
+    val preRollEnabled: StateFlow<Boolean> = _preRollEnabled
+
+    fun togglePreRoll() {
+        val on = !_preRollEnabled.value
+        _preRollEnabled.value = on
+        if (on) {
+            preRollCapture.start()
+            recorder.setPreRollBuffer(preRollBuffer)
+            Toast.makeText(app, "Pre-roll on — last 5s captured to next take", Toast.LENGTH_SHORT).show()
+        } else {
+            preRollCapture.stop()
+            preRollBuffer.clear()
+            recorder.setPreRollBuffer(null)
+            Toast.makeText(app, "Pre-roll off", Toast.LENGTH_SHORT).show()
+        }
+        if (hydrated.value) viewModelScope.launch { settings.setPreRollEnabled(on) }
+    }
+
+    // ---- Feature #2: Stop broadcast receiver (notification Stop button) ----
+    private val stopBroadcastReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == com.example.recorderproject.audio.RecordingForegroundService.ACTION_STOP_RECORDING) {
+                Log.i(TAG, "Stop broadcast received — stopping recording")
+                if (_isRecording.value) {
+                    stopRecording()
+                }
+            }
+        }
+    }
+    private var stopReceiverRegistered = false
     private val mediaPlayer = MediaPlayer()
     private val settings = SettingsDataStore(application)
     private val hydrated = MutableStateFlow(false)
@@ -114,10 +155,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 // only see files created in the current session.
                 scanRecordingsFromDisk()
                 rewireRecorderFromState()
+                // Update default file name to next take for the loaded scene
+                refreshAutoFileName()
             } catch (e: Exception) {
                 Log.e(TAG, "Settings hydration failed: ${e.message}", e)
             } finally {
                 hydrated.value = true
+                // Register stop-recording broadcast (used by notification Stop button)
+                if (!stopReceiverRegistered) {
+                    val filter = android.content.IntentFilter(
+                        com.example.recorderproject.audio.RecordingForegroundService.ACTION_STOP_RECORDING
+                    )
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        app.registerReceiver(stopBroadcastReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                    } else {
+                        @Suppress("UnspecifiedRegisterReceiverFlag")
+                        app.registerReceiver(stopBroadcastReceiver, filter)
+                    }
+                    stopReceiverRegistered = true
+                }
             }
         }
 
@@ -963,6 +1019,40 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _errorMessage.value = null
     }
 
+    // ---- Feature #3: Auto-naming scene_T## ----
+
+    /**
+     * Compute the next take number for [sceneName] by scanning the recordings dir
+     * for files matching "<scene>_T<NN>.wav" pattern. Returns 1 if none exist.
+     *
+     * Sanitizes scene name the same way `validateRecordingData` does so the comparison
+     * matches what actually lands on disk.
+     */
+    private fun computeNextTakeNumber(sceneName: String): Int {
+        val sanitized = sceneName.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
+        if (sanitized.isBlank()) return 1
+        val dir = java.io.File(
+            app.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
+            "Recordings",
+        )
+        if (!dir.exists()) return 1
+        val pattern = Regex("^${Regex.escape(sanitized)}_T(\\d+)(_nr)?\\.wav$", RegexOption.IGNORE_CASE)
+        val existing = dir.listFiles()?.mapNotNull { f ->
+            pattern.matchEntire(f.name)?.groupValues?.get(1)?.toIntOrNull()
+        } ?: emptyList()
+        return (existing.maxOrNull() ?: 0) + 1
+    }
+
+    /** Update the default file name based on current scene + next take number. */
+    private fun refreshAutoFileName() {
+        val scene = _sceneName.value.trim()
+        if (scene.isBlank()) return
+        val sanitized = scene.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
+        val takeNum = computeNextTakeNumber(scene)
+        val newName = "${sanitized}_T${"%02d".format(takeNum)}.wav"
+        _fileName.value = newName
+    }
+
     fun updateFileName(value: String) {
         _fileName.value = value
     }
@@ -970,6 +1060,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun updateSceneName(value: String) {
         _sceneName.value = value
         if (hydrated.value) viewModelScope.launch { settings.setSceneName(value) }
+        refreshAutoFileName()
     }
 
     fun updateNotes(value: String) {
@@ -1110,6 +1201,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             _monitorEnabled.value = false
             Toast.makeText(app, "Monitor stopped to prevent echo while recording", Toast.LENGTH_SHORT).show()
         }
+        // If pre-roll is on, stop the capture thread so the main AudioRecord can open the mic.
+        // The buffer content has been written into preRollBuffer; AudioRecorderManager.start()
+        // will drain + prepend it.
+        if (preRollCapture.isRunning()) {
+            preRollCapture.stop()
+        }
+
         if (_isRecording.value) {
             Log.d(TAG, "Already recording, ignoring")
             return
@@ -1292,6 +1390,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 }
                 _isRecording.value = false
                 _currentWaveform.value = emptyList()
+                // If pre-roll was enabled, restart the capture thread for the next take.
+                if (_preRollEnabled.value) {
+                    preRollCapture.start()
+                }
+                // Auto-bump take number for next take in the same scene
+                refreshAutoFileName()
                 Log.d(TAG, "Recording stopped successfully")
                 Toast.makeText(app, "Recording saved: ${finalFile.name}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -1910,6 +2014,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _groupByScene.value = s.groupByScene
         _lockScreenControlsOn.value = s.lockScreenControls
         _cloudBackupOn.value = s.cloudBackup
+
+        _preRollEnabled.value = s.preRollEnabled
+        if (s.preRollEnabled) {
+            preRollCapture.start()
+            recorder.setPreRollBuffer(preRollBuffer)
+        } else {
+            preRollCapture.stop()
+        }
     }
 
     /**
@@ -2040,6 +2152,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
+        try { preRollCapture.stop() } catch (_: Exception) {}
+        if (stopReceiverRegistered) {
+            try { app.unregisterReceiver(stopBroadcastReceiver) } catch (_: Exception) {}
+            stopReceiverRegistered = false
+        }
         try { audioMonitor.stop() } catch (_: Exception) {}
         if (becomingNoisyRegistered) {
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}

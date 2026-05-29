@@ -67,6 +67,7 @@ class SettingsDataStore(private val context: Context) {
     private val lockScreenControlsKey = booleanPreferencesKey("lockscreen_controls")
     private val cloudBackupKey = booleanPreferencesKey("cloud_backup")
     private val activeRecordingPathKey = stringPreferencesKey("active_recording_path")
+    private val preRollEnabledKey = booleanPreferencesKey("pre_roll_enabled")
 
     /** Read every key at once and return a snapshot. */
     suspend fun snapshot(): SettingsSnapshot {
@@ -106,6 +107,7 @@ class SettingsDataStore(private val context: Context) {
             groupByScene = p[groupByScene] ?: Defaults.GROUP_BY_SCENE,
             lockScreenControls = p[lockScreenControlsKey] ?: Defaults.LOCKSCREEN_CONTROLS,
             cloudBackup = p[cloudBackupKey] ?: Defaults.CLOUD_BACKUP,
+            preRollEnabled = p[preRollEnabledKey] ?: Defaults.PRE_ROLL_ENABLED,
         )
     }
 
@@ -157,6 +159,7 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setGroupByScene(v: Boolean) = context.dataStore.edit { it[groupByScene] = v }
     suspend fun setLockScreenControls(v: Boolean) = context.dataStore.edit { it[lockScreenControlsKey] = v }
     suspend fun setCloudBackup(v: Boolean) = context.dataStore.edit { it[cloudBackupKey] = v }
+    suspend fun setPreRollEnabled(v: Boolean) = context.dataStore.edit { it[preRollEnabledKey] = v }
 
     /** Path of the currently-active recording, or null if none. Set on start, cleared on stop. */
     suspend fun setActiveRecordingPath(path: String?) {

@@ -61,6 +61,7 @@ class RecordingForegroundService : Service() {
     companion object {
         const val CHANNEL_ID = "meatrec_recording"
         const val NOTIF_ID = 4011
+        const val ACTION_STOP_RECORDING = "com.example.recorderproject.ACTION_STOP_RECORDING"
 
         private fun ensureChannel(ctx: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -86,6 +87,11 @@ class RecordingForegroundService : Service() {
                 ctx, 0, openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+            val stopIntent = Intent(ACTION_STOP_RECORDING).setPackage(ctx.packageName)
+            val stopPi = PendingIntent.getBroadcast(
+                ctx, 1, stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             return NotificationCompat.Builder(ctx, CHANNEL_ID)
                 .setContentTitle("MEAT REC")
                 .setContentText(if (isRecording) "Recording in progress — tap to return" else "Idle")
@@ -97,6 +103,7 @@ class RecordingForegroundService : Service() {
                 .setSilent(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setContentIntent(pi)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPi)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build()
         }
