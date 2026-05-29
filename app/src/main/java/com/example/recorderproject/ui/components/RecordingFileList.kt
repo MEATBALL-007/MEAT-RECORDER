@@ -1,5 +1,8 @@
 package com.example.recorderproject.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +20,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
@@ -95,34 +97,38 @@ fun RecordingFileList(
     var infoCandidate by remember { mutableStateOf<RecordFile?>(null) }
 
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(files) { file ->
+        items(files, key = { it.id }) { file ->
             val selected = file.id in selectedIds
-            FileRow(
-                file = file,
-                selected = selected,
-                onTap = {
-                    if (selectionMode) onToggleSelect(file) else onTapFile(file)
-                },
-                onLongPress = {
-                    // Long-press still opens the dropdown menu via FileRow's internal state.
-                    // (Multi-select is entered via the "Select" menu item below.)
-                },
-                onSelect = { onToggleSelect(file) },
-                onTapEQ = { onTapEQ(file) },
-                onShare = { onShare(file) },
-                onRequestDelete = { deleteCandidate = file },
-                onToggleLock = { onToggleLock(file) },
-                onToggleStar = { onToggleStar(file) },
-                onOpenSpectrogram = { onOpenSpectrogram(file) },
-                onRequestRename = { renameCandidate = file },
-                onRequestInfo = { infoCandidate = file },
-                onOpenPortrait = { onOpenPortrait(file) },
-                onSliceScenes = { onSliceScenes(file) },
-                onSetGhostTake = { onSetGhostTake(file) },
-                onDetectSync = { onDetectSync(file) },
-                onPitchShift = { onPitchShift(file) },
-                onApplyNR = { onApplyNR(file) },
-            )
+            Box(modifier = Modifier.animateItemPlacement(
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            )) {
+                FileRow(
+                    file = file,
+                    selected = selected,
+                    onTap = {
+                        if (selectionMode) onToggleSelect(file) else onTapFile(file)
+                    },
+                    onLongPress = {
+                        // Long-press still opens the dropdown menu via FileRow's internal state.
+                        // (Multi-select is entered via the "Select" menu item below.)
+                    },
+                    onSelect = { onToggleSelect(file) },
+                    onTapEQ = { onTapEQ(file) },
+                    onShare = { onShare(file) },
+                    onRequestDelete = { deleteCandidate = file },
+                    onToggleLock = { onToggleLock(file) },
+                    onToggleStar = { onToggleStar(file) },
+                    onOpenSpectrogram = { onOpenSpectrogram(file) },
+                    onRequestRename = { renameCandidate = file },
+                    onRequestInfo = { infoCandidate = file },
+                    onOpenPortrait = { onOpenPortrait(file) },
+                    onSliceScenes = { onSliceScenes(file) },
+                    onSetGhostTake = { onSetGhostTake(file) },
+                    onDetectSync = { onDetectSync(file) },
+                    onPitchShift = { onPitchShift(file) },
+                    onApplyNR = { onApplyNR(file) },
+                )
+            }
         }
     }
 

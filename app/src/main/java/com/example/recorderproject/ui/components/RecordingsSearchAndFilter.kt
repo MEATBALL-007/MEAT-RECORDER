@@ -1,7 +1,13 @@
 package com.example.recorderproject.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -19,11 +25,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -101,15 +113,46 @@ fun RecordingsFilterChips(
     ) {
         items.forEach { (value, label) ->
             val active = value == current
+            var pressed by remember { mutableStateOf(false) }
+
+            val chipBg by animateColorAsState(
+                targetValue = if (active) RecorderOrange else RecorderCharcoalCard,
+                animationSpec = tween(durationMillis = 150),
+                label = "chipBg_$label",
+            )
+            val textColor by animateColorAsState(
+                targetValue = if (active) Color.White else RecorderBlueGrey,
+                animationSpec = tween(durationMillis = 150),
+                label = "chipText_$label",
+            )
+            val pressScale by animateFloatAsState(
+                targetValue = if (pressed) 0.96f else 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                ),
+                label = "chipScale_$label",
+            )
+
             Text(
                 label,
-                color = if (active) Color.White else RecorderBlueGrey,
+                color = textColor,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 fontSize = 12.sp,
                 modifier = Modifier
+                    .scale(pressScale)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (active) RecorderOrange else RecorderCharcoalCard)
-                    .clickable { onChange(value) }
+                    .background(chipBg)
+                    .pointerInput(value) {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                tryAwaitRelease()
+                                pressed = false
+                            },
+                            onTap = { onChange(value) },
+                        )
+                    }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }

@@ -2,9 +2,15 @@ package com.example.recorderproject.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -700,57 +706,84 @@ private fun RecordingSettingsCard(
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
 
             // Bluetooth Monitor — live mic→headphone monitoring (BT/wired/USB)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            "Bluetooth Monitor",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (monitorOn) {
-                            // Tiny pulse dot + dB readout when active
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MeatOrange),
-                            )
-                            Text(
-                                if (monitorRmsDb <= -59f) "—" else "%.0f dB".format(monitorRmsDb),
-                                color = MeatYellow,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            )
-                        }
-                    }
-                    Text(
-                        if (monitorOn)
-                            "Routing mic → BT / wired earphone (live, ~50 ms latency)"
-                        else
-                            "Route mic audio to BT / wired earphone",
-                        color = Color.White.copy(alpha = 0.45f),
-                        fontSize = 12.sp,
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Orange aura pulse behind the toggle row when monitor is ON
+                if (monitorOn) {
+                    val monitorAura = rememberInfiniteTransition(label = "monitorAura")
+                    val pulseAlpha by monitorAura.animateFloat(
+                        initialValue = 0.15f,
+                        targetValue = 0.30f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1500, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                        label = "auraAlpha",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        MeatOrange.copy(alpha = pulseAlpha),
+                                        Color.Transparent,
+                                    ),
+                                ),
+                            ),
                     )
                 }
-                Switch(
-                    checked = monitorOn,
-                    onCheckedChange = { onToggleMonitor() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = MeatOrange,
-                        uncheckedThumbColor = Color.White.copy(alpha = 0.8f),
-                        uncheckedTrackColor = Color(0xFF2A2A2A),
-                    ),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                "Bluetooth Monitor",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            if (monitorOn) {
+                                // Tiny pulse dot + dB readout when active
+                                Box(
+                                    Modifier
+                                        .size(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MeatOrange),
+                                )
+                                Text(
+                                    if (monitorRmsDb <= -59f) "—" else "%.0f dB".format(monitorRmsDb),
+                                    color = MeatYellow,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                )
+                            }
+                        }
+                        Text(
+                            if (monitorOn)
+                                "Routing mic → BT / wired earphone (live, ~50 ms latency)"
+                            else
+                                "Route mic audio to BT / wired earphone",
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Switch(
+                        checked = monitorOn,
+                        onCheckedChange = { onToggleMonitor() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MeatOrange,
+                            uncheckedThumbColor = Color.White.copy(alpha = 0.8f),
+                            uncheckedTrackColor = Color(0xFF2A2A2A),
+                        ),
+                    )
+                }
             }
 
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
