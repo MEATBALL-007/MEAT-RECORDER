@@ -443,8 +443,8 @@ class AudioRecorderManager(private val context: Context) {
                                     } else {
                                         floats.copyOf(read)
                                     }
-                                    val lufs = lufsProcessor.process(monoFloats)
-                                    ll(lufs)
+                                    lufsProcessor.process(monoFloats)
+                                    ll(lufsProcessor.shortTermLufs)
                                 } catch (_: Exception) {}
                             }
                         }
