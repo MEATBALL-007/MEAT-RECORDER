@@ -151,6 +151,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     // Clear the marker either way — we've handled it (or the file doesn't exist)
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
                 }
+                // Detect zombie recording: previous session was recording when destroyed.
+                val wasRecording = try { settings.getIsRecording() } catch (_: Exception) { false }
+                if (wasRecording) {
+                    // The take is recoverable via PR2 logic; clear the flag here.
+                    // The user can review the recovered file in the recordings list.
+                    try { settings.setIsRecording(false) } catch (_: Exception) {}
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(app, "Previous recording recovered — check Recordings list", Toast.LENGTH_LONG).show()
+                    }
+                }
                 // Populate _recordFiles from disk on launch — without this, the user can
                 // only see files created in the current session.
                 scanRecordingsFromDisk()
@@ -369,6 +379,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun toggleVad() {
         _vadOn.value = !_vadOn.value
         if (hydrated.value) viewModelScope.launch { settings.setVad(_vadOn.value) }
+        Toast.makeText(
+            app,
+            if (_vadOn.value) "VAD on — placeholder, not yet auto-triggering record" else "VAD off",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
@@ -407,6 +422,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val liveSpectrum: StateFlow<FloatArray> = _liveSpectrum
     private val _livePitchHz = MutableStateFlow(0f)
     val livePitchHz: StateFlow<Float> = _livePitchHz
+    // D: live LUFS meter — populated only while recording
+    private val _liveLufs = MutableStateFlow(-70f)
+    val liveLufs: StateFlow<Float> = _liveLufs
     // Rolling window of recent FFT frames so the SPECTRUM heatmap can scroll
     private val _spectrumHistory = MutableStateFlow<List<FloatArray>>(emptyList())
     val spectrumHistory: StateFlow<List<FloatArray>> = _spectrumHistory
@@ -1223,7 +1241,35 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        // Feature I: countdown beep before recording
+        val countdown = _countdownSeconds.value
+        if (countdown > 0) {
+            viewModelScope.launch {
+                try {
+                    val tg = android.media.ToneGenerator(
+                        android.media.AudioManager.STREAM_MUSIC, 80,
+                    )
+                    for (i in countdown downTo 1) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(app, "Recording in ${i}…", Toast.LENGTH_SHORT).show()
+                        }
+                        tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 200)
+                        kotlinx.coroutines.delay(1000L)
+                    }
+                    tg.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Countdown beep failed: ${e.message}")
+                }
+                startRecordingNow()
+            }
+            return
+        }
+        startRecordingNow()
+    }
+
+    private fun startRecordingNow() {
         _isRecording.value = true
+        viewModelScope.launch { try { settings.setIsRecording(true) } catch (_: Exception) {} }
         requestAudioFocus() // Best-effort — don't block recording if denied
         if (!becomingNoisyRegistered) {
             app.registerReceiver(
@@ -1275,6 +1321,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setPitchListener { hz ->
                 _livePitchHz.value = hz
             }
+            recorder.setLufsListener { lufs ->
+                _liveLufs.value = lufs
+            }
             recorder.setErrorListener { err ->
                 viewModelScope.launch(Dispatchers.Main) {
                     val msg = when (err) {
@@ -1323,9 +1372,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         // M1/M2: clear listeners + reset live state
         recorder.setSpectrumListener(null)
         recorder.setPitchListener(null)
+        recorder.setLufsListener(null)
         recorder.setErrorListener(null)
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
+        _liveLufs.value = -70f
         _spectrumHistory.value = emptyList()
 
         // Q2: stop foreground service
@@ -1389,6 +1440,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
                 }
                 _isRecording.value = false
+                try { settings.setIsRecording(false) } catch (_: Exception) {}
                 _currentWaveform.value = emptyList()
                 // If pre-roll was enabled, restart the capture thread for the next take.
                 if (_preRollEnabled.value) {
@@ -1402,6 +1454,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 Log.e(TAG, "Failed to stop recording: ${e.message}", e)
                 _errorMessage.value = "Failed to stop recording: ${e.message}"
                 _isRecording.value = false
+                try { settings.setIsRecording(false) } catch (_: Exception) {}
                 Toast.makeText(app, "Failed to save recording: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
@@ -2147,6 +2200,62 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (scanned.isNotEmpty()) {
             _recordFiles.value = _recordFiles.value + scanned
             Log.i(TAG, "scanRecordingsFromDisk: added ${scanned.size} files from disk")
+        }
+    }
+
+    /**
+     * Export a CSV sound report of all recordings to a temp file and fire a share intent.
+     * Columns: Scene, Take, FileName, Duration(s), HasNR, HasEQ, Starred, Locked, Tags, Notes.
+     */
+    fun exportSoundReport() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val files = _recordFiles.value
+                val sb = StringBuilder()
+                sb.appendLine("Scene,Take,FileName,Duration(s),HasNR,HasEQ,Starred,Locked,Tags,Notes")
+                for (f in files) {
+                    val takeMatch = Regex("_T(\\d+)").find(f.name)
+                    val takeNum = takeMatch?.groupValues?.get(1) ?: ""
+                    fun esc(s: String) = "\"${s.replace("\"", "\"\"")}\""
+                    sb.append(esc(f.sceneName)).append(',')
+                        .append(takeNum).append(',')
+                        .append(esc(f.name)).append(',')
+                        .append(f.durationSeconds).append(',')
+                        .append(if (f.hasNoiseReduction) "Y" else "N").append(',')
+                        .append(if (f.hasEQ) "Y" else "N").append(',')
+                        .append(if (f.starred) "Y" else "N").append(',')
+                        .append(if (f.isLocked) "Y" else "N").append(',')
+                        .append(esc(f.tags)).append(',')
+                        .append(esc(f.notes))
+                        .append('\n')
+                }
+                val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US)
+                    .format(java.util.Date())
+                val outFile = java.io.File(app.cacheDir, "sound_report_$ts.csv")
+                outFile.writeText(sb.toString())
+
+                withContext(Dispatchers.Main) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        app, app.packageName + ".fileprovider", outFile,
+                    )
+                    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, "Sound Report $ts")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    val chooser = android.content.Intent.createChooser(share, "Share sound report").apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    app.startActivity(chooser)
+                    Toast.makeText(app, "Sound report exported: ${files.size} takes", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Sound report export failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

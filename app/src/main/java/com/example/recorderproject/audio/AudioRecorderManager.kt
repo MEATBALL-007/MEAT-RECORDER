@@ -115,9 +115,12 @@ class AudioRecorderManager(private val context: Context) {
     // so the rate is ~10-20 Hz and visualization doesn't melt the CPU.
     @Volatile private var spectrumListener: ((FloatArray) -> Unit)? = null
     @Volatile private var pitchListener: ((Float) -> Unit)? = null
+    @Volatile private var lufsListener: ((Float) -> Unit)? = null
     private var dspFrameCounter: Int = 0
     fun setSpectrumListener(cb: ((FloatArray) -> Unit)?) { spectrumListener = cb }
     fun setPitchListener(cb: ((Float) -> Unit)?) { pitchListener = cb }
+    fun setLufsListener(l: ((Float) -> Unit)?) { lufsListener = l }
+    private val lufsProcessor by lazy { LufsProcessor(sampleRate.toFloat()) }
 
     // PR3: Error listener — surfaces recording-thread exceptions (SAF revocation, disk full, etc.) to UI.
     @Volatile private var errorListener: ((Throwable) -> Unit)? = null
@@ -333,12 +336,13 @@ class AudioRecorderManager(private val context: Context) {
                         val levels = audioBuffer.take(read).map { it / 32768f }
                         onAudioFrame(levels)
 
-                        // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch.
+                        // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch + LUFS.
                         // Listeners are best-effort and run on the recording thread.
                         dspFrameCounter++
                         if (dspFrameCounter % 4 == 0) {
                             val sl = spectrumListener
                             val pl = pitchListener
+                            val ll = lufsListener
                             if (sl != null && read >= FFTAnalyzer.FFT_SIZE) {
                                 try {
                                     val bands = FFTAnalyzer.frameSpectrum(
@@ -351,6 +355,14 @@ class AudioRecorderManager(private val context: Context) {
                                 try {
                                     val result = PitchDetector.detect(audioBuffer, 0, read, sampleRate)
                                     if (result.confidence > 0.30f) pl(result.frequencyHz)
+                                } catch (_: Exception) {}
+                            }
+                            if (ll != null) {
+                                try {
+                                    val floats = FloatArray(read)
+                                    for (i in 0 until read) floats[i] = audioBuffer[i] / 32768f
+                                    val lufs = lufsProcessor.process(floats)
+                                    ll(lufs)
                                 } catch (_: Exception) {}
                             }
                         }

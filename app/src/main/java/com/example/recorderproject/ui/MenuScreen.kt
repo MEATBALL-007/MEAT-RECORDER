@@ -127,6 +127,10 @@ fun MenuScreen(
                 MenuItem("⚙️", "Settings", "Theme · sample rate · etc.", AccentSpec(Color(0xFF7B8189), Color(0xFFAAB1BA)), onOpenSettings),
                 MenuItem("📊", "Statistics", "Total time · file count", AccentSpec(Color(0xFFFFC72C), Color(0xFFFA9112)), onOpenStats),
                 MenuItem("◐", "Design Studio", "Preview 4 design directions", AccentSpec(Color(0xFFFA4616), Color(0xFFFFC72C)), onOpenDesignPicker),
+                MenuItem("📋", "Sound Report", "Export CSV of all takes", AccentSpec(Color(0xFF3DC399), Color(0xFF7FE5C8))) {
+                    viewModel.closeMenu()
+                    viewModel.exportSoundReport()
+                },
             )
 
             Column(

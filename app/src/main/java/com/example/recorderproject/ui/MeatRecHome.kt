@@ -135,6 +135,11 @@ fun MeatRecHome(
     onToggleLiveNoiseGate: () -> Unit = {},
     liveEqBandGains: FloatArray = FloatArray(6),
     onChangeLiveEqBand: (Int, Float) -> Unit = { _, _ -> },
+    preRollOn: Boolean = false,
+    onTogglePreRoll: () -> Unit = {},
+    vadOn: Boolean = false,
+    onToggleVad: () -> Unit = {},
+    lufsDb: Float = -70f,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -273,6 +278,11 @@ fun MeatRecHome(
                     onToggleLiveNoiseGate = onToggleLiveNoiseGate,
                     liveEqBandGains = liveEqBandGains,
                     onChangeLiveEqBand = onChangeLiveEqBand,
+                    preRollOn = preRollOn,
+                    onTogglePreRoll = onTogglePreRoll,
+                    vadOn = vadOn,
+                    onToggleVad = onToggleVad,
+                    lufsDb = lufsDb,
                 )
             }
 

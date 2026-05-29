@@ -68,6 +68,10 @@ class SettingsDataStore(private val context: Context) {
     private val cloudBackupKey = booleanPreferencesKey("cloud_backup")
     private val activeRecordingPathKey = stringPreferencesKey("active_recording_path")
     private val preRollEnabledKey = booleanPreferencesKey("pre_roll_enabled")
+    private val isRecordingKey = booleanPreferencesKey("is_recording")
+
+    suspend fun setIsRecording(v: Boolean) = context.dataStore.edit { it[isRecordingKey] = v }
+    suspend fun getIsRecording(): Boolean = context.dataStore.data.first()[isRecordingKey] ?: false
 
     /** Read every key at once and return a snapshot. */
     suspend fun snapshot(): SettingsSnapshot {

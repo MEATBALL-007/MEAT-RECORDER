@@ -91,6 +91,11 @@ fun RecordingActiveSection(
     onToggleLiveNoiseGate: () -> Unit = {},
     liveEqBandGains: FloatArray = FloatArray(6),
     onChangeLiveEqBand: (Int, Float) -> Unit = { _, _ -> },
+    preRollOn: Boolean = false,
+    onTogglePreRoll: () -> Unit = {},
+    vadOn: Boolean = false,
+    onToggleVad: () -> Unit = {},
+    lufsDb: Float = -70f,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -98,7 +103,28 @@ fun RecordingActiveSection(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         RecBadge(elapsedSeconds = elapsedSeconds, isPaused = isPaused)
-        InputLevelBar(percent = inputLevelPercent)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            InputLevelBar(percent = inputLevelPercent)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "LUFS",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 10.sp,
+                    letterSpacing = 1.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (lufsDb > -69f) "%.1f".format(lufsDb) else "—",
+                    color = MeatYellow,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
         // Quick action row: pause/resume + drop cue
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -139,6 +165,24 @@ fun RecordingActiveSection(
                 label = "Edit EQ",
                 icon = "→",
                 onClick = onOpenEqEditor,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        // Pre-roll + VAD chip row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ActiveChip(
+                label = if (preRollOn) "Pre-roll 5s ON" else "Pre-roll 5s",
+                active = preRollOn,
+                onClick = onTogglePreRoll,
+                modifier = Modifier.weight(1f),
+            )
+            ActiveChip(
+                label = if (vadOn) "VAD ON" else "VAD",
+                active = vadOn,
+                onClick = onToggleVad,
                 modifier = Modifier.weight(1f),
             )
         }
