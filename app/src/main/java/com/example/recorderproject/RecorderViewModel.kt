@@ -2400,7 +2400,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 val base = f.nameWithoutExtension
                 val isOriginalShadowedByNr =
                     !base.lowercase().endsWith("_nr") && nrBaseNames.contains(base)
-                !isOriginalShadowedByNr && f.absolutePath !in existingPaths
+                val isDeliverySibling = base.endsWith("_delivery")
+                !isOriginalShadowedByNr && !isDeliverySibling && f.absolutePath !in existingPaths
             }
             .sortedByDescending { it.lastModified() }
             .mapNotNull { f ->
@@ -2420,6 +2421,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                         (ms / 1000L).toInt()
                     } catch (_: Exception) { 0 }
 
+                    // Pick up delivery sibling if present.
+                    val deliveryWav  = java.io.File(f.parentFile, "${f.nameWithoutExtension}_delivery.wav")
+                    val deliveryJson = java.io.File(f.parentFile, "${f.nameWithoutExtension}_delivery.json")
+                    val deliveryResult = runCatching {
+                        if (deliveryJson.exists()) DeliveryResult.fromJson(deliveryJson.readText()) else null
+                    }.getOrNull()
+                    val deliveryPath = if (deliveryWav.exists()) deliveryWav.absolutePath else null
+
                     RecordFile(
                         id = java.util.UUID.randomUUID().toString(),
                         name = f.name,
@@ -2428,12 +2437,29 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                         sceneName = "",
                         hasNoiseReduction = hasNr,
                         hasEQ = hasEq,
+                        deliveryPath = deliveryPath,
+                        deliveryResult = deliveryResult,
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "scanRecordingsFromDisk: skipping ${f.name}: ${e.message}")
                     null
                 }
             }
+
+        // Orphan delivery sweep: _delivery.wav without matching original AND without sidecar JSON.
+        val originalNames = allWavs
+            .filter { !it.nameWithoutExtension.endsWith("_delivery") }
+            .map { it.nameWithoutExtension }
+            .toSet()
+        allWavs
+            .filter { f ->
+                val base = f.nameWithoutExtension
+                if (!base.endsWith("_delivery")) return@filter false
+                val originalBase = base.removeSuffix("_delivery")
+                val sidecar = java.io.File(f.parentFile, "${base}.json")
+                originalBase !in originalNames && !sidecar.exists()
+            }
+            .forEach { runCatching { it.delete() } }
 
         if (scanned.isNotEmpty()) {
             _recordFiles.value = _recordFiles.value + scanned
