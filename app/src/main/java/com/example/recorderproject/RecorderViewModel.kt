@@ -27,9 +27,14 @@ import com.example.recorderproject.model.RecordingQuality
 import com.example.recorderproject.model.SortOrder
 import com.example.recorderproject.model.applyAudioSample
 import com.example.recorderproject.model.applyDecayTick
+import com.example.recorderproject.audio.DeliveryRenderer
+import com.example.recorderproject.model.DeliveryResult
+import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +44,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -425,6 +431,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // D: live LUFS meter — populated only while recording
     private val _liveLufs = MutableStateFlow(-70f)
     val liveLufs: StateFlow<Float> = _liveLufs
+
+    // D: live true-peak — populated only while recording
+    private val _liveTpDbTp = MutableStateFlow(Float.NEGATIVE_INFINITY)
+    val liveTpDbTp: StateFlow<Float> = _liveTpDbTp
+
+    // D: current loudness delivery target (session-level)
+    private val _loudnessTarget = MutableStateFlow<LoudnessTarget>(LoudnessTarget.DEFAULT)
+    val loudnessTarget: StateFlow<LoudnessTarget> = _loudnessTarget
+
+    // D: in-progress delivery render
+    private val _isRenderingDelivery = MutableStateFlow(false)
+    val isRenderingDelivery: StateFlow<Boolean> = _isRenderingDelivery
+
+    // D: rolling render result for snackbar / UI
+    private val _lastDeliveryResult = MutableStateFlow<DeliveryResult?>(null)
+    val lastDeliveryResult: StateFlow<DeliveryResult?> = _lastDeliveryResult
+
+    private val renderSemaphore = Semaphore(permits = 2)
+
     // K.2: Stereo phase correlation (-1..1) — populated only while recording stereo
     private val _phaseCorrelation = MutableStateFlow(0f)
     val phaseCorrelation: StateFlow<Float> = _phaseCorrelation
@@ -1432,6 +1457,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setLufsListener { lufs ->
                 _liveLufs.value = lufs
             }
+            recorder.setTruePeakListener { tp -> _liveTpDbTp.value = tp }
             recorder.setPhaseListener { c -> _phaseCorrelation.value = c }
             recorder.setErrorListener { err ->
                 viewModelScope.launch(Dispatchers.Main) {
@@ -1482,11 +1508,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setSpectrumListener(null)
         recorder.setPitchListener(null)
         recorder.setLufsListener(null)
+        recorder.setTruePeakListener(null)
         recorder.setPhaseListener(null)
         recorder.setErrorListener(null)
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
         _liveLufs.value = -70f
+        _liveTpDbTp.value = Float.NEGATIVE_INFINITY
         _phaseCorrelation.value = 0f
         _spectrumHistory.value = emptyList()
 
@@ -1547,6 +1575,41 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
 
                 _recordFiles.value = _recordFiles.value + finalFile
+
+                // D: kick off delivery render if a target is active
+                val deliveryTarget = _loudnessTarget.value
+                if (deliveryTarget !is LoudnessTarget.Off && !finalFile.path.startsWith("content://")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        renderSemaphore.withPermit {
+                            _isRenderingDelivery.value = true
+                            try {
+                                val src = java.io.File(finalFile.path)
+                                val dst = java.io.File(
+                                    src.parentFile,
+                                    src.nameWithoutExtension + "_delivery.wav"
+                                )
+                                val result = runCatching {
+                                    DeliveryRenderer.render(src, dst, deliveryTarget)
+                                }.getOrNull()
+
+                                if (result != null) {
+                                    java.io.File(
+                                        src.parentFile,
+                                        src.nameWithoutExtension + "_delivery.json"
+                                    ).writeText(DeliveryResult.toJson(result))
+                                    _lastDeliveryResult.value = result
+                                    rebindDeliveryResult(src.absolutePath, dst.absolutePath, result)
+                                } else {
+                                    _lastDeliveryResult.value = null
+                                    if (dst.exists() && dst.length() < 100) dst.delete()
+                                }
+                            } finally {
+                                _isRenderingDelivery.value = false
+                            }
+                        }
+                    }
+                }
+
                 viewModelScope.launch {
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
                 }
@@ -1608,6 +1671,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             _recordFiles.value = _recordFiles.value.filter { it.id != file.id }
         } catch (e: Exception) {
             Log.e(TAG, "Delete failed: ${e.message}", e)
+        }
+    }
+
+    private fun rebindDeliveryResult(srcPath: String, dstPath: String, r: DeliveryResult) {
+        _recordFiles.update { list ->
+            list.map { f ->
+                if (f.path == srcPath) f.copy(deliveryPath = dstPath, deliveryResult = r) else f
+            }
         }
     }
 
@@ -2212,6 +2283,35 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setPreRollBuffer(preRollBuffer)
         } else {
             preRollCapture.stop()
+        }
+
+        _loudnessTarget.value = LoudnessTarget.decode(
+            s.defaultLoudnessTarget,
+            s.customLoudnessLufs,
+            s.customLoudnessTpCeiling,
+        )
+    }
+
+    /** Change the active session target. Does not persist. */
+    fun setSessionLoudnessTarget(t: LoudnessTarget) {
+        _loudnessTarget.value = t
+    }
+
+    /**
+     * Persist as default + update session target.
+     *
+     * NOTE: SettingsDataStore exposes individual setters (not bulk apply).
+     * If the setter names don't exist yet, call the closest equivalent — e.g.
+     * settings.setDefaultLoudnessTarget(...), settings.setCustomLoudnessLufs(...),
+     * settings.setCustomLoudnessTpCeiling(...). These were added in Task B3.
+     */
+    fun saveAsDefaultLoudnessTarget(t: LoudnessTarget) {
+        _loudnessTarget.value = t
+        viewModelScope.launch {
+            val (key, lufs, tp) = LoudnessTarget.encode(t)
+            settings.setDefaultLoudnessTarget(key)
+            settings.setCustomLoudnessLufs(lufs)
+            settings.setCustomLoudnessTpCeiling(tp)
         }
     }
 
