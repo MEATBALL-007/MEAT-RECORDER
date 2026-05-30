@@ -97,6 +97,12 @@ fun RecordingActiveSection(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    momentaryLufs: Float = -70f,
+    shortTermLufs: Float = -70f,
+    integratedLufs: Float = -70f,
+    truePeakDbtp: Float = Float.NEGATIVE_INFINITY,
+    loudnessTarget: com.example.recorderproject.model.LoudnessTarget = com.example.recorderproject.model.LoudnessTarget.Off,
+    reduceMotion: Boolean = false,
     onSlateTone: () -> Unit = {},
     sceneName: String = "",
     fileName: String = "",
@@ -118,25 +124,15 @@ fun RecordingActiveSection(
         RecBadge(elapsedSeconds = elapsedSeconds, isPaused = isPaused)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             InputLevelBar(percent = inputLevelPercent)
-            Row(
+            LoudnessMeterBar(
+                momentaryLufs = if (momentaryLufs > -69.5f) momentaryLufs else lufsDb,
+                shortTermLufs = if (shortTermLufs > -69.5f) shortTermLufs else lufsDb,
+                integratedLufs = if (integratedLufs > -69.5f) integratedLufs else lufsDb,
+                truePeakDbtp = truePeakDbtp,
+                target = loudnessTarget,
+                reduceMotion = reduceMotion,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    "LUFS",
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 10.sp,
-                    letterSpacing = 1.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (lufsDb > -69f) "%.1f".format(lufsDb) else "—",
-                    color = MeatYellow,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            )
         }
         // Quick action row: pause/resume + drop cue + slate tone
         Row(
