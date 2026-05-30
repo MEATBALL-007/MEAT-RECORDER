@@ -360,6 +360,34 @@ private fun RecordingRow(
                                 .padding(horizontal = 4.dp, vertical = 1.dp),
                         )
                     }
+                    val dr = file.deliveryResult
+                    if (dr != null && dr.targetLufs != null) {
+                        val passed = dr.passed
+                        val badgeColor = if (passed) MeatOrange else Color(0xFF7B8189)
+                        val badgeBg = if (passed) Color(0x33FA4616) else Color(0x337B8189)
+                        Text(
+                            text = "%d".format(dr.targetLufs.toInt()),
+                            color = badgeColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(badgeBg)
+                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+                if (file.deliveryPath != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                    ) {
+                        Text(
+                            text = "↳ " + java.io.File(file.deliveryPath).name,
+                            fontSize = 11.sp,
+                            color = Color(0xFF7B8189),
+                        )
+                    }
                 }
             }
 
