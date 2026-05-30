@@ -135,6 +135,11 @@ class AudioRecorderManager(private val context: Context) {
     fun setPitchListener(cb: ((Float) -> Unit)?) { pitchListener = cb }
     fun setLufsListener(l: ((Float) -> Unit)?) { lufsListener = l }
     private val lufsProcessor by lazy { LufsProcessor(sampleRate.toFloat()) }
+    @Volatile private var truePeakListener: ((Float) -> Unit)? = null
+    fun setTruePeakListener(l: ((Float) -> Unit)?) { truePeakListener = l }
+    private val truePeakDetector by lazy {
+        TruePeakDetector(sampleRate.toFloat(), channels = 1)
+    }
 
     // PR3: Error listener — surfaces recording-thread exceptions (SAF revocation, disk full, etc.) to UI.
     @Volatile private var errorListener: ((Throwable) -> Unit)? = null
@@ -445,6 +450,8 @@ class AudioRecorderManager(private val context: Context) {
                                     }
                                     lufsProcessor.process(monoFloats)
                                     ll(lufsProcessor.shortTermLufs)
+                                    truePeakDetector.feed(monoFloats)
+                                    truePeakListener?.invoke(truePeakDetector.peakDbTP)
                                 } catch (_: Exception) {}
                             }
                         }
