@@ -402,8 +402,13 @@ fun MeatRecHome(
                 }
             }
 
-            // Batch 4: Toolbar above the recordings list (search + filter + sort)
-            if (files.isNotEmpty() || searchQuery.isNotEmpty()) {
+            // Batch 4: Toolbar above the recordings list (search + filter + sort).
+            // Also show it when a filter/search is ACTIVE even if the resulting list is
+            // empty — otherwise a filter that hides everything (e.g. "NR") would also hide
+            // the only control that can reset it, leaving the library stuck looking empty.
+            if (files.isNotEmpty() || searchQuery.isNotEmpty() ||
+                fileFilter != com.example.recorderproject.RecorderViewModel.FileFilter.ALL
+            ) {
                 com.example.recorderproject.ui.components.RecordingsToolbar(
                     searchQuery = searchQuery,
                     onSearchChange = onSearchChange,

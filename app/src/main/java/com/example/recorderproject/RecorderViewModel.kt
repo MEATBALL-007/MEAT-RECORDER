@@ -170,6 +170,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 // Populate _recordFiles from disk on launch — without this, the user can
                 // only see files created in the current session.
                 scanRecordingsFromDisk()
+                // Also scan the SAF (folder-picker) save location, if one is set —
+                // otherwise recordings saved there disappear from the list after an app
+                // restart, since scanRecordingsFromDisk() only reads internal storage.
+                scanSafRecordings()
                 rewireRecorderFromState()
                 // Update default file name to next take for the loaded scene
                 refreshAutoFileName()
@@ -239,14 +243,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val searchQuery: StateFlow<String> = _searchQuery
     fun setSearchQuery(q: String) { _searchQuery.value = q }
 
-    private val _fileFilter = MutableStateFlow(
-        runCatching { FileFilter.valueOf(prefs.getString("file_filter", null) ?: "") }
-            .getOrElse { FileFilter.ALL }
-    )
+    // NOTE: the filter chip is TRANSIENT view state and is intentionally NOT restored
+    // across launches. Persisting it caused a trap: a stuck non-ALL filter (e.g. "NR")
+    // hid every recording, and since the filter toolbar only shows when the list is
+    // non-empty, there was no way to switch back to "All" — the library looked empty
+    // forever. Always start at ALL so recordings are visible by default.
+    private val _fileFilter = MutableStateFlow(FileFilter.ALL)
     val fileFilter: StateFlow<FileFilter> = _fileFilter
     fun setFileFilter(f: FileFilter) {
         _fileFilter.value = f
-        prefs.edit().putString("file_filter", f.name).apply()
     }
 
     // F8: bulk multi-select state for RECORDINGS list
@@ -1548,6 +1553,17 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     recordedFile
                 }
 
+                // Surface the take in the list NOW — the WAV is on disk and playable.
+                // NR / EQ below can be slow or throw; if we waited until after them to
+                // add the file, a failure there would make the recording silently vanish
+                // from the list (the original bug). We add it here, then swap in the
+                // fully-processed version below via [provisionalId].
+                val provisionalId = renamedFile.id
+                _recordFiles.value = _recordFiles.value + renamedFile
+                _isRecording.value = false
+                try { settings.setIsRecording(false) } catch (_: Exception) {}
+                _currentWaveform.value = emptyList()
+
                 val nrFile = if (_noiseReductionEnabled.value) {
                     Log.d(TAG, "Applying noise reduction")
                     withContext(Dispatchers.IO) { noiseProcessor.process(renamedFile) }
@@ -1574,7 +1590,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 // Recorder no longer needs the chain after the take
                 recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
 
-                _recordFiles.value = _recordFiles.value + finalFile
+                // Swap the provisional entry for the fully-processed final file.
+                // (NR assigns a new id, so filter by the provisional id, not finalFile's.)
+                _recordFiles.value = _recordFiles.value.filterNot { it.id == provisionalId } + finalFile
 
                 // D: kick off delivery render if a target is active
                 val deliveryTarget = _loudnessTarget.value
@@ -1613,9 +1631,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 viewModelScope.launch {
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
                 }
-                _isRecording.value = false
-                try { settings.setIsRecording(false) } catch (_: Exception) {}
-                _currentWaveform.value = emptyList()
+                // (isRecording / waveform already reset above, right after the take was
+                // added to the list, so the UI updates immediately.)
                 // If pre-roll was enabled, restart the capture thread for the next take.
                 if (_preRollEnabled.value) {
                     preRollCapture.start()
@@ -1653,6 +1670,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _errorMessage.value = "Failed to stop recording: ${e.message}"
                 _isRecording.value = false
                 try { settings.setIsRecording(false) } catch (_: Exception) {}
+                _currentWaveform.value = emptyList()
+                // Safety net: even if recorder.stop()/post-processing threw, the WAV was
+                // written to disk (periodic crash-safe finalize). Rescan so the take still
+                // appears in the list and can be played back rather than silently lost.
+                try { scanRecordingsFromDisk() } catch (_: Exception) {}
                 Toast.makeText(app, "Failed to save recording: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
@@ -1798,6 +1820,17 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     _isPlaying.value = true
                     startPositionUpdates()
                 } catch (_: Exception) {}
+            }
+            // Surface async prepare/playback failures instead of hanging silently.
+            // (e.g. some devices can't decode 24-bit WAV via MediaPlayer — the file is
+            // still valid on disk, the user just gets told rather than a dead Play button.)
+            mediaPlayer.setOnErrorListener { _, what, extra ->
+                Log.e(TAG, "MediaPlayer error: what=$what extra=$extra for ${file.name}")
+                _isPlayerReady.value = false
+                _isPlaying.value = false
+                positionUpdateJob?.cancel()
+                _errorMessage.value = "Can't play ${file.name} (code $what/$extra)"
+                true
             }
             if (file.path.startsWith("content://")) {
                 mediaPlayer.setDataSource(app, android.net.Uri.parse(file.path))
@@ -2464,6 +2497,86 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (scanned.isNotEmpty()) {
             _recordFiles.value = _recordFiles.value + scanned
             Log.i(TAG, "scanRecordingsFromDisk: added ${scanned.size} files from disk")
+        }
+    }
+
+    /**
+     * Like [scanRecordingsFromDisk] but for a SAF (folder-picker) save location. Recordings
+     * saved to a chosen folder are stored as content:// documents, which the internal-storage
+     * scan never sees — so without this they vanish from the list after an app restart even
+     * though the files are perfectly intact. Best-effort and fully guarded; never throws.
+     */
+    private suspend fun scanSafRecordings() = withContext(Dispatchers.IO) {
+        val uri = _saveDirectoryUri.value ?: return@withContext
+        val tree = try {
+            androidx.documentfile.provider.DocumentFile.fromTreeUri(app, uri)
+        } catch (_: Exception) { null } ?: return@withContext
+        val docs = try { tree.listFiles().toList() } catch (_: Exception) { return@withContext }
+
+        fun baseOf(n: String) = if (n.contains('.')) n.substringBeforeLast('.') else n
+        // name -> doc, for sidecar/companion (_eq.json, _delivery.*) lookups
+        val byName = docs.mapNotNull { d -> d.name?.let { it to d } }.toMap()
+
+        val wavs = docs.filter { it.isFile && (it.name?.endsWith(".wav", ignoreCase = true) == true) }
+        val nrBaseNames = wavs.mapNotNull { it.name }
+            .map { baseOf(it) }
+            .filter { it.lowercase().endsWith("_nr") }
+            .map { it.dropLast(3) }
+            .toSet()
+        val existingPaths = _recordFiles.value.map { it.path }.toSet()
+
+        val scanned = wavs
+            .sortedByDescending { it.lastModified() }
+            .mapNotNull { doc ->
+                try {
+                    val fullName = doc.name ?: return@mapNotNull null
+                    val base = baseOf(fullName)
+                    val baseLower = base.lowercase()
+                    // Hide _delivery siblings and NR-shadowed originals, mirroring the internal scan.
+                    if (base.endsWith("_delivery")) return@mapNotNull null
+                    if (!baseLower.endsWith("_nr") && nrBaseNames.contains(base)) return@mapNotNull null
+                    val path = doc.uri.toString()
+                    if (path in existingPaths) return@mapNotNull null
+
+                    val durationSeconds = try {
+                        val mmr = android.media.MediaMetadataRetriever()
+                        mmr.setDataSource(app, doc.uri)
+                        val ms = mmr.extractMetadata(
+                            android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+                        )?.toLongOrNull() ?: 0L
+                        mmr.release()
+                        (ms / 1000L).toInt()
+                    } catch (_: Exception) { 0 }
+
+                    val deliveryDoc = byName["${base}_delivery.wav"]
+                    val deliveryResult = runCatching {
+                        byName["${base}_delivery.json"]?.let { d ->
+                            app.contentResolver.openInputStream(d.uri)?.use { ins ->
+                                DeliveryResult.fromJson(ins.readBytes().decodeToString())
+                            }
+                        }
+                    }.getOrNull()
+
+                    RecordFile(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = fullName,
+                        path = path,
+                        durationSeconds = durationSeconds,
+                        sceneName = "",
+                        hasNoiseReduction = baseLower.endsWith("_nr"),
+                        hasEQ = byName.containsKey("${base}_eq.json"),
+                        deliveryPath = deliveryDoc?.uri?.toString(),
+                        deliveryResult = deliveryResult,
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "scanSafRecordings: skipping ${doc.name}: ${e.message}")
+                    null
+                }
+            }
+
+        if (scanned.isNotEmpty()) {
+            _recordFiles.value = _recordFiles.value + scanned
+            Log.i(TAG, "scanSafRecordings: added ${scanned.size} files from SAF folder")
         }
     }
 
