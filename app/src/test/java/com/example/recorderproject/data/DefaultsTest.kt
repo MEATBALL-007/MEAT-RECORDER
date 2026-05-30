@@ -13,7 +13,7 @@ class DefaultsTest {
         assertEquals(0f, Defaults.INPUT_GAIN_DB)
         assertEquals(false, Defaults.NOISE_REDUCTION)
         assertEquals(48000, Defaults.SAMPLE_RATE_HZ)
-        assertEquals(16, Defaults.BIT_DEPTH)
+        assertEquals(32, Defaults.BIT_DEPTH)   // 32-bit float capture is the documented default
         assertEquals(1, Defaults.CHANNEL_COUNT)
         assertEquals(0, Defaults.COUNTDOWN_SEC)
         assertEquals(0, Defaults.MAX_DURATION_MIN)

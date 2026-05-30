@@ -19,7 +19,10 @@ object Defaults {
     const val INPUT_GAIN_DB: Float = 0f
     const val NOISE_REDUCTION: Boolean = false
     const val SAMPLE_RATE_HZ: Int = 48000
-    const val BIT_DEPTH: Int = 16
+    // 32-bit float capture (native AudioRecord format → no quantization, best quality).
+    // NOTE: 32-bit float WAV does NOT play back via Android MediaPlayer; in-app replay
+    // will fail for these files (they're intended for editing on a computer).
+    const val BIT_DEPTH: Int = 32
     const val CHANNEL_COUNT: Int = 1
     const val COUNTDOWN_SEC: Int = 0
     const val MAX_DURATION_MIN: Int = 0
