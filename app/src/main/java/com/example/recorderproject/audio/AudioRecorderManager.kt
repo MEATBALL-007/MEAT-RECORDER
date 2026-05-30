@@ -363,7 +363,9 @@ class AudioRecorderManager(private val context: Context) {
                         }
                         // F2: Live pause — skip writing while paused.
                         if (paused) {
-                            onAudioFrame(List(read) { 0f })
+                            // Emit a tiny zero frame (throttled) so the meter reads silence
+                            // without boxing the whole buffer every read.
+                            if (readCount % 2 == 0) onAudioFrame(List(8) { 0f })
                             continue
                         }
                         // J.2: Slate tone — overwrite mic samples with 1 kHz sine wave.
@@ -403,13 +405,24 @@ class AudioRecorderManager(private val context: Context) {
                             }
                         }
                         writePcmFloats(floats, read)
-                        // Level meter for UI — use first channel if stereo
-                        val levels = if (channelCount == 2) {
-                            List(read / 2) { i -> floats[i * 2] }
-                        } else {
-                            List(read) { i -> floats[i] }
+                        // Level meter / waveform for UI. Throttle + downsample: pushing the
+                        // full ~512-sample buffer as a boxed List<Float> ~90x/s recomposes the
+                        // whole home screen and is the main source of recording-time lag.
+                        // Every other buffer, decimated to <=120 points, is plenty for both the
+                        // RMS meter and the 60fps waveform (which lerps between updates).
+                        // Stride sampling preserves RMS in expectation, so the meter stays accurate.
+                        if (readCount % 2 == 0) {
+                            val frameSamples = if (channelCount == 2) read / 2 else read
+                            val stride = (frameSamples / 120).coerceAtLeast(1)
+                            val levels = ArrayList<Float>(frameSamples / stride + 1)
+                            var i = 0
+                            if (channelCount == 2) {
+                                while (i < read) { levels.add(floats[i]); i += 2 * stride }
+                            } else {
+                                while (i < read) { levels.add(floats[i]); i += stride }
+                            }
+                            onAudioFrame(levels)
                         }
-                        onAudioFrame(levels)
 
                         // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch + LUFS.
                         // FFT/Pitch need ShortArray — convert only what's needed.

@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -423,11 +424,15 @@ private fun LiveWaveformCard(waveform: List<Float>) {
     // Hold a "displayed" buffer that smoothly eases toward each new target value.
     // Lerp factor 0.35 per 16ms tick → ~60% closure over ~30ms (one or two frames).
     val displayed = remember { mutableStateListOf<Float>() }
+    // The animation loop below runs on a constant key, so it must read the LIVE
+    // waveform via rememberUpdatedState — capturing `waveform` directly would freeze
+    // it at the initial (empty) value and the bars would never move.
+    val latestWaveform = rememberUpdatedState(waveform)
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(16) // ~60 fps
             // Resize displayed to match latest waveform length without losing existing values
-            val target = waveform
+            val target = latestWaveform.value
             if (target.isEmpty()) {
                 if (displayed.isNotEmpty()) {
                     // Decay toward zero when no input
