@@ -51,6 +51,11 @@ object Defaults {
     const val PLAYBACK_LOOP: Boolean = false
     const val PLAYBACK_VOLUME: Float = 1f
 
+    // Loudness / delivery
+    const val defaultLoudnessTarget: String = "PODCAST"
+    const val customLoudnessLufs: Float = -16f
+    const val customLoudnessTpCeiling: Float = -1f
+
     // Misc
     val SAVE_DIRECTORY_URI: String? = null
     const val GROUP_BY_SCENE: Boolean = false

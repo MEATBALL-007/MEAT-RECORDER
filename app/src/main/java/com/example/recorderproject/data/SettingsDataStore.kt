@@ -61,6 +61,11 @@ class SettingsDataStore(private val context: Context) {
     private val playbackLoopKey = booleanPreferencesKey("playback_loop")
     private val playbackVolumeKey = floatPreferencesKey("playback_volume")
 
+    // ----- Loudness / delivery -----
+    private val defaultLoudnessTargetKey   = stringPreferencesKey("default_loudness_target")
+    private val customLoudnessLufsKey      = floatPreferencesKey("custom_loudness_lufs")
+    private val customLoudnessTpCeilingKey = floatPreferencesKey("custom_loudness_tp_ceiling")
+
     // ----- Misc -----
     private val saveDirectoryUriKey = stringPreferencesKey("save_directory_uri")
     private val groupByScene = booleanPreferencesKey("group_by_scene")
@@ -114,6 +119,9 @@ class SettingsDataStore(private val context: Context) {
             cloudBackup = p[cloudBackupKey] ?: Defaults.CLOUD_BACKUP,
             preRollEnabled = p[preRollEnabledKey] ?: Defaults.PRE_ROLL_ENABLED,
             cloudBackupUri = p[cloudBackupUriKey],
+            defaultLoudnessTarget   = p[defaultLoudnessTargetKey]   ?: Defaults.defaultLoudnessTarget,
+            customLoudnessLufs      = p[customLoudnessLufsKey]      ?: Defaults.customLoudnessLufs,
+            customLoudnessTpCeiling = p[customLoudnessTpCeilingKey] ?: Defaults.customLoudnessTpCeiling,
         )
     }
 
@@ -166,6 +174,9 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setLockScreenControls(v: Boolean) = context.dataStore.edit { it[lockScreenControlsKey] = v }
     suspend fun setCloudBackup(v: Boolean) = context.dataStore.edit { it[cloudBackupKey] = v }
     suspend fun setPreRollEnabled(v: Boolean) = context.dataStore.edit { it[preRollEnabledKey] = v }
+    suspend fun setDefaultLoudnessTarget(v: String) = context.dataStore.edit { it[defaultLoudnessTargetKey] = v }
+    suspend fun setCustomLoudnessLufs(v: Float) = context.dataStore.edit { it[customLoudnessLufsKey] = v }
+    suspend fun setCustomLoudnessTpCeiling(v: Float) = context.dataStore.edit { it[customLoudnessTpCeilingKey] = v }
     suspend fun setCloudBackupUri(v: String?) = context.dataStore.edit {
         if (v == null) it.remove(cloudBackupUriKey) else it[cloudBackupUriKey] = v
     }

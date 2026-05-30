@@ -50,4 +50,8 @@ data class SettingsSnapshot(
     val cloudBackup: Boolean = Defaults.CLOUD_BACKUP,
     val preRollEnabled: Boolean = Defaults.PRE_ROLL_ENABLED,
     val cloudBackupUri: String? = null,
+    // Loudness / delivery
+    val defaultLoudnessTarget: String = Defaults.defaultLoudnessTarget,
+    val customLoudnessLufs: Float = Defaults.customLoudnessLufs,
+    val customLoudnessTpCeiling: Float = Defaults.customLoudnessTpCeiling,
 )
