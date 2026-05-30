@@ -2450,11 +2450,21 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             try {
                 val files = _recordFiles.value
                 val sb = StringBuilder()
-                sb.appendLine("Scene,Take,FileName,Duration(s),HasNR,HasEQ,Starred,Locked,Tags,Notes")
+                sb.appendLine("Scene,Take,FileName,Duration(s),HasNR,HasEQ,Starred,Locked,Tags,Notes,Integrated,TP_dBTP,LRA,Target_Result")
                 for (f in files) {
                     val takeMatch = Regex("_T(\\d+)").find(f.name)
                     val takeNum = takeMatch?.groupValues?.get(1) ?: ""
                     fun esc(s: String) = "\"${s.replace("\"", "\"\"")}\""
+                    val dr = f.deliveryResult
+                    val integrated = dr?.integratedLufs?.let { "%.1f".format(it) } ?: ""
+                    val tp         = dr?.truePeakDbtp?.let { "%.1f".format(it) } ?: ""
+                    val lra        = dr?.lra?.let { "%.1f".format(it) } ?: ""
+                    val result = when {
+                        dr == null            -> "N/A"
+                        dr.targetLufs == null -> "N/A"
+                        dr.passed             -> "PASS"
+                        else                  -> "FAIL"
+                    }
                     sb.append(esc(f.sceneName)).append(',')
                         .append(takeNum).append(',')
                         .append(esc(f.name)).append(',')
@@ -2464,7 +2474,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                         .append(if (f.starred) "Y" else "N").append(',')
                         .append(if (f.isLocked) "Y" else "N").append(',')
                         .append(esc(f.tags)).append(',')
-                        .append(esc(f.notes))
+                        .append(esc(f.notes)).append(',')
+                        .append(integrated).append(',')
+                        .append(tp).append(',')
+                        .append(lra).append(',')
+                        .append(result)
                         .append('\n')
                 }
                 val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US)
