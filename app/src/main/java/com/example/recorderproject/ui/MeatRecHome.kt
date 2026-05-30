@@ -147,6 +147,10 @@ fun MeatRecHome(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    liveTpDbtp: Float = Float.NEGATIVE_INFINITY,
+    loudnessTarget: com.example.recorderproject.model.LoudnessTarget = com.example.recorderproject.model.LoudnessTarget.Off,
+    onSelectLoudnessTarget: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
+    onSaveLoudnessAsDefault: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
@@ -265,6 +269,13 @@ fun MeatRecHome(
                 )
             }
 
+            // D: Loudness delivery target chip
+            com.example.recorderproject.ui.components.LoudnessTargetChip(
+                current = loudnessTarget,
+                onSelectSession = onSelectLoudnessTarget,
+                onSaveAsDefault = onSaveLoudnessAsDefault,
+            )
+
             // K1: rich recording-active section — Live Waveform + SPECTRUM + PITCH
             AnimatedVisibility(
                 visible = isRecording,
@@ -293,6 +304,10 @@ fun MeatRecHome(
                     vadOn = vadOn,
                     onToggleVad = onToggleVad,
                     lufsDb = lufsDb,
+                    shortTermLufs = lufsDb,
+                    integratedLufs = lufsDb,
+                    truePeakDbtp = liveTpDbtp,
+                    loudnessTarget = loudnessTarget,
                     onSlateTone = onSlateTone,
                     sceneName = sceneName,
                     fileName = fileName,

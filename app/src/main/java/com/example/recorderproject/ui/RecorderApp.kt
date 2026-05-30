@@ -126,6 +126,20 @@ fun RecorderApp(
         }
     }
 
+    // D: surface delivery-render result as a Toast
+    val lastDelivery by viewModel.lastDeliveryResult.collectAsStateWithLifecycle()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(lastDelivery) {
+        val r = lastDelivery ?: return@LaunchedEffect
+        val target = r.targetLufs ?: return@LaunchedEffect
+        val msg = when {
+            r.passed -> "Rendered %.0f LUFS · %.1f dBTP · PASS".format(target, r.truePeakDbtp)
+            r.integratedLufs < -60f -> "Too quiet to normalize — re-record louder."
+            else -> "Couldn't reach %.0f LUFS without clipping — try a lower target.".format(target)
+        }
+        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+    }
+
     var slateOpen by remember { mutableStateOf(false) }
     var sourcePickerOpen by remember { mutableStateOf(false) }
     var splashTrigger by remember { mutableStateOf(0) }
@@ -221,6 +235,10 @@ fun RecorderApp(
         vadOn = viewModel.vadOn.collectAsStateWithLifecycle().value,
         onToggleVad = { viewModel.toggleVad() },
         lufsDb = viewModel.liveLufs.collectAsStateWithLifecycle().value,
+        liveTpDbtp = viewModel.liveTpDbTp.collectAsStateWithLifecycle().value,
+        loudnessTarget = viewModel.loudnessTarget.collectAsStateWithLifecycle().value,
+        onSelectLoudnessTarget = { viewModel.setSessionLoudnessTarget(it) },
+        onSaveLoudnessAsDefault = { viewModel.saveAsDefaultLoudnessTarget(it) },
         selectedIds = selectedIds,
         onToggleSelect = { viewModel.toggleFileSelection(it.id) },
         onBulkDelete = { viewModel.deleteSelected() },
