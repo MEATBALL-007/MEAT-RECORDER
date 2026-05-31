@@ -156,6 +156,9 @@ fun MeatRecHome(
     onChangeInputGain: (Float) -> Unit = {},
     onBumpTake: () -> Unit = {},
     onBumpSubscene: () -> Unit = {},
+    onTakeMinus1: () -> Unit = {},
+    onSceneMinus1: () -> Unit = {},
+    onScenePlus1: () -> Unit = {},
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
@@ -291,10 +294,13 @@ fun MeatRecHome(
                     .padding(horizontal = 16.dp),
             )
 
-            // H: Take +1 / Scene +0.1 manual bump buttons
+            // H: Take ± / Scene ± manual bump buttons
             com.example.recorderproject.ui.components.TakeSceneBumpRow(
-                onBumpTake = onBumpTake,
-                onBumpSubscene = onBumpSubscene,
+                onTakeMinus = onTakeMinus1,
+                onTakePlus = onBumpTake,
+                onSceneMinus = onSceneMinus1,
+                onSceneDot1 = onBumpSubscene,
+                onScenePlus = onScenePlus1,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),

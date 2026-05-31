@@ -1228,16 +1228,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * H: Manually bump take number by +1.
-     * Parses the trailing _T## in the current filename and increments it, otherwise
-     * defers to the auto-name logic. Useful when you want to skip a take number.
+     * H: Manually adjust take number by [delta].
+     * Parses the trailing _T## in the current filename and adds delta (clamped to >=1).
+     * Useful to skip a take (+1) or back up to overwrite (-1).
      */
-    fun bumpTake() {
+    fun bumpTake(delta: Int = 1) {
         val current = _fileName.value
         val match = Regex("^(.+)_T(\\d+)(\\.wav)?$", RegexOption.IGNORE_CASE).matchEntire(current)
         if (match != null) {
             val base = match.groupValues[1]
-            val n = (match.groupValues[2].toIntOrNull() ?: 0) + 1
+            val n = ((match.groupValues[2].toIntOrNull() ?: 0) + delta).coerceAtLeast(1)
             val ext = match.groupValues[3].ifBlank { ".wav" }
             _fileName.value = "${base}_T${"%02d".format(n)}$ext"
         } else {
@@ -1246,21 +1246,47 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * H: Manually bump scene to next decimal sub-scene (+0.1).
-     * "Scene 1" → "Scene 1.1" → "Scene 1.2" … ; take resets to 01.
-     * If the scene ends in an integer, appends ".1". If it already has a decimal,
-     * increments the fractional digit.
+     * H: Manually bump scene to next decimal sub-scene (default +0.1).
+     * "Scene 1" + 0.1 → "Scene 1.1" → +0.1 → "Scene 1.2" … ; take resets to 01.
+     * Negative delta steps backward (clamps at .0, which collapses back to the
+     * integer-only form, e.g. "Scene 1.1" - 0.1 → "Scene 1").
      */
-    fun bumpSubscene() {
+    fun bumpSubscene(deltaTenths: Int = 1) {
         val base = _sceneName.value.trim()
         val m = Regex("^(.*?)(\\d+)(?:\\.(\\d+))?\\s*$").matchEntire(base)
         val nextScene = if (m != null) {
             val prefix = m.groupValues[1]
             val whole = m.groupValues[2]
-            val frac = m.groupValues[3].toIntOrNull() ?: 0
-            "$prefix$whole.${frac + 1}"
+            val frac = (m.groupValues[3].toIntOrNull() ?: 0) + deltaTenths
+            when {
+                frac > 0 -> "$prefix$whole.$frac"
+                frac == 0 -> "$prefix$whole"
+                else -> "$prefix$whole"     // can't go below 0; stay at integer form
+            }
+        } else if (deltaTenths > 0) {
+            "$base.$deltaTenths"
         } else {
-            "$base.1"
+            base
+        }
+        _sceneName.value = nextScene
+        if (hydrated.value) viewModelScope.launch { settings.setSceneName(nextScene) }
+        refreshAutoFileName()
+    }
+
+    /**
+     * H: Manually bump the whole-number scene (default +1).
+     * "Scene 1" + 1 → "Scene 2"; "Scene 1.3" + 1 → "Scene 2" (fractional resets);
+     * negative delta clamps at 1.
+     */
+    fun bumpScene(delta: Int) {
+        val base = _sceneName.value.trim()
+        val m = Regex("^(.*?)(\\d+)(?:\\.\\d+)?\\s*$").matchEntire(base)
+        val nextScene = if (m != null) {
+            val prefix = m.groupValues[1]
+            val whole = (m.groupValues[2].toIntOrNull() ?: 1) + delta
+            "$prefix${whole.coerceAtLeast(1)}"
+        } else {
+            "$base ${(1 + delta).coerceAtLeast(1)}"
         }
         _sceneName.value = nextScene
         if (hydrated.value) viewModelScope.launch { settings.setSceneName(nextScene) }

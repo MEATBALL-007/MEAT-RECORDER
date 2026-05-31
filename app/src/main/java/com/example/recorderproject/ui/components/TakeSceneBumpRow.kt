@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,27 +22,58 @@ private val Yellow   = Color(0xFFFFC72C)
 private val BlueGrey = Color(0xFF7B8189)
 
 /**
- * Two side-by-side increment buttons.
- *  - "+1 TAKE"  — bumps the take number in the current file name (Scene_1_T01 → Scene_1_T02).
- *  - "+0.1 SCENE" — bumps the scene to next sub-scene (Scene 1 → Scene 1.1); take resets to 01.
+ * Manual take / scene increment + decrement buttons.
  *
- * Use before tapping record when you want to manually skip a take number, or move
- * to a sub-scene without renaming by hand.
+ *  Row 1 (TAKE):  [-1]  [+1]
+ *  Row 2 (SCENE): [-1]  [+0.1]  [+1]
+ *
+ * All buttons mutate the current file-name + scene-name state via the VM.
+ * Take is clamped to >= 1; scene whole number clamped to >= 1; scene fraction
+ * clamped to >= 0 (going below collapses back to integer form).
  */
 @Composable
 fun TakeSceneBumpRow(
-    onBumpTake: () -> Unit,
-    onBumpSubscene: () -> Unit,
+    onTakeMinus: () -> Unit,
+    onTakePlus: () -> Unit,
+    onSceneMinus: () -> Unit,
+    onSceneDot1: () -> Unit,
+    onScenePlus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        BumpButton(label = "+1 TAKE",   accent = Orange, onClick = onBumpTake, modifier = Modifier.weight(1f))
-        BumpButton(label = "+0.1 SCENE", accent = Yellow, onClick = onBumpSubscene, modifier = Modifier.weight(1f))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RowLabel("TAKE")
+            BumpButton(label = "−1", accent = Orange, onClick = onTakeMinus, modifier = Modifier.weight(1f))
+            BumpButton(label = "+1", accent = Orange, onClick = onTakePlus,  modifier = Modifier.weight(1f))
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RowLabel("SCENE")
+            BumpButton(label = "−1",   accent = Yellow, onClick = onSceneMinus, modifier = Modifier.weight(1f))
+            BumpButton(label = "+0.1", accent = Yellow, onClick = onSceneDot1,  modifier = Modifier.weight(1f))
+            BumpButton(label = "+1",   accent = Yellow, onClick = onScenePlus,  modifier = Modifier.weight(1f))
+        }
     }
+}
+
+@Composable
+private fun RowLabel(text: String) {
+    Text(
+        text = text,
+        color = BlueGrey,
+        fontSize = 10.sp,
+        letterSpacing = 1.5.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(end = 6.dp),
+    )
 }
 
 @Composable
@@ -63,9 +95,9 @@ private fun BumpButton(
         Text(
             text = label,
             color = accent,
-            fontSize = 12.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp,
+            letterSpacing = 1.0.sp,
         )
     }
 }
