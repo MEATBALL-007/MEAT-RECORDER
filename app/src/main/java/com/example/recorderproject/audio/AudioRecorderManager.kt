@@ -141,6 +141,13 @@ class AudioRecorderManager(private val context: Context) {
         TruePeakDetector(sampleRate.toFloat(), channels = 1)
     }
 
+    // G: raw peak dBFS — pre-EQ / pre-NR sample-domain peak across the chunk.
+    // Held with exponential decay so the UI gets a stable needle rather than a flicker.
+    @Volatile private var rawPeakListener: ((Float) -> Unit)? = null
+    fun setRawPeakListener(l: ((Float) -> Unit)?) { rawPeakListener = l }
+    @Volatile private var rawPeakHeldLin: Float = 0f
+    private val rawPeakDecay: Float = 0.85f   // ~250 ms half-life at ~20 chunks/s
+
     // PR3: Error listener — surfaces recording-thread exceptions (SAF revocation, disk full, etc.) to UI.
     @Volatile private var errorListener: ((Throwable) -> Unit)? = null
     fun setErrorListener(l: ((Throwable) -> Unit)?) { errorListener = l }
@@ -465,6 +472,21 @@ class AudioRecorderManager(private val context: Context) {
                                     ll(lufsProcessor.shortTermLufs)
                                     truePeakDetector.feed(monoFloats)
                                     truePeakListener?.invoke(truePeakDetector.peakDbTP)
+                                    // G: chunk peak with exponential hold (fast attack, slow release).
+                                    val rpl = rawPeakListener
+                                    if (rpl != null) {
+                                        var chunkMax = 0f
+                                        for (s in monoFloats) {
+                                            val a = if (s < 0f) -s else s
+                                            if (a > chunkMax) chunkMax = a
+                                        }
+                                        val held = if (chunkMax > rawPeakHeldLin) chunkMax
+                                                   else rawPeakHeldLin * rawPeakDecay
+                                        rawPeakHeldLin = held
+                                        val db = if (held <= 0f) Float.NEGATIVE_INFINITY
+                                                 else 20f * kotlin.math.log10(held)
+                                        rpl(db)
+                                    }
                                 } catch (_: Exception) {}
                             }
                         }

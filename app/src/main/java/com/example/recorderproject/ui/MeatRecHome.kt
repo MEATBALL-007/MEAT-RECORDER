@@ -151,6 +151,9 @@ fun MeatRecHome(
     loudnessTarget: com.example.recorderproject.model.LoudnessTarget = com.example.recorderproject.model.LoudnessTarget.Off,
     onSelectLoudnessTarget: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
     onSaveLoudnessAsDefault: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
+    liveRawPeakDbfs: Float = Float.NEGATIVE_INFINITY,
+    inputGainDb: Float = 0f,
+    onChangeInputGain: (Float) -> Unit = {},
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
@@ -274,6 +277,16 @@ fun MeatRecHome(
                 current = loudnessTarget,
                 onSelectSession = onSelectLoudnessTarget,
                 onSaveAsDefault = onSaveLoudnessAsDefault,
+            )
+
+            // G: Raw input level + gain — always visible, dial in before tapping record
+            com.example.recorderproject.ui.components.InputGainCard(
+                peakDbfs = liveRawPeakDbfs,
+                inputGainDb = inputGainDb,
+                onChangeInputGain = onChangeInputGain,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
             )
 
             // K1: rich recording-active section — Live Waveform + SPECTRUM + PITCH

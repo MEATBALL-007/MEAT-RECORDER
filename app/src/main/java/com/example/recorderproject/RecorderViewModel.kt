@@ -441,6 +441,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _liveTpDbTp = MutableStateFlow(Float.NEGATIVE_INFINITY)
     val liveTpDbTp: StateFlow<Float> = _liveTpDbTp
 
+    // G: raw peak dBFS — pre-EQ / pre-NR sample-domain peak, populated while recording
+    private val _liveRawPeakDbfs = MutableStateFlow(Float.NEGATIVE_INFINITY)
+    val liveRawPeakDbfs: StateFlow<Float> = _liveRawPeakDbfs
+
     // D: current loudness delivery target (session-level)
     private val _loudnessTarget = MutableStateFlow<LoudnessTarget>(LoudnessTarget.DEFAULT)
     val loudnessTarget: StateFlow<LoudnessTarget> = _loudnessTarget
@@ -1463,6 +1467,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _liveLufs.value = lufs
             }
             recorder.setTruePeakListener { tp -> _liveTpDbTp.value = tp }
+            recorder.setRawPeakListener { db -> _liveRawPeakDbfs.value = db }
             recorder.setPhaseListener { c -> _phaseCorrelation.value = c }
             recorder.setErrorListener { err ->
                 viewModelScope.launch(Dispatchers.Main) {
@@ -1514,12 +1519,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setPitchListener(null)
         recorder.setLufsListener(null)
         recorder.setTruePeakListener(null)
+        recorder.setRawPeakListener(null)
         recorder.setPhaseListener(null)
         recorder.setErrorListener(null)
         _liveSpectrum.value = FloatArray(0)
         _livePitchHz.value = 0f
         _liveLufs.value = -70f
         _liveTpDbTp.value = Float.NEGATIVE_INFINITY
+        _liveRawPeakDbfs.value = Float.NEGATIVE_INFINITY
         _phaseCorrelation.value = 0f
         _spectrumHistory.value = emptyList()
 
