@@ -445,6 +445,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _liveRawPeakDbfs = MutableStateFlow(Float.NEGATIVE_INFINITY)
     val liveRawPeakDbfs: StateFlow<Float> = _liveRawPeakDbfs
 
+    // H: device location snapshot, captured at recording start; copied onto the
+    // finalized RecordFile so IxmlWriter emits a <LOCATION> tag.
+    @Volatile private var pendingLocationTag: String? = null
+
     // D: current loudness delivery target (session-level)
     private val _loudnessTarget = MutableStateFlow<LoudnessTarget>(LoudnessTarget.DEFAULT)
     val loudnessTarget: StateFlow<LoudnessTarget> = _loudnessTarget
@@ -1223,6 +1227,46 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         refreshAutoFileName()
     }
 
+    /**
+     * H: Manually bump take number by +1.
+     * Parses the trailing _T## in the current filename and increments it, otherwise
+     * defers to the auto-name logic. Useful when you want to skip a take number.
+     */
+    fun bumpTake() {
+        val current = _fileName.value
+        val match = Regex("^(.+)_T(\\d+)(\\.wav)?$", RegexOption.IGNORE_CASE).matchEntire(current)
+        if (match != null) {
+            val base = match.groupValues[1]
+            val n = (match.groupValues[2].toIntOrNull() ?: 0) + 1
+            val ext = match.groupValues[3].ifBlank { ".wav" }
+            _fileName.value = "${base}_T${"%02d".format(n)}$ext"
+        } else {
+            refreshAutoFileName()
+        }
+    }
+
+    /**
+     * H: Manually bump scene to next decimal sub-scene (+0.1).
+     * "Scene 1" → "Scene 1.1" → "Scene 1.2" … ; take resets to 01.
+     * If the scene ends in an integer, appends ".1". If it already has a decimal,
+     * increments the fractional digit.
+     */
+    fun bumpSubscene() {
+        val base = _sceneName.value.trim()
+        val m = Regex("^(.*?)(\\d+)(?:\\.(\\d+))?\\s*$").matchEntire(base)
+        val nextScene = if (m != null) {
+            val prefix = m.groupValues[1]
+            val whole = m.groupValues[2]
+            val frac = m.groupValues[3].toIntOrNull() ?: 0
+            "$prefix$whole.${frac + 1}"
+        } else {
+            "$base.1"
+        }
+        _sceneName.value = nextScene
+        if (hydrated.value) viewModelScope.launch { settings.setSceneName(nextScene) }
+        refreshAutoFileName()
+    }
+
     fun updateNotes(value: String) {
         _notes.value = value
     }
@@ -1429,7 +1473,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
         }
         recordingStartMs = System.currentTimeMillis()
-        Log.d(TAG, "Set audio source to: ${_audioSource.value}")
+        // H: snapshot device location for metadata (null if permission denied / no fix)
+        pendingLocationTag = com.example.recorderproject.audio.LocationCapture.snapshot(app)
+        Log.d(TAG, "Set audio source to: ${_audioSource.value}, location=${pendingLocationTag ?: "n/a"}")
         try {
             Log.d(TAG, "Calling recorder.start()")
             recorder.start(
@@ -1558,7 +1604,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     recordedFile.copy(name = newFile.name, path = newFile.absolutePath)
                 } else {
                     recordedFile
-                }
+                }.copy(locationTag = pendingLocationTag ?: recordedFile.locationTag)
 
                 // Surface the take in the list NOW — the WAV is on disk and playable.
                 // NR / EQ below can be slow or throw; if we waited until after them to

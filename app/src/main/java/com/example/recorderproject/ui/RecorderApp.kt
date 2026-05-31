@@ -242,6 +242,8 @@ fun RecorderApp(
         liveRawPeakDbfs = viewModel.liveRawPeakDbfs.collectAsStateWithLifecycle().value,
         inputGainDb = inputGainDb,
         onChangeInputGain = { viewModel.updateInputGainDb(it) },
+        onBumpTake = { viewModel.bumpTake() },
+        onBumpSubscene = { viewModel.bumpSubscene() },
         selectedIds = selectedIds,
         onToggleSelect = { viewModel.toggleFileSelection(it.id) },
         onBulkDelete = { viewModel.deleteSelected() },

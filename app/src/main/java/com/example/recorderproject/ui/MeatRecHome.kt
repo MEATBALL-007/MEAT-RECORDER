@@ -154,6 +154,8 @@ fun MeatRecHome(
     liveRawPeakDbfs: Float = Float.NEGATIVE_INFINITY,
     inputGainDb: Float = 0f,
     onChangeInputGain: (Float) -> Unit = {},
+    onBumpTake: () -> Unit = {},
+    onBumpSubscene: () -> Unit = {},
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
@@ -284,6 +286,15 @@ fun MeatRecHome(
                 peakDbfs = liveRawPeakDbfs,
                 inputGainDb = inputGainDb,
                 onChangeInputGain = onChangeInputGain,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
+
+            // H: Take +1 / Scene +0.1 manual bump buttons
+            com.example.recorderproject.ui.components.TakeSceneBumpRow(
+                onBumpTake = onBumpTake,
+                onBumpSubscene = onBumpSubscene,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
