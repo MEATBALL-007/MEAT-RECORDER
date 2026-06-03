@@ -211,11 +211,12 @@ class MainActivity : ComponentActivity() {
                         trimFile != null -> TrimScreen(
                             file = trimFile!!,
                             onConfirm = { inMs, outMs ->
-                                Toast.makeText(
-                                    this,
-                                    "Trim ${inMs}ms..${outMs}ms (export wiring pending)",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                val result = viewModel.trimFile(trimFile!!, inMs, outMs)
+                                if (result != null) {
+                                    android.widget.Toast.makeText(this, "Saved: ${result.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(this, "Trim failed — file may be locked", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                                 viewModel.closeTrim()
                             },
                             onBack = { viewModel.closeTrim() },

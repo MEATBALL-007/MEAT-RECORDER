@@ -58,6 +58,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val recorder = AudioRecorderManager(application.applicationContext)
     private val noiseProcessor = NoiseReductionProcessor()
 
+    // External mic detector — covers USB-C, Bluetooth, wired headsets, BLE audio.
+    private val inputDeviceDetector = com.example.recorderproject.audio.UsbAudioDetector(application.applicationContext)
+    val externalInputDevices: StateFlow<List<com.example.recorderproject.audio.UsbAudioDetector.UsbDevice>> = inputDeviceDetector.devices
+
     // ---- Feature #1: Pre-roll buffer ----
     private val preRollBuffer = com.example.recorderproject.audio.PreRollBuffer(
         sampleRate = 48_000, seconds = 5, channels = 1,
@@ -106,6 +110,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val eqBandGainsPersist = MutableSharedFlow<FloatArray>(extraBufferCapacity = 64)
 
     init {
+        inputDeviceDetector.start()
         viewModelScope.launch {
             try {
                 val snapshot = settings.snapshot()
@@ -734,6 +739,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setMicSourceLabel(label) }
     }
 
+    /** Select a specific hardware input device (USB, BT, wired headset). */
+    fun selectInputDevice(device: com.example.recorderproject.audio.UsbAudioDetector.UsbDevice) {
+        val audioDeviceInfo = inputDeviceDetector.preferredDeviceById(device.id)
+        recorder.setPreferredDevice(audioDeviceInfo)
+        _micSourceLabel.value = device.productName
+        // For Bluetooth SCO mics, also switch to VOICE_COMMUNICATION source so Android
+        // routes the SCO input path (required on most devices to actually capture from BT mic).
+        if (device.category == com.example.recorderproject.audio.UsbAudioDetector.DeviceCategory.BLUETOOTH) {
+            _audioSource.value = android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+            _audioSourceName.value = "Voice Communication"
+        }
+        if (hydrated.value) viewModelScope.launch { settings.setMicSourceLabel(device.productName) }
+    }
+
+    /** Clear hardware device preference — fall back to OS default for chosen AudioSource. */
+    fun clearInputDevice() {
+        recorder.setPreferredDevice(null)
+    }
+
     // Save directory
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
@@ -979,6 +1003,32 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val trimFile: StateFlow<RecordFile?> = _trimFile
     fun openTrim(file: RecordFile) { _trimFile.value = file }
     fun closeTrim() { _trimFile.value = null }
+
+    fun trimFile(file: com.example.recorderproject.model.RecordFile, inMs: Long, outMs: Long): java.io.File? {
+        return try {
+            val result = com.example.recorderproject.audio.WavTrimmer.trimToFile(
+                srcPath = file.path,
+                inMs = inMs,
+                outMs = outMs,
+                sampleRate = file.sampleRate,
+                bitDepth = file.bitDepth,
+                channelCount = file.channelCount,
+            )
+            if (result != null) {
+                val trimRecord = file.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = result.name,
+                    path = result.absolutePath,
+                    durationSeconds = ((outMs - inMs) / 1000L).toInt().coerceAtLeast(1),
+                )
+                _recordFiles.value = _recordFiles.value + trimRecord
+            }
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Trim failed: ${e.message}", e)
+            null
+        }
+    }
 
     /** G18: compressor live during record (uses existing MasterLimiter — toggle only). */
     private val _compressorOn = MutableStateFlow(false)
@@ -2740,6 +2790,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (becomingNoisyRegistered) {
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
         }
+        try { inputDeviceDetector.stop() } catch (_: Exception) {}
         abandonAudioFocus()
         mediaPlayer.release()
     }
