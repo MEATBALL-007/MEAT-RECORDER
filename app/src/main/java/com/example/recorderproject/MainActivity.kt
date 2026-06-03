@@ -77,6 +77,32 @@ class MainActivity : ComponentActivity() {
 
     fun selectCloudDirectory() { cloudDirectoryLauncher.launch(null) }
 
+    private val googleSignInLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                viewModel.refreshDriveSignInState()
+                Toast.makeText(this, "Google Drive connected", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Google Sign-In failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun signInToGoogleDrive() {
+        val options = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+            com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+        )
+            .requestEmail()
+            .requestScopes(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.file"))
+            .build()
+        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this, options)
+        googleSignInLauncher.launch(client.signInIntent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -157,6 +183,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onPickCloudLocation = { selectCloudDirectory() },
                             onOpenPrivacy = { privacyOpen = true },
+                            onSignInDrive = { signInToGoogleDrive() },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
