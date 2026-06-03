@@ -28,6 +28,7 @@ import com.example.recorderproject.ui.RoomProfilerScreen
 import com.example.recorderproject.ui.SceneSlicerScreen
 import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.StatisticsScreen
+import com.example.recorderproject.ui.PrivacyPolicyScreen
 import com.example.recorderproject.ui.TranscriptScreen
 import com.example.recorderproject.ui.TrimScreen
 import com.example.recorderproject.ui.components.PitchShiftDialog
@@ -82,6 +83,7 @@ class MainActivity : ComponentActivity() {
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
             var modeChosen by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("mode_chosen", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
+            var privacyOpen by remember { mutableStateOf(false) }
             // Persist theme by display name across launches so user's pick survives restart.
             val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
             var appTheme by remember { mutableStateOf(AppTheme.fromName(savedThemeName)) }
@@ -136,6 +138,7 @@ class MainActivity : ComponentActivity() {
                             onboardingDone = true
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
+                        privacyOpen -> PrivacyPolicyScreen(onBack = { privacyOpen = false })
                         settingsOpen -> MeatRecSettings(
                             viewModel = viewModel,
                             currentTheme = appTheme,
@@ -153,6 +156,7 @@ class MainActivity : ComponentActivity() {
                                 settingsOpen = false
                             },
                             onPickCloudLocation = { selectCloudDirectory() },
+                            onOpenPrivacy = { privacyOpen = true },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
@@ -263,8 +267,11 @@ class MainActivity : ComponentActivity() {
         val notificationsGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
+        val bluetoothGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
 
-        if (audioGranted && storageGranted && notificationsGranted) {
+        if (audioGranted && storageGranted && notificationsGranted && bluetoothGranted) {
             Toast.makeText(this, "Starting recording...", Toast.LENGTH_SHORT).show()
             viewModel.startRecording()
         } else {
@@ -274,6 +281,9 @@ class MainActivity : ComponentActivity() {
                 if (needsLegacyStoragePermission) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                     add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
                 }
             }.toTypedArray()
             permissionLauncher.launch(perms)

@@ -80,6 +80,7 @@ fun MeatRecSettings(
     onBack: () -> Unit,
     onChangeMode: () -> Unit = {},
     onPickCloudLocation: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
@@ -347,6 +348,17 @@ fun MeatRecSettings(
                     )
                 }
                 Text("→", color = MeatOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+
+            SectionHeader("LEGAL")
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenPrivacy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White.copy(alpha = 0.75f),
+                ),
+            ) {
+                Text("Privacy Policy", fontSize = 13.sp)
             }
         }
 
