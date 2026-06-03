@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
+import com.example.recorderproject.audio.VoiceActivityDetector
 import com.example.recorderproject.audio.NoiseReductionProcessor
 import com.example.recorderproject.audio.StaticSpectrum
 import com.example.recorderproject.data.Defaults
@@ -61,6 +62,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // External mic detector — covers USB-C, Bluetooth, wired headsets, BLE audio.
     private val inputDeviceDetector = com.example.recorderproject.audio.UsbAudioDetector(application.applicationContext)
     val externalInputDevices: StateFlow<List<com.example.recorderproject.audio.UsbAudioDetector.UsbDevice>> = inputDeviceDetector.devices
+    private val voiceActivityDetector = VoiceActivityDetector(
+        context = app.applicationContext,
+        thresholdDb = -38f,
+        triggerWindowMs = 250,
+        cooldownMs = 3000,
+    )
 
     // ---- Feature #1: Pre-roll buffer ----
     private val preRollBuffer = com.example.recorderproject.audio.PreRollBuffer(
@@ -393,13 +400,23 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _vadOn = MutableStateFlow(false)
     val vadOn: StateFlow<Boolean> = _vadOn
     fun toggleVad() {
-        _vadOn.value = !_vadOn.value
-        if (hydrated.value) viewModelScope.launch { settings.setVad(_vadOn.value) }
-        Toast.makeText(
-            app,
-            if (_vadOn.value) "VAD on — placeholder, not yet auto-triggering record" else "VAD off",
-            Toast.LENGTH_SHORT,
-        ).show()
+        val on = !_vadOn.value
+        _vadOn.value = on
+        if (hydrated.value) viewModelScope.launch { settings.setVad(on) }
+        if (on) {
+            voiceActivityDetector.onVoiceDetected = {
+                if (!_isRecording.value) {
+                    Log.i(TAG, "VAD: voice detected — auto-starting recording")
+                    startRecording()
+                }
+            }
+            voiceActivityDetector.start(viewModelScope)
+            Toast.makeText(app, "VAD on — recording will start when voice is detected", Toast.LENGTH_SHORT).show()
+        } else {
+            voiceActivityDetector.stop()
+            voiceActivityDetector.onVoiceDetected = null
+            Toast.makeText(app, "VAD off", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
@@ -1461,6 +1478,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun startRecordingInternal() {
+        if (_vadOn.value) voiceActivityDetector.stop()
         Log.d(TAG, "startRecording() called")
         // Safeguard: if monitor is on, stop it before recording. Monitor while
         // recording risks an acoustic feedback loop (speaker → mic → speaker)
@@ -1692,6 +1710,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _isRecording.value = false
                 try { settings.setIsRecording(false) } catch (_: Exception) {}
                 _currentWaveform.value = emptyList()
+                if (_vadOn.value) {
+                    voiceActivityDetector.onVoiceDetected = {
+                        if (!_isRecording.value) startRecording()
+                    }
+                    voiceActivityDetector.start(viewModelScope)
+                }
 
                 val nrFile = if (_noiseReductionEnabled.value) {
                     Log.d(TAG, "Applying noise reduction")
@@ -2791,6 +2815,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
         }
         try { inputDeviceDetector.stop() } catch (_: Exception) {}
+        try { voiceActivityDetector.stop() } catch (_: Exception) {}
         abandonAudioFocus()
         mediaPlayer.release()
     }
