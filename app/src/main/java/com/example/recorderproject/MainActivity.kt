@@ -259,6 +259,41 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestRecordingPermissions() {
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (!prefs.getBoolean("location_disclosure_shown", false)) {
+            showLocationDisclosureDialog()
+            return
+        }
+        proceedWithRecordingPermissions()
+    }
+
+    private fun showLocationDisclosureDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Location Metadata (Optional)")
+            .setMessage(
+                "MEAT REC can tag your recordings with GPS coordinates — stored inside " +
+                "the WAV file so you remember where each take was recorded.\n\n" +
+                "Location data stays on your device and is never sent to any server.\n\n" +
+                "Allow location tagging?"
+            )
+            .setPositiveButton("Allow") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("location_disclosure_shown", true)
+                    .putBoolean("location_tagging_enabled", true)
+                    .apply()
+                proceedWithRecordingPermissions()
+            }
+            .setNegativeButton("No thanks") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("location_disclosure_shown", true)
+                    .putBoolean("location_tagging_enabled", false)
+                    .apply()
+                proceedWithRecordingPermissions()
+            }
+            .show()
+    }
+
+    private fun proceedWithRecordingPermissions() {
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         val storageGranted = !needsLegacyStoragePermission ||
@@ -272,18 +307,18 @@ class MainActivity : ComponentActivity() {
                 PackageManager.PERMISSION_GRANTED
 
         if (audioGranted && storageGranted && notificationsGranted && bluetoothGranted) {
-            Toast.makeText(this, "Starting recording...", Toast.LENGTH_SHORT).show()
             viewModel.startRecording()
         } else {
-            Toast.makeText(this, "Requesting permissions...", Toast.LENGTH_SHORT).show()
             val perms = buildList {
                 add(Manifest.permission.RECORD_AUDIO)
                 if (needsLegacyStoragePermission) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
                     add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
                     add(Manifest.permission.BLUETOOTH_CONNECT)
+                if (getPreferences(MODE_PRIVATE).getBoolean("location_tagging_enabled", false)) {
+                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 }
             }.toTypedArray()
             permissionLauncher.launch(perms)
