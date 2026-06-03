@@ -72,6 +72,9 @@ fun SettingsScreenV2(
     onPickSaveLocation: () -> Unit,
     onBack: () -> Unit,
     onOpenPrivacy: () -> Unit = {},
+    onChangeMode: () -> Unit = {},
+    onPickCloudLocation: () -> Unit = {},
+    onSignInDrive: () -> Unit = {},
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()

@@ -18,7 +18,6 @@ import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.DesignPickerScreen
 import com.example.recorderproject.ui.MeatRecModeSelector
-import com.example.recorderproject.ui.MeatRecSettings
 import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
@@ -165,14 +164,17 @@ class MainActivity : ComponentActivity() {
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
                         privacyOpen -> PrivacyPolicyScreen(onBack = { privacyOpen = false })
-                        settingsOpen -> MeatRecSettings(
+                        settingsOpen -> SettingsScreenV2(
                             viewModel = viewModel,
-                            currentTheme = appTheme,
+                            theme = appTheme,
+                            reduceMotion = reduceMotion,
                             onChangeTheme = {
                                 appTheme = it
                                 getPreferences(MODE_PRIVATE).edit()
                                     .putString("app_theme", it.displayName).apply()
                             },
+                            onToggleReduceMotion = { reduceMotion = it },
+                            onPickSaveLocation = { directoryLauncher.launch(null) },
                             onBack = { settingsOpen = false },
                             onChangeMode = {
                                 // Reset the mode-chosen flag → next render shows the selector again
@@ -182,7 +184,7 @@ class MainActivity : ComponentActivity() {
                                 settingsOpen = false
                             },
                             onPickCloudLocation = { selectCloudDirectory() },
-                            onOpenPrivacy = { privacyOpen = true },
+                            onOpenPrivacy = { settingsOpen = false; privacyOpen = true },
                             onSignInDrive = { signInToGoogleDrive() },
                         )
                         eqOpen -> EQScreen(
