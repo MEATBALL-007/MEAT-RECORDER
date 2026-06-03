@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
+import com.example.recorderproject.audio.TranscriptionEngine
 import com.example.recorderproject.audio.VoiceActivityDetector
 import com.example.recorderproject.audio.NoiseReductionProcessor
 import com.example.recorderproject.audio.StaticSpectrum
@@ -68,6 +69,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         triggerWindowMs = 250,
         cooldownMs = 3000,
     )
+    private val transcriptionEngine = TranscriptionEngine(app.applicationContext)
 
     // ---- Feature #1: Pre-roll buffer ----
     private val preRollBuffer = com.example.recorderproject.audio.PreRollBuffer(
@@ -1222,13 +1224,30 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _transcripts = MutableStateFlow<Map<String, String>>(emptyMap())
     val transcripts: StateFlow<Map<String, String>> = _transcripts
 
+    private val _transcribeProgress = MutableStateFlow<Map<String, String>>(emptyMap())
+    val transcribeProgress: StateFlow<Map<String, String>> = _transcribeProgress
+
     fun requestTranscribe(file: RecordFile) {
-        // Placeholder: real STT engine wiring is out of scope this round. Seed a stub so
-        // the transcript card has content. Wire ML Kit / SpeechRecognizer here later.
-        _transcripts.value = _transcripts.value + (file.id to
-            "[Placeholder] Transcript engine not yet integrated. " +
-                "When ML Kit / SpeechRecognizer is wired, the result for ${file.name} " +
-                "will appear here. Duration ${file.durationSeconds}s."
+        if (file.path.startsWith("content://")) {
+            Toast.makeText(app, "Transcription requires a local file path, not SAF URI", Toast.LENGTH_LONG).show()
+            return
+        }
+        _transcribeProgress.value = _transcribeProgress.value + (file.id to "Transcribing…")
+        transcriptionEngine.transcribe(
+            filePath = file.path,
+            durationSeconds = file.durationSeconds,
+            scope = viewModelScope,
+            onProgress = { msg ->
+                _transcribeProgress.value = _transcribeProgress.value + (file.id to msg)
+            },
+            onResult = { text ->
+                _transcripts.value = _transcripts.value + (file.id to text)
+                _transcribeProgress.value = _transcribeProgress.value - file.id
+            },
+            onError = { err ->
+                _transcribeProgress.value = _transcribeProgress.value - file.id
+                Toast.makeText(app, err, Toast.LENGTH_LONG).show()
+            },
         )
     }
 
