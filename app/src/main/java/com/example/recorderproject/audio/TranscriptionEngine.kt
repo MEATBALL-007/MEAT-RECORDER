@@ -79,11 +79,17 @@ class TranscriptionEngine(private val context: Context) {
         })
 
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        mediaPlayer = MediaPlayer().apply {
-            @Suppress("DEPRECATION")
-            setAudioStreamType(AudioManager.STREAM_VOICE_CALL)
-            setDataSource(filePath)
-            prepare()
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                @Suppress("DEPRECATION")
+                setAudioStreamType(AudioManager.STREAM_VOICE_CALL)
+                setDataSource(filePath)
+                prepare()
+            }
+        } catch (e: Exception) {
+            cleanup()
+            if (cont.isActive) cont.resumeWithException(Exception("Cannot read audio file: ${e.message}"))
+            return@suspendCancellableCoroutine
         }
 
         val listenMs = (durationSeconds * 1000L + 3000L).coerceAtLeast(5000L)

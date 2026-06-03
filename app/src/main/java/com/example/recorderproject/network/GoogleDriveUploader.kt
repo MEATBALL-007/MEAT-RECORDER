@@ -20,9 +20,11 @@ class GoogleDriveUploader(private val context: Context) {
             val account = GoogleSignIn.getLastSignedInAccount(context)
                 ?: return@withContext null.also { Log.w(TAG, "Not signed in") }
 
-            val token = GoogleAuthUtil.getToken(context, account.account!!, SCOPE)
+            val systemAccount = account.account
+                ?: return@withContext null.also { Log.w(TAG, "account.account is null — cannot get token") }
+            val token = GoogleAuthUtil.getToken(context, systemAccount, SCOPE)
             val boundary = "meatrec_${System.currentTimeMillis()}"
-            val metaJson = """{"name":"${file.name}"}"""
+            val metaJson = JSONObject().apply { put("name", file.name) }.toString()
 
             val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
             val conn = (url.openConnection() as HttpURLConnection).apply {
