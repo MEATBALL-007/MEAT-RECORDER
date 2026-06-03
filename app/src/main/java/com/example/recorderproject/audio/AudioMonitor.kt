@@ -53,6 +53,10 @@ class AudioMonitor(
         thread = null
     }
 
+    // RECORD_AUDIO is gated by the recording flow before start() is ever called; the
+    // try/catch below is the safety net for the case where it somehow isn't (the
+    // AudioRecord constructor can throw SecurityException when permission is missing).
+    @SuppressLint("MissingPermission")
     private fun run() {
         val channelInMask = AudioFormat.CHANNEL_IN_MONO
         val channelOutMask = AudioFormat.CHANNEL_OUT_MONO
@@ -61,61 +65,89 @@ class AudioMonitor(
         val minOut = AudioTrack.getMinBufferSize(sampleRate, channelOutMask, format).coerceAtLeast(256)
         val bufSamples = maxOf(minIn, minOut) / 2 // shorts
 
-        // AudioRecord: use Builder + LOW_LATENCY performance mode (API 28+).
-        // Pre-API-28 falls back to the legacy constructor with minimum buffer.
-        val record = if (android.os.Build.VERSION.SDK_INT >= 28) {
-            AudioRecord.Builder()
-                .setAudioSource(audioSource)
+        // Build the input/output devices up front. A rejected RECORD_AUDIO permission, an
+        // unsupported format, or a busy mic can make these throw — catch it here so the
+        // monitor thread fails quietly instead of taking down the app with an uncaught
+        // exception. Anything created before the throw is released in the catch.
+        var record: AudioRecord? = null
+        var track: AudioTrack? = null
+        try {
+            // AudioRecord: use Builder + LOW_LATENCY performance mode (API 28+).
+            // Pre-API-28 falls back to the legacy constructor with minimum buffer.
+            record = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                AudioRecord.Builder()
+                    .setAudioSource(audioSource)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(format)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelInMask)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(minIn)
+                    .build()
+            } else {
+                AudioRecord(audioSource, sampleRate, channelInMask, format, minIn)
+            }
+
+            // AudioTrack: PERFORMANCE_MODE_LOW_LATENCY (API 26+) for minimum buffer chain.
+            // The output path then uses the device's fast-mixer/AAudio path when available.
+            track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setEncoding(format)
                         .setSampleRate(sampleRate)
-                        .setChannelMask(channelInMask)
+                        .setChannelMask(channelOutMask)
                         .build()
                 )
-                .setBufferSizeInBytes(minIn)
+                .setBufferSizeInBytes(minOut)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .apply {
+                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                        setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                    }
+                }
                 .build()
-        } else {
-            AudioRecord(audioSource, sampleRate, channelInMask, format, minIn)
+        } catch (e: Exception) {
+            Log.e(tag, "Monitor failed to initialise audio devices: ${e.message}", e)
+            running = false
+            try { record?.release() } catch (_: Exception) {}
+            try { track?.release() } catch (_: Exception) {}
+            return
         }
 
-        // AudioTrack: PERFORMANCE_MODE_LOW_LATENCY (API 26+) for minimum buffer chain.
-        // The output path then uses the device's fast-mixer/AAudio path when available.
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(format)
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(channelOutMask)
-                    .build()
-            )
-            .setBufferSizeInBytes(minOut)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .apply {
-                if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                }
-            }
-            .build()
+        // Both devices are non-null here (the catch above returns on any failure).
+        val rec: AudioRecord = record!!
+        val trk: AudioTrack = track!!
+
+        // Bail if either device failed to initialise (e.g. mic held by another app).
+        if (rec.state != AudioRecord.STATE_INITIALIZED ||
+            trk.state != AudioTrack.STATE_INITIALIZED) {
+            Log.e(tag, "Monitor devices not initialised (record=${rec.state} track=${trk.state})")
+            running = false
+            try { rec.release() } catch (_: Exception) {}
+            try { trk.release() } catch (_: Exception) {}
+            return
+        }
 
         // Log effective latency so we can confirm low-latency path engaged
         Log.i(tag, "Monitor started: minIn=${minIn}B minOut=${minOut}B " +
-            "trackPerfMode=${if (android.os.Build.VERSION.SDK_INT >= 26) track.performanceMode else "n/a"} " +
+            "trackPerfMode=${if (android.os.Build.VERSION.SDK_INT >= 26) trk.performanceMode else "n/a"} " +
             "(0=NONE, 1=POWER_SAVING, 2=LOW_LATENCY)")
 
         try {
-            record.startRecording()
-            track.play()
+            rec.startRecording()
+            trk.play()
 
             val buf = ShortArray(bufSamples)
             while (running) {
-                val read = record.read(buf, 0, buf.size)
+                val read = rec.read(buf, 0, buf.size)
                 if (read <= 0) continue
 
                 // Apply EQ chain if enabled bands present
@@ -130,7 +162,7 @@ class AudioMonitor(
                     }
                 }
 
-                track.write(buf, 0, read)
+                trk.write(buf, 0, read)
 
                 // Compute level for any registered meter listener (~5-15µs per buffer)
                 val cb = levelListener
@@ -153,8 +185,8 @@ class AudioMonitor(
         } catch (e: Exception) {
             Log.e(tag, "Monitor loop crashed: ${e.message}", e)
         } finally {
-            try { record.stop(); record.release() } catch (_: Exception) {}
-            try { track.stop(); track.release() } catch (_: Exception) {}
+            try { rec.stop(); rec.release() } catch (_: Exception) {}
+            try { trk.stop(); trk.release() } catch (_: Exception) {}
         }
     }
 }

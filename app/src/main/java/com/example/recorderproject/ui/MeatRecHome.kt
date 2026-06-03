@@ -689,8 +689,8 @@ private fun RecordingSettingsCard(
                 }
                 PillRow(
                     options = listOf(
-                        Triple(1, "Mono", "VM40 Ch.1"),
-                        Triple(2, "Stereo", "VM40 Dual"),
+                        Triple(1, "Mono", "1 channel"),
+                        Triple(2, "Stereo", "2 channels"),
                     ),
                     current = channelCount,
                     onSelect = onChangeChannelCount,

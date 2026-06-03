@@ -97,6 +97,13 @@ class AudioRecorderManager(private val context: Context) {
         audioSource = source
     }
 
+    // Preferred input device — when set, AudioRecord routes from this hardware device
+    // instead of the OS-selected default. Used for USB-C mics, BT headsets, wired headsets.
+    private var preferredInputDevice: android.media.AudioDeviceInfo? = null
+    fun setPreferredDevice(device: android.media.AudioDeviceInfo?) {
+        preferredInputDevice = device
+    }
+
     // ------------- Real-time EQ during recording (Phase 7) -------------
     //
     // When set, every PCM frame read from AudioRecord is run through this biquad cascade
@@ -287,6 +294,13 @@ class AudioRecorderManager(private val context: Context) {
                 audioFormat,
                 bufferSize
             )
+            // Route to the user's selected hardware device (USB, BT, wired headset, etc.)
+            preferredInputDevice?.let { dev ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    recorder?.preferredDevice = dev
+                    Log.d(TAG, "setPreferredDevice: ${dev.productName} (id=${dev.id})")
+                }
+            }
             Log.d(TAG, "AudioRecord created successfully, state: ${recorder?.state}")
             recorder?.startRecording()
             Log.d(TAG, "Recording started, recordingState: ${recorder?.recordingState}")

@@ -99,9 +99,7 @@ fun TranscriptScreen(
                             fontSize = 14.sp,
                         )
                         Text(
-                            "The transcription engine is staged but not yet active. " +
-                                "When wired up, taps to Transcribe will run the recording " +
-                                "through ML Kit / SpeechRecognizer and display the result here.",
+                            "Tap Transcribe below to convert this recording to text using on-device speech recognition.",
                             color = RecorderBlueGrey,
                             fontSize = 12.sp,
                         )

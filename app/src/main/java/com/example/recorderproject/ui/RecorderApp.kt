@@ -152,6 +152,7 @@ fun RecorderApp(
     val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
+    val externalInputDevices by viewModel.externalInputDevices.collectAsStateWithLifecycle()
 
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -283,9 +284,14 @@ fun RecorderApp(
     if (sourcePickerOpen) {
         AudioSourcePicker(
             currentSourceName = micSource,
-            usbDevices = emptyList(),
-            onPickBuiltin = { viewModel.setMicSource(it) },
-            onPickUsb = { viewModel.setMicSource(it.productName) },
+            externalDevices = externalInputDevices,
+            onPickBuiltin = {
+                viewModel.clearInputDevice()
+                viewModel.setMicSource(it)
+            },
+            onPickExternal = { device ->
+                viewModel.selectInputDevice(device)
+            },
             onDismiss = { sourcePickerOpen = false },
         )
     }
