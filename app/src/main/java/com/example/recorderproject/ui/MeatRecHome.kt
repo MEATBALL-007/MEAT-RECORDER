@@ -162,6 +162,8 @@ fun MeatRecHome(
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
+    isPro: Boolean = true,
+    onTapUpgrade: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -225,6 +227,26 @@ fun MeatRecHome(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                 )
+            }
+            // Persistent "PRO" upgrade pill — free users only, one tap to the paywall.
+            if (!isPro) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MeatYellow)
+                        .clickable(onClick = onTapUpgrade)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        "★ PRO",
+                        color = Color(0xFF0C0C10),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                    )
+                }
             }
             Box(
                 modifier = Modifier

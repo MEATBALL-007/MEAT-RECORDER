@@ -153,6 +153,7 @@ fun RecorderApp(
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
     val externalInputDevices by viewModel.externalInputDevices.collectAsStateWithLifecycle()
+    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
 
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -178,6 +179,8 @@ fun RecorderApp(
             if (isRecording) viewModel.stopRecording() else onStartRecording()
         },
         onOpenSettings = onOpenSettings,
+        isPro = isPro,
+        onTapUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO) },
         onOpenSourcePicker = { sourcePickerOpen = true },
         onPickSaveLocation = onSelectSaveLocation,
         onAnalyzeRoom = { viewModel.openRoomProfiler() },
