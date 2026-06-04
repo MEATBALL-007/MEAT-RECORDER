@@ -41,7 +41,7 @@ sealed class LoudnessTarget {
     }
 
     companion object {
-        val DEFAULT: LoudnessTarget = Podcast
+        val DEFAULT: LoudnessTarget = Off
 
         fun encode(t: LoudnessTarget): Triple<String, Float, Float> = when (t) {
             Off        -> Triple("OFF",       0f, 0f)
