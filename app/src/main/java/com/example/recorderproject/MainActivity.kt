@@ -126,6 +126,15 @@ class MainActivity : ComponentActivity() {
                 val statsOpen by viewModel.statsOpen.collectAsStateWithLifecycle()
                 val trimFile by viewModel.trimFile.collectAsStateWithLifecycle()
                 val designPickerOpen by viewModel.designPickerOpen.collectAsStateWithLifecycle()
+                val paywallFeature by viewModel.paywallFeature.collectAsStateWithLifecycle()
+                val proPrice by viewModel.billing.priceText.collectAsStateWithLifecycle()
+                val billingMessage by viewModel.billing.lastMessage.collectAsStateWithLifecycle()
+                androidx.compose.runtime.LaunchedEffect(billingMessage) {
+                    billingMessage?.let {
+                        Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show()
+                        viewModel.billing.consumeMessage()
+                    }
+                }
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -281,6 +290,17 @@ class MainActivity : ComponentActivity() {
                                 ).show()
                             },
                             onDismiss = { viewModel.closePitchShift() },
+                        )
+                    }
+
+                    // Pro paywall — floats over any route when a free user taps a locked feature.
+                    if (paywallFeature != null) {
+                        com.example.recorderproject.ui.components.ProUpgradeSheet(
+                            highlight = paywallFeature,
+                            priceText = proPrice,
+                            onUpgrade = { viewModel.billing.launchPurchase(this@MainActivity) },
+                            onRestore = { viewModel.billing.queryPurchases() },
+                            onDismiss = { viewModel.closePaywall() },
                         )
                     }
                 }

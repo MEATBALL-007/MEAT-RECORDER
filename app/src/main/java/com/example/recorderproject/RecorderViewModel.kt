@@ -64,6 +64,29 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // External mic detector — covers USB-C, Bluetooth, wired headsets, BLE audio.
     private val inputDeviceDetector = com.example.recorderproject.audio.UsbAudioDetector(application.applicationContext)
     val externalInputDevices: StateFlow<List<com.example.recorderproject.audio.UsbAudioDetector.UsbDevice>> = inputDeviceDetector.devices
+
+    // ---- Monetization: MEAT REC Pro one-time unlock ----
+    val entitlements = com.example.recorderproject.billing.EntitlementStore(application.applicationContext)
+    val billing = com.example.recorderproject.billing.BillingManager(application.applicationContext, entitlements)
+    /** True when the user owns Pro (or debug-forced). Gate Pro features on this. */
+    val isPro: StateFlow<Boolean> = entitlements.isPro
+
+    /** When a free user taps a locked feature, this holds it so the UI shows the paywall. Null = closed. */
+    private val _paywallFeature = MutableStateFlow<com.example.recorderproject.billing.ProFeature?>(null)
+    val paywallFeature: StateFlow<com.example.recorderproject.billing.ProFeature?> = _paywallFeature
+    fun openPaywall(feature: com.example.recorderproject.billing.ProFeature) { _paywallFeature.value = feature }
+    fun closePaywall() { _paywallFeature.value = null }
+
+    /**
+     * Gate a Pro feature. Returns true and runs nothing extra if the user is Pro;
+     * otherwise opens the paywall for [feature] and returns false. Callers should
+     * `if (!requirePro(X)) return` before doing the gated work.
+     */
+    fun requirePro(feature: com.example.recorderproject.billing.ProFeature): Boolean {
+        if (isPro.value) return true
+        openPaywall(feature)
+        return false
+    }
     private val voiceActivityDetector = VoiceActivityDetector(
         context = app.applicationContext,
         thresholdDb = -38f,
@@ -129,6 +152,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     init {
         inputDeviceDetector.start()
+        billing.start()
         viewModelScope.launch {
             try {
                 val snapshot = settings.snapshot()
@@ -522,6 +546,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val bitDepth: StateFlow<Int> = _bitDepth
 
     fun updateBitDepth(v: Int) {
+        // Free tier caps at 16-bit; 24/32-bit float is Pro.
+        if (v > com.example.recorderproject.billing.ProFeature.FREE_MAX_BIT_DEPTH &&
+            !requirePro(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO)
+        ) return
         _bitDepth.value = v
         recorder.setBitDepth(v)
         if (hydrated.value) viewModelScope.launch { settings.setBitDepth(v) }
@@ -769,6 +797,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     /** Select a specific hardware input device (USB, BT, wired headset). */
     fun selectInputDevice(device: com.example.recorderproject.audio.UsbAudioDetector.UsbDevice) {
+        // External mic routing (USB / BT / wired) is a Pro feature.
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.EXTERNAL_MIC)) return
         val audioDeviceInfo = inputDeviceDetector.preferredDeviceById(device.id)
         recorder.setPreferredDevice(audioDeviceInfo)
         _micSourceLabel.value = device.productName
@@ -847,6 +877,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     /** Open A/B compare with the two currently selected files. Requires exactly 2. */
     fun openAbCompareFromSelection() {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.ANALYSIS_TOOLS)) return
         val ids = _selectedFileIds.value
         if (ids.size != 2) {
             Toast.makeText(app, "Select exactly 2 files to compare", Toast.LENGTH_SHORT).show()
@@ -928,7 +959,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** Phase C: which file's harmonic portrait is currently open (null = none). */
     private val _portraitFile = MutableStateFlow<RecordFile?>(null)
     val portraitFile: StateFlow<RecordFile?> = _portraitFile
-    fun openPortrait(file: RecordFile) { _portraitFile.value = file }
+    fun openPortrait(file: RecordFile) {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.ANALYSIS_TOOLS)) return
+        _portraitFile.value = file
+    }
     fun closePortrait() { _portraitFile.value = null }
 
     /** Phase D: ghost-take file overlaid on next recording (null = no ghost). */
@@ -939,7 +973,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** Phase D: is the multi-take comparison screen open? */
     private val _multiTakeOpen = MutableStateFlow(false)
     val multiTakeOpen: StateFlow<Boolean> = _multiTakeOpen
-    fun openMultiTake() { _multiTakeOpen.value = true }
+    fun openMultiTake() {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.ANALYSIS_TOOLS)) return
+        _multiTakeOpen.value = true
+    }
     fun closeMultiTake() { _multiTakeOpen.value = false }
 
     /** G4: menu screen open? */
@@ -1078,6 +1115,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _cloudBackupOn = MutableStateFlow(false)
     val cloudBackupOn: StateFlow<Boolean> = _cloudBackupOn
     fun toggleCloudBackup() {
+        // Turning cloud backup ON requires Pro; turning it off is always allowed.
+        if (!_cloudBackupOn.value && !requirePro(com.example.recorderproject.billing.ProFeature.CLOUD_BACKUP)) return
         _cloudBackupOn.value = !_cloudBackupOn.value
         if (_cloudBackupOn.value && _cloudBackupUri.value == null) {
             Toast.makeText(app, "Pick a cloud folder in Settings → Cloud Backup Folder", Toast.LENGTH_LONG).show()
@@ -1186,13 +1225,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** Phase E: which file's pitch-shift dialog is open (null = none). */
     private val _pitchShiftFile = MutableStateFlow<RecordFile?>(null)
     val pitchShiftFile: StateFlow<RecordFile?> = _pitchShiftFile
-    fun openPitchShift(file: RecordFile) { _pitchShiftFile.value = file }
+    fun openPitchShift(file: RecordFile) {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.PITCH_SHIFT)) return
+        _pitchShiftFile.value = file
+    }
     fun closePitchShift() { _pitchShiftFile.value = null }
 
     /** Phase E: room profiler screen open? */
     private val _roomProfilerOpen = MutableStateFlow(false)
     val roomProfilerOpen: StateFlow<Boolean> = _roomProfilerOpen
-    fun openRoomProfiler() { _roomProfilerOpen.value = true }
+    fun openRoomProfiler() {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.ANALYSIS_TOOLS)) return
+        _roomProfilerOpen.value = true
+    }
     fun closeRoomProfiler() { _roomProfilerOpen.value = false }
 
     /** Phase E: which file's scene-slicer screen is open (null = none). */
@@ -1252,6 +1297,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val transcribeProgress: StateFlow<Map<String, String>> = _transcribeProgress
 
     fun requestTranscribe(file: RecordFile) {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.TRANSCRIPTION)) return
         if (file.path.startsWith("content://")) {
             Toast.makeText(app, "Transcription requires a local file path, not SAF URI", Toast.LENGTH_LONG).show()
             return
@@ -1413,6 +1459,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun updateSampleRate(value: Int) {
+        // Free tier caps at 48 kHz; 96 kHz is Pro.
+        if (value > com.example.recorderproject.billing.ProFeature.FREE_MAX_SAMPLE_RATE &&
+            !requirePro(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO)
+        ) return
         _sampleRate.value = value
         if (hydrated.value) viewModelScope.launch { settings.setSampleRate(value) }
     }
@@ -2129,6 +2179,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onEQOpen(file: RecordFile) {
+        if (!requirePro(com.example.recorderproject.billing.ProFeature.FULL_EQ)) return
         _eqSourceFile.value = file
         val srcPath = file.path
         if (!srcPath.startsWith("content://")) {
@@ -2863,6 +2914,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
         try { inputDeviceDetector.stop() } catch (_: Exception) {}
         try { voiceActivityDetector.stop() } catch (_: Exception) {}
+        try { billing.stop() } catch (_: Exception) {}
         abandonAudioFocus()
         mediaPlayer.release()
     }

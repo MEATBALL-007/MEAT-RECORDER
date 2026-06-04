@@ -16,8 +16,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -94,6 +96,8 @@ fun SettingsScreenV2(
     val lockScreenControlsOn by viewModel.lockScreenControlsOn.collectAsStateWithLifecycle()
     val groupByScene by viewModel.groupByScene.collectAsStateWithLifecycle()
     val autoStopMin by viewModel.autoStopMinutes.collectAsStateWithLifecycle()
+    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
+    val proPrice by viewModel.billing.priceText.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -117,6 +121,16 @@ fun SettingsScreenV2(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SectionHeader("MEAT REC PRO", accent = RecorderYellow)
+            ProSettingsRow(
+                isPro = isPro,
+                priceText = proPrice,
+                onUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO) },
+                onRestore = { viewModel.billing.queryPurchases() },
+                debugForcePro = viewModel.entitlements.isDebugForcePro(),
+                onToggleDebugPro = { viewModel.entitlements.setDebugForcePro(it) },
+            )
+
             SectionHeader("APPEARANCE", accent = RecorderYellow)
             ThemeGrid(current = theme, onChange = onChangeTheme)
 
@@ -297,6 +311,66 @@ fun SettingsScreenV2(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = RecorderBlueGrey),
             ) {
                 Text("Privacy Policy", fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProSettingsRow(
+    isPro: Boolean,
+    priceText: String?,
+    onUpgrade: () -> Unit,
+    onRestore: () -> Unit,
+    debugForcePro: Boolean = false,
+    onToggleDebugPro: (Boolean) -> Unit = {},
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RecorderCharcoalCard)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (com.example.recorderproject.BuildConfig.DEBUG) {
+            ToggleRow(
+                label = "DEBUG: simulate Pro",
+                detail = "Test-only toggle — never shown in the released app",
+                value = debugForcePro,
+                onChange = onToggleDebugPro,
+            )
+        }
+        if (isPro) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(20.dp))
+                Text("Pro unlocked", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+            Text("Thanks for supporting MEAT REC — all features are unlocked.",
+                color = RecorderBlueGrey, fontSize = 12.sp, lineHeight = 17.sp)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(20.dp))
+                Text("Upgrade to Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+            Text("Unlock studio quality, external mics, EQ, pitch shift, transcription, cloud backup & more. One payment, forever.",
+                color = RecorderBlueGrey, fontSize = 12.sp, lineHeight = 17.sp)
+            Button(
+                onClick = onUpgrade,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    if (priceText != null) "Upgrade — $priceText" else "See Pro features",
+                    color = Color.White, fontWeight = FontWeight.Bold,
+                )
+            }
+            OutlinedButton(
+                onClick = onRestore,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = RecorderBlueGrey),
+            ) {
+                Text("Restore purchase", fontSize = 13.sp)
             }
         }
     }
