@@ -36,13 +36,25 @@ class BillingManager(
         private const val TAG = "BillingManager"
         /** Must match the in-app product ID created in Play Console. */
         const val PRODUCT_PRO_LIFETIME = "meatrec_pro_lifetime"
+
+        /** Launch promotion: the Play Console price IS the promo price; the struck-through
+         *  "original" is computed as promoPrice / (1 - discount). 35% off → original = price / 0.65. */
+        const val LAUNCH_DISCOUNT_PERCENT = 35
+
+        /** Shown before Play Billing connects / before the product exists in Play Console. */
+        const val FALLBACK_PROMO_PRICE = "฿129"
+        const val FALLBACK_ORIGINAL_PRICE = "฿199"
     }
 
     private val appContext = context.applicationContext
 
-    /** Localized price string from Play (e.g. "฿199.00"); null until product details load. */
+    /** Localized promo price string from Play (e.g. "฿129.00"); null until product details load. */
     private val _priceText = MutableStateFlow<String?>(null)
     val priceText: StateFlow<String?> = _priceText
+
+    /** Struck-through "original" price, computed from the live price + launch discount; null until loaded. */
+    private val _originalPriceText = MutableStateFlow<String?>(null)
+    val originalPriceText: StateFlow<String?> = _originalPriceText
 
     /** True once billing has connected and we've completed at least one purchase query. */
     private val _ready = MutableStateFlow(false)
@@ -105,11 +117,35 @@ class BillingManager(
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 val pd = details.firstOrNull { it.productId == PRODUCT_PRO_LIFETIME }
                 proProductDetails = pd
-                _priceText.value = pd?.oneTimePurchaseOfferDetails?.formattedPrice
-                Log.d(TAG, "Product loaded: price=${_priceText.value}")
+                val offer = pd?.oneTimePurchaseOfferDetails
+                _priceText.value = offer?.formattedPrice
+                _originalPriceText.value = computeOriginalPrice(offer)
+                Log.d(TAG, "Product loaded: price=${_priceText.value} was=${_originalPriceText.value}")
             } else {
                 Log.w(TAG, "queryProduct failed: ${result.debugMessage}")
             }
+        }
+    }
+
+    /**
+     * Compute the struck-through "original" price for the launch promo from the live
+     * Play price. original = promo / (1 - discount). Formats in the product's own currency
+     * so it reads correctly in every region. Returns null if details aren't available.
+     */
+    private fun computeOriginalPrice(offer: ProductDetails.OneTimePurchaseOfferDetails?): String? {
+        offer ?: return null
+        return try {
+            val promo = offer.priceAmountMicros / 1_000_000.0
+            if (promo <= 0.0) return null
+            val original = promo / (1.0 - LAUNCH_DISCOUNT_PERCENT / 100.0)
+            val fmt = java.text.NumberFormat.getCurrencyInstance()
+            fmt.currency = java.util.Currency.getInstance(offer.priceCurrencyCode)
+            // Round up to a whole unit so it reads as a clean "199" rather than "198.46".
+            fmt.maximumFractionDigits = 0
+            fmt.format(kotlin.math.ceil(original))
+        } catch (e: Exception) {
+            Log.w(TAG, "computeOriginalPrice failed: ${e.message}")
+            null
         }
     }
 

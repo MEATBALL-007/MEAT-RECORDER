@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,10 +47,16 @@ import com.example.recorderproject.ui.theme.RecorderYellow
 fun ProUpgradeSheet(
     highlight: ProFeature?,
     priceText: String?,
+    originalPriceText: String? = null,
     onUpgrade: () -> Unit,
     onRestore: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Live price when Play is connected; otherwise the launch-promo fallbacks so the
+    // offer is visible even before the Play Console product is set up.
+    val promoPrice = priceText ?: com.example.recorderproject.billing.BillingManager.FALLBACK_PROMO_PRICE
+    val wasPrice = originalPriceText ?: com.example.recorderproject.billing.BillingManager.FALLBACK_ORIGINAL_PRICE
+    val discount = com.example.recorderproject.billing.BillingManager.LAUNCH_DISCOUNT_PERCENT
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -66,6 +73,18 @@ fun ProUpgradeSheet(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(26.dp))
                 Text("MEAT REC Pro", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                Spacer(Modifier.weight(1f))
+                // Launch promo badge
+                Text(
+                    "เปิดตัว -$discount%",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(RecorderOrange)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
             }
 
             highlight?.let {
@@ -84,14 +103,40 @@ fun ProUpgradeSheet(
                 ProFeature.entries.forEach { f -> FeatureLine(f.title, f.blurb) }
             }
 
+            // Price line — struck-through "was" price next to the launch price.
+            Row(
+                modifier = Modifier.padding(top = 6.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    wasPrice,
+                    color = RecorderBlueGrey,
+                    fontSize = 16.sp,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
+                )
+                Text(
+                    promoPrice,
+                    color = RecorderYellow,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "lifetime",
+                    color = RecorderBlueGrey,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+
             Button(
                 onClick = onUpgrade,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Text(
-                    if (priceText != null) "Upgrade — $priceText" else "Upgrade to Pro",
+                    "Upgrade now — $promoPrice",
                     color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp,
                     modifier = Modifier.padding(vertical = 4.dp),
                 )

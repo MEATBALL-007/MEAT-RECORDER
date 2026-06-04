@@ -189,15 +189,27 @@ fun MeatRecHome(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "MeatRec",
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.sp,
+                    )
+                    // Brand becomes "MeatRec PRO" once the user owns Pro.
+                    if (isPro) {
+                        Text(
+                            "PRO",
+                            color = MeatYellow,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                }
                 Text(
-                    "MeatRec",
-                    color = Color.White,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.sp,
-                )
-                Text(
-                    "Field Recording System",
+                    if (isPro) "Pro · Field Recording System" else "Field Recording System",
                     color = MeatYellow,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,

@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
                 val designPickerOpen by viewModel.designPickerOpen.collectAsStateWithLifecycle()
                 val paywallFeature by viewModel.paywallFeature.collectAsStateWithLifecycle()
                 val proPrice by viewModel.billing.priceText.collectAsStateWithLifecycle()
+                val proOriginalPrice by viewModel.billing.originalPriceText.collectAsStateWithLifecycle()
                 val billingMessage by viewModel.billing.lastMessage.collectAsStateWithLifecycle()
                 androidx.compose.runtime.LaunchedEffect(billingMessage) {
                     billingMessage?.let {
@@ -298,6 +299,7 @@ class MainActivity : ComponentActivity() {
                         com.example.recorderproject.ui.components.ProUpgradeSheet(
                             highlight = paywallFeature,
                             priceText = proPrice,
+                            originalPriceText = proOriginalPrice,
                             onUpgrade = { viewModel.billing.launchPurchase(this@MainActivity) },
                             onRestore = { viewModel.billing.queryPurchases() },
                             onDismiss = { viewModel.closePaywall() },
