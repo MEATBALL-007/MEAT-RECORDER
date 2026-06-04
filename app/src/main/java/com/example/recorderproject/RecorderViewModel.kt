@@ -170,6 +170,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                         Log.w(TAG, "Persisted SAF URI no longer granted, clearing: ${e.message}")
                         _saveDirectoryUri.value = null
                         settings.setSaveDirectoryUri(null)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                app,
+                                "⚠️ Save folder permission expired — recordings will be saved to App Storage. Go to Settings → Save Location to re-select your folder.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
                     }
                 }
                 // Recovery: if a previous session died while recording, the WAV is now
@@ -1794,6 +1801,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 } else {
                     recordedFile
                 }.copy(locationTag = pendingLocationTag ?: recordedFile.locationTag)
+
+                // Tell the user exactly where the file landed, especially important when
+                // no save folder is set and the file went to internal app storage.
+                if (_saveDirectoryUri.value == null) {
+                    Toast.makeText(
+                        app,
+                        "✅ Saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
 
                 // Surface the take in the list NOW — the WAV is on disk and playable.
                 // NR / EQ below can be slow or throw; if we waited until after them to

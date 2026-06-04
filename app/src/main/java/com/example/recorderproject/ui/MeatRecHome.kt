@@ -165,6 +165,8 @@ fun MeatRecHome(
     phaseCorrelation: Float = 0f,
     isPro: Boolean = true,
     onTapUpgrade: () -> Unit = {},
+    hasSaveLocation: Boolean = true,
+    onPickSaveLocation2: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -172,6 +174,35 @@ fun MeatRecHome(
             .fillMaxSize()
             .background(Color.Black),
     ) {
+        // Save-location warning banner — shown until the user picks a folder
+        if (!hasSaveLocation) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF2D1A00))
+                    .clickable(onClick = onPickSaveLocation2)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("⚠️", fontSize = 16.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "No save folder set",
+                        color = Color(0xFFFFC72C),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Recordings save to App Storage. Tap to choose a folder.",
+                        color = Color(0xFFB07A40),
+                        fontSize = 11.sp,
+                    )
+                }
+                Text("Set →", color = Color(0xFFFFC72C), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
         // ============== 1. ORANGE TOP BAR (with gradient depth) ==============
         Row(
             modifier = Modifier

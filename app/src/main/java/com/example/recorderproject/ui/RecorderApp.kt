@@ -118,6 +118,7 @@ fun RecorderApp(
     val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
 
     val isPro by viewModel.isPro.collectAsStateWithLifecycle()
+    val saveDirectoryUri by viewModel.saveDirectoryUri.collectAsStateWithLifecycle()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     // Elapsed seconds tracker — increments while recording; enforces 15-min free limit
@@ -133,7 +134,7 @@ fun RecorderApp(
                 when (elapsed) {
                     warnSecs  -> android.widget.Toast.makeText(
                         ctx,
-                        "2 minutes left — upgrade to Pro for unlimited recording",
+                        "1 minute left — upgrade to Pro for unlimited recording",
                         android.widget.Toast.LENGTH_LONG,
                     ).show()
                     limitSecs -> {
@@ -200,6 +201,8 @@ fun RecorderApp(
         onTapUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO) },
         onOpenSourcePicker = { sourcePickerOpen = true },
         onPickSaveLocation = onSelectSaveLocation,
+        hasSaveLocation = saveDirectoryUri != null,
+        onPickSaveLocation2 = onSelectSaveLocation,
         onAnalyzeRoom = { viewModel.openRoomProfiler() },
         files = files,
         onTapFile = { viewModel.selectFile(it) },
