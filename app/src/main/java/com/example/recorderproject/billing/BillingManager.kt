@@ -41,9 +41,43 @@ class BillingManager(
          *  "original" is computed as promoPrice / (1 - discount). 35% off → original = price / 0.65. */
         const val LAUNCH_DISCOUNT_PERCENT = 35
 
-        /** Shown before Play Billing connects / before the product exists in Play Console. */
-        const val FALLBACK_PROMO_PRICE = "฿129"
-        const val FALLBACK_ORIGINAL_PRICE = "฿199"
+        /**
+         * Fallback prices shown ONLY before Play Billing connects (pre-Play-Console setup,
+         * emulator without Play, transient errors). Real installs get the exact, auto-localized
+         * Play price via formattedPrice. Here we pick a sensible round price in the device's
+         * own currency so non-Thai testers don't see Baht. Pair = (original, promo).
+         */
+        private val FALLBACK_BY_CURRENCY: Map<String, Pair<String, String>> = mapOf(
+            "THB" to ("฿199" to "฿129"),
+            "USD" to ("$5.99" to "$3.99"),
+            "EUR" to ("€5.99" to "€3.99"),
+            "GBP" to ("£5.49" to "£3.49"),
+            "JPY" to ("¥900" to "¥600"),
+            "CNY" to ("¥45" to "¥29"),
+            "INR" to ("₹449" to "₹299"),
+            "KRW" to ("₩7,500" to "₩4,900"),
+            "IDR" to ("Rp99.000" to "Rp65.000"),
+            "VND" to ("₫149.000" to "₫99.000"),
+            "BRL" to ("R$24,90" to "R$15,90"),
+            "RUB" to ("499 ₽" to "329 ₽"),
+            "TRY" to ("₺189" to "₺125"),
+            "PHP" to ("₱299" to "₱199"),
+            "MYR" to ("RM23" to "RM15"),
+            "AUD" to ("$8.99" to "$5.99"),
+            "CAD" to ("$7.99" to "$5.49"),
+            "MXN" to ("$109" to "$72"),
+        )
+
+        private fun deviceCurrencyCode(): String = try {
+            java.util.Currency.getInstance(java.util.Locale.getDefault()).currencyCode
+        } catch (_: Exception) { "USD" }
+
+        /** (original, promo) fallback strings in the device's local currency; defaults to USD. */
+        fun localizedFallback(): Pair<String, String> =
+            FALLBACK_BY_CURRENCY[deviceCurrencyCode()] ?: FALLBACK_BY_CURRENCY.getValue("USD")
+
+        val FALLBACK_PROMO_PRICE: String get() = localizedFallback().second
+        val FALLBACK_ORIGINAL_PRICE: String get() = localizedFallback().first
     }
 
     private val appContext = context.applicationContext
