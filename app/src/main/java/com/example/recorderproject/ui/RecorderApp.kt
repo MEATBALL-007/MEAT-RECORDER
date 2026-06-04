@@ -249,6 +249,7 @@ fun RecorderApp(
         onChangeInputGain = { viewModel.updateInputGainDb(it) },
         onBumpTake = { viewModel.bumpTake(+1) },
         onBumpSubscene = { viewModel.bumpSubscene(+1) },
+        onSubsceneMinus = { viewModel.bumpSubscene(-1) },
         onTakeMinus1 = { viewModel.bumpTake(-1) },
         onSceneMinus1 = { viewModel.bumpScene(-1) },
         onScenePlus1 = { viewModel.bumpScene(+1) },

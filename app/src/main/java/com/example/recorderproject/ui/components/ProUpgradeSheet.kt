@@ -74,9 +74,9 @@ fun ProUpgradeSheet(
                 Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(26.dp))
                 Text("MEAT REC Pro", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Spacer(Modifier.weight(1f))
-                // Launch promo badge
+                // Launch promo badge — always English, by design (brand marketing tag).
                 Text(
-                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.launch_promo, discount),
+                    "LAUNCH -$discount%",
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,

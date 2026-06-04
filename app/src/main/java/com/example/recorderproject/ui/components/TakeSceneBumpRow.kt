@@ -25,7 +25,7 @@ private val BlueGrey = Color(0xFF7B8189)
  * Manual take / scene increment + decrement buttons.
  *
  *  Row 1 (TAKE):  [-1]  [+1]
- *  Row 2 (SCENE): [-1]  [+0.1]  [+1]
+ *  Row 2 (SCENE): [-1]  [-0.1]  [+0.1]  [+1]
  *
  * All buttons mutate the current file-name + scene-name state via the VM.
  * Take is clamped to >= 1; scene whole number clamped to >= 1; scene fraction
@@ -36,6 +36,7 @@ fun TakeSceneBumpRow(
     onTakeMinus: () -> Unit,
     onTakePlus: () -> Unit,
     onSceneMinus: () -> Unit,
+    onSceneMinusDot1: () -> Unit,
     onSceneDot1: () -> Unit,
     onScenePlus: () -> Unit,
     modifier: Modifier = Modifier,
@@ -57,9 +58,10 @@ fun TakeSceneBumpRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RowLabel("SCENE")
-            BumpButton(label = "−1",   accent = Yellow, onClick = onSceneMinus, modifier = Modifier.weight(1f))
-            BumpButton(label = "+0.1", accent = Yellow, onClick = onSceneDot1,  modifier = Modifier.weight(1f))
-            BumpButton(label = "+1",   accent = Yellow, onClick = onScenePlus,  modifier = Modifier.weight(1f))
+            BumpButton(label = "−1",   accent = Yellow, onClick = onSceneMinus,    modifier = Modifier.weight(1f))
+            BumpButton(label = "−0.1", accent = Yellow, onClick = onSceneMinusDot1, modifier = Modifier.weight(1f))
+            BumpButton(label = "+0.1", accent = Yellow, onClick = onSceneDot1,     modifier = Modifier.weight(1f))
+            BumpButton(label = "+1",   accent = Yellow, onClick = onScenePlus,     modifier = Modifier.weight(1f))
         }
     }
 }

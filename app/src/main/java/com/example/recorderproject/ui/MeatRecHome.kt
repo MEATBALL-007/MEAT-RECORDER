@@ -156,6 +156,7 @@ fun MeatRecHome(
     onChangeInputGain: (Float) -> Unit = {},
     onBumpTake: () -> Unit = {},
     onBumpSubscene: () -> Unit = {},
+    onSubsceneMinus: () -> Unit = {},
     onTakeMinus1: () -> Unit = {},
     onSceneMinus1: () -> Unit = {},
     onScenePlus1: () -> Unit = {},
@@ -336,6 +337,7 @@ fun MeatRecHome(
                 onTakeMinus = onTakeMinus1,
                 onTakePlus = onBumpTake,
                 onSceneMinus = onSceneMinus1,
+                onSceneMinusDot1 = onSubsceneMinus,
                 onSceneDot1 = onBumpSubscene,
                 onScenePlus = onScenePlus1,
                 modifier = Modifier
