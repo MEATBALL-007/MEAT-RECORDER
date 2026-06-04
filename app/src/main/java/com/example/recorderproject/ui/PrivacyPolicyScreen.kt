@@ -86,7 +86,7 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
                 "no advertising SDKs are included in MEAT REC."
             )
             PolicySection("Contact",
-                "Questions? Contact: support@meatrec.app"
+                "Questions? Contact: taboonmbhat@gmail.com"
             )
             Spacer(Modifier.height(32.dp))
         }
