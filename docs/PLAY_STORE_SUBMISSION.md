@@ -24,7 +24,7 @@
 |---|---|---|
 | Hi-res icon 512×512 | `docs/play-assets/icon-512.png` | ✅ พร้อม |
 | Feature graphic 1024×500 | `docs/play-assets/feature-1024x500.png` | ✅ พร้อม |
-| Privacy policy (HTML) | `docs/privacy/index.html` | ✅ พร้อม host |
+| Privacy policy URL (live) | **https://meatball-007.github.io/meatrec-privacy/** | ✅ LIVE สาธารณะแล้ว |
 | Screenshots (≥2) | — | ⏳ ถ่ายจาก emulator/มือถือ |
 
 ### วิธีถ่าย screenshots
@@ -95,11 +95,12 @@ unless you choose to back them up.
 
 ## ลำดับขั้นตอนการส่ง
 
-### ☐ 1. เปิด GitHub Pages → ได้ privacy URL
-1. Push branch ขึ้น GitHub แล้ว (ดูข้อ Asset C)
-2. GitHub repo → **Settings → Pages**
-3. Source = Deploy from a branch · Branch = `main` (หลัง merge) หรือ `feat/loudness-delivery` · Folder = `/docs`
-4. รอ ~1 นาที → URL = `https://meatball-007.github.io/MEAT-RECORDER/privacy/`
+### ☑ 1. Privacy policy URL — ✅ เสร็จแล้ว (LIVE)
+- Host บน public repo แยกต่างหาก: https://github.com/MEATBALL-007/meatrec-privacy
+- URL สาธารณะพร้อมใช้: **https://meatball-007.github.io/meatrec-privacy/**
+- เอา URL นี้ไปวางใน Play Console → App content → Privacy policy ได้เลย
+- (โค้ดหลักยังเป็น private repo — repo นี้มีแค่ไฟล์ privacy policy)
+- อยากแก้เนื้อหา: แก้ `index.html` ใน repo meatrec-privacy แล้ว push → Pages อัปเดตอัตโนมัติ
 
 ### ☐ 2. Google Cloud OAuth — ✅ เสร็จแล้ว
 - OAuth client (Android) ผูกกับ package + SHA-1 แล้ว
