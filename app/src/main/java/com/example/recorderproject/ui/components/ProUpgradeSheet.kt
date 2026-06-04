@@ -121,6 +121,7 @@ private fun ProFeature.initialSlide(): Int = when (this) {
     ProFeature.CLOUD_BACKUP                  -> 4
     ProFeature.ANALYSIS_TOOLS,
     ProFeature.ALL_THEMES                    -> 5
+    ProFeature.RECORDING_LIMIT               -> 0
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

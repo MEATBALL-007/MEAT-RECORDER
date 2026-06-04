@@ -4,7 +4,7 @@ package com.example.recorderproject.billing
  * Catalogue of features locked behind MEAT REC Pro. Used to label the paywall and to
  * decide whether tapping a control should run the feature or open the upgrade sheet.
  *
- * Free tier (NOT listed here) covers: unlimited recording, up to 48 kHz / 16-bit,
+ * Free tier (NOT listed here) covers: recording up to 15 min per take, up to 48 kHz / 16-bit,
  * mono + stereo, built-in mic + basic source picker, playback, basic trim, rename,
  * share, file list/search/sort, and the first 3 themes.
  */
@@ -19,7 +19,8 @@ enum class ProFeature(val title: String, val blurb: String) {
     TRANSCRIPTION("Transcribe", "Turn recordings into text on-device"),
     CLOUD_BACKUP("Cloud backup", "Auto-upload takes to your Google Drive"),
     ANALYSIS_TOOLS("Analysis suite", "Spectrogram, harmonic portrait, room profiler, A/B & multi-take"),
-    ALL_THEMES("All themes", "Unlock all 10 appearance themes");
+    ALL_THEMES("All themes", "Unlock all 10 appearance themes"),
+    RECORDING_LIMIT("Unlimited recording", "Free recordings are limited to 15 min — go unlimited with Pro");
 
     companion object {
         /** Free users are capped to these. */
@@ -28,5 +29,11 @@ enum class ProFeature(val title: String, val blurb: String) {
 
         /** Theme indices [0..2] are free; the rest require Pro. */
         const val FREE_THEME_COUNT = 3
+
+        /** Free recording length cap in seconds (15 minutes). */
+        const val FREE_RECORDING_LIMIT_SECONDS = 15 * 60
+
+        /** Warn the user when this many seconds remain before the limit. */
+        const val FREE_RECORDING_WARN_SECONDS = 2 * 60
     }
 }

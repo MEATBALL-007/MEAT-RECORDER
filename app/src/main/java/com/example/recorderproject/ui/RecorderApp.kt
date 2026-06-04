@@ -117,19 +117,36 @@ fun RecorderApp(
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
     val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
 
-    // Elapsed seconds tracker — increments while recording
+    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    // Elapsed seconds tracker — increments while recording; enforces 15-min free limit
     var elapsed by remember { mutableStateOf(0) }
+    val limitSecs = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS
+    val warnSecs  = limitSecs - com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS
     LaunchedEffect(isRecording) {
         elapsed = 0
         while (isRecording) {
             kotlinx.coroutines.delay(1000)
             elapsed++
+            if (!isPro) {
+                when (elapsed) {
+                    warnSecs  -> android.widget.Toast.makeText(
+                        ctx,
+                        "2 minutes left — upgrade to Pro for unlimited recording",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                    limitSecs -> {
+                        viewModel.stopRecording()
+                        viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
+                    }
+                }
+            }
         }
     }
 
     // D: surface delivery-render result as a Toast
     val lastDelivery by viewModel.lastDeliveryResult.collectAsStateWithLifecycle()
-    val ctx = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(lastDelivery) {
         val r = lastDelivery ?: return@LaunchedEffect
         val target = r.targetLufs ?: return@LaunchedEffect
@@ -154,7 +171,6 @@ fun RecorderApp(
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
     val externalInputDevices by viewModel.externalInputDevices.collectAsStateWithLifecycle()
-    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
 
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxSize()) {
