@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Sistema di registrazione sul campo</string>
+    <string name="app_tagline_pro">Pro · Sistema di registrazione sul campo</string>
+    <string name="tap_to_record">Tocca per registrare</string>
+    <string name="tap_to_start">Tocca il pulsante per iniziare a registrare</string>
+    <string name="settings">Impostazioni</string>
+    <string name="language">Lingua</string>
+    <string name="language_hint">Scegli la tua lingua. L’app si aggiorna subito.</string>
+    <string name="reset_factory">Ripristina impostazioni di fabbrica</string>
+    <string name="reset_factory_detail">Cancella tutte le impostazioni. Registrazioni, preset e Pro restano al sicuro.</string>
+    <string name="reset_confirm_title">Ripristinare tutte le impostazioni?</string>
+    <string name="reset_confirm_body">Le impostazioni di registrazione tornano ai valori predefiniti. Registrazioni, preset, tema, lingua e Pro NON vengono toccati.</string>
+    <string name="reset">Ripristina</string>
+    <string name="cancel">Annulla</string>
+    <string name="privacy_policy">Informativa sulla privacy</string>
+    <string name="upgrade_to_pro">Passa a Pro</string>
+    <string name="restore_purchase">Ripristina acquisto</string>
+    <string name="pro_unlocked">Pro sbloccato</string>
+    <string name="launch_promo">LANCIO -%1$d%%</string>
+    <string name="upgrade_now">Passa a Pro ora — %1$s</string>
+    <string name="lifetime">a vita</string>
+</resources>

@@ -3,7 +3,7 @@ package com.example.recorderproject
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -35,7 +35,7 @@ import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val viewModel by viewModels<RecorderViewModel>()
 
     // Storage permission is a runtime permission only on API <= 28 (legacy storage).
@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
             var modeChosen by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("mode_chosen", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
+            var languageOpen by remember { mutableStateOf(false) }
             var privacyOpen by remember { mutableStateOf(false) }
             // Persist theme by display name across launches so user's pick survives restart.
             val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
@@ -174,6 +175,9 @@ class MainActivity : ComponentActivity() {
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
                         privacyOpen -> PrivacyPolicyScreen(onBack = { privacyOpen = false })
+                        languageOpen -> com.example.recorderproject.ui.LanguageScreen(
+                            onBack = { languageOpen = false },
+                        )
                         settingsOpen -> SettingsScreenV2(
                             viewModel = viewModel,
                             theme = appTheme,
@@ -196,6 +200,7 @@ class MainActivity : ComponentActivity() {
                             onPickCloudLocation = { selectCloudDirectory() },
                             onOpenPrivacy = { settingsOpen = false; privacyOpen = true },
                             onSignInDrive = { signInToGoogleDrive() },
+                            onOpenLanguage = { settingsOpen = false; languageOpen = true },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
@@ -274,6 +279,11 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onOpenSettings = { settingsOpen = true },
+                            onOpenPresets = {
+                                // CUSTOM/mode chip → re-open the preset & mode selector (not Settings).
+                                modeChosen = false
+                                getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", false).apply()
+                            },
                         )
                     }
 

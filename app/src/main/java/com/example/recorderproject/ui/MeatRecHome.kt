@@ -209,7 +209,10 @@ fun MeatRecHome(
                     }
                 }
                 Text(
-                    if (isPro) "Pro · Field Recording System" else "Field Recording System",
+                    androidx.compose.ui.res.stringResource(
+                        if (isPro) com.example.recorderproject.R.string.app_tagline_pro
+                        else com.example.recorderproject.R.string.app_tagline
+                    ),
                     color = MeatYellow,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -298,14 +301,14 @@ fun MeatRecHome(
                 BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
             }
             Text(
-                if (isRecording) "Recording…" else "Tap to Record",
+                if (isRecording) "Recording…" else androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.tap_to_record),
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
             )
             if (!isRecording) {
                 Text(
-                    "Tap the button to start recording",
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.tap_to_start),
                     color = Color.White.copy(alpha = 0.50f),
                     fontSize = 14.sp,
                 )

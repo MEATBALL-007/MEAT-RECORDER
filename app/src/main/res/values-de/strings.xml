@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Field-Recording-System</string>
+    <string name="app_tagline_pro">Pro · Field-Recording-System</string>
+    <string name="tap_to_record">Zum Aufnehmen tippen</string>
+    <string name="tap_to_start">Auf die Taste tippen, um die Aufnahme zu starten</string>
+    <string name="settings">Einstellungen</string>
+    <string name="language">Sprache</string>
+    <string name="language_hint">Wähle deine Sprache. Die App aktualisiert sich sofort.</string>
+    <string name="reset_factory">Auf Werkseinstellungen zurücksetzen</string>
+    <string name="reset_factory_detail">Löscht alle Einstellungen. Aufnahmen, Presets &amp; Pro bleiben erhalten.</string>
+    <string name="reset_confirm_title">Alle Einstellungen zurücksetzen?</string>
+    <string name="reset_confirm_body">Aufnahme-Einstellungen werden zurückgesetzt. Deine Aufnahmen, Presets, Design, Sprache und Pro bleiben unberührt.</string>
+    <string name="reset">Zurücksetzen</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="privacy_policy">Datenschutz</string>
+    <string name="upgrade_to_pro">Auf Pro upgraden</string>
+    <string name="restore_purchase">Kauf wiederherstellen</string>
+    <string name="pro_unlocked">Pro freigeschaltet</string>
+    <string name="launch_promo">START -%1$d%%</string>
+    <string name="upgrade_now">Jetzt upgraden — %1$s</string>
+    <string name="lifetime">lebenslang</string>
+</resources>

@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">نظام التسجيل الميداني</string>
+    <string name="app_tagline_pro">Pro · نظام التسجيل الميداني</string>
+    <string name="tap_to_record">اضغط للتسجيل</string>
+    <string name="tap_to_start">اضغط على الزر لبدء التسجيل</string>
+    <string name="settings">الإعدادات</string>
+    <string name="language">اللغة</string>
+    <string name="language_hint">اختر لغتك. يتحدّث التطبيق فوراً.</string>
+    <string name="reset_factory">إعادة الضبط إلى إعدادات المصنع</string>
+    <string name="reset_factory_detail">يمسح كل الإعدادات. تبقى التسجيلات والإعدادات المسبقة و Pro آمنة.</string>
+    <string name="reset_confirm_title">إعادة ضبط كل الإعدادات؟</string>
+    <string name="reset_confirm_body">تعود إعدادات التسجيل إلى الوضع الافتراضي. لا تتأثر تسجيلاتك وإعداداتك ومظهرك ولغتك وتفعيل Pro.</string>
+    <string name="reset">إعادة ضبط</string>
+    <string name="cancel">إلغاء</string>
+    <string name="privacy_policy">سياسة الخصوصية</string>
+    <string name="upgrade_to_pro">الترقية إلى Pro</string>
+    <string name="restore_purchase">استعادة الشراء</string>
+    <string name="pro_unlocked">تم تفعيل Pro</string>
+    <string name="launch_promo">إطلاق -%1$d%%</string>
+    <string name="upgrade_now">الترقية الآن — %1$s</string>
+    <string name="lifetime">مدى الحياة</string>
+</resources>

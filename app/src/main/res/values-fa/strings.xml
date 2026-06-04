@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">سیستم ضبط میدانی</string>
+    <string name="app_tagline_pro">Pro · سیستم ضبط میدانی</string>
+    <string name="tap_to_record">برای ضبط ضربه بزنید</string>
+    <string name="tap_to_start">برای شروع ضبط روی دکمه ضربه بزنید</string>
+    <string name="settings">تنظیمات</string>
+    <string name="language">زبان</string>
+    <string name="language_hint">زبان خود را انتخاب کنید. برنامه بلافاصله به‌روز می‌شود.</string>
+    <string name="reset_factory">بازنشانی به تنظیمات کارخانه</string>
+    <string name="reset_factory_detail">همه تنظیمات را پاک می‌کند. ضبط‌ها، پیش‌تنظیم‌ها و Pro حفظ می‌شوند.</string>
+    <string name="reset_confirm_title">همه تنظیمات بازنشانی شود؟</string>
+    <string name="reset_confirm_body">تنظیمات ضبط به حالت پیش‌فرض بازمی‌گردد. ضبط‌ها، پیش‌تنظیم‌ها، پوسته، زبان و Pro شما تغییر نمی‌کند.</string>
+    <string name="reset">بازنشانی</string>
+    <string name="cancel">لغو</string>
+    <string name="privacy_policy">سیاست حریم خصوصی</string>
+    <string name="upgrade_to_pro">ارتقا به Pro</string>
+    <string name="restore_purchase">بازیابی خرید</string>
+    <string name="pro_unlocked">Pro فعال شد</string>
+    <string name="launch_promo">عرضه -%1$d%%</string>
+    <string name="upgrade_now">همین حالا ارتقا دهید — %1$s</string>
+    <string name="lifetime">مادام‌العمر</string>
+</resources>

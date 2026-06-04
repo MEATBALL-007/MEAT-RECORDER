@@ -76,7 +76,7 @@ fun ProUpgradeSheet(
                 Spacer(Modifier.weight(1f))
                 // Launch promo badge
                 Text(
-                    "เปิดตัว -$discount%",
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.launch_promo, discount),
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -122,7 +122,7 @@ fun ProUpgradeSheet(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "lifetime",
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.lifetime),
                     color = RecorderBlueGrey,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(bottom = 4.dp),
@@ -136,7 +136,7 @@ fun ProUpgradeSheet(
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Text(
-                    "Upgrade now — $promoPrice",
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.upgrade_now, promoPrice),
                     color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp,
                     modifier = Modifier.padding(vertical = 4.dp),
                 )

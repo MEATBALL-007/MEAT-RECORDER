@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Система польового запису</string>
+    <string name="app_tagline_pro">Pro · Система польового запису</string>
+    <string name="tap_to_record">Торкніться, щоб записати</string>
+    <string name="tap_to_start">Торкніться кнопки, щоб почати запис</string>
+    <string name="settings">Налаштування</string>
+    <string name="language">Мова</string>
+    <string name="language_hint">Виберіть мову. Застосунок оновиться миттєво.</string>
+    <string name="reset_factory">Скинути до заводських налаштувань</string>
+    <string name="reset_factory_detail">Стирає всі налаштування. Записи, пресети та Pro лишаються в безпеці.</string>
+    <string name="reset_confirm_title">Скинути всі налаштування?</string>
+    <string name="reset_confirm_body">Налаштування запису повернуться до типових. Ваші записи, пресети, тема, мова та Pro НЕ зачіпаються.</string>
+    <string name="reset">Скинути</string>
+    <string name="cancel">Скасувати</string>
+    <string name="privacy_policy">Політика конфіденційності</string>
+    <string name="upgrade_to_pro">Перейти на Pro</string>
+    <string name="restore_purchase">Відновити покупку</string>
+    <string name="pro_unlocked">Pro розблоковано</string>
+    <string name="launch_promo">СТАРТ -%1$d%%</string>
+    <string name="upgrade_now">Перейти на Pro — %1$s</string>
+    <string name="lifetime">назавжди</string>
+</resources>

@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">フィールド録音システム</string>
+    <string name="app_tagline_pro">Pro · フィールド録音システム</string>
+    <string name="tap_to_record">タップして録音</string>
+    <string name="tap_to_start">ボタンをタップして録音を開始</string>
+    <string name="settings">設定</string>
+    <string name="language">言語</string>
+    <string name="language_hint">言語を選択してください。アプリは即座に更新されます。</string>
+    <string name="reset_factory">工場出荷時設定にリセット</string>
+    <string name="reset_factory_detail">すべての設定を消去します。録音・プリセット・Pro は保持されます。</string>
+    <string name="reset_confirm_title">すべての設定をリセットしますか？</string>
+    <string name="reset_confirm_body">録音設定が初期値に戻ります。録音・プリセット・テーマ・言語・Pro 解除は変更されません。</string>
+    <string name="reset">リセット</string>
+    <string name="cancel">キャンセル</string>
+    <string name="privacy_policy">プライバシーポリシー</string>
+    <string name="upgrade_to_pro">Pro にアップグレード</string>
+    <string name="restore_purchase">購入を復元</string>
+    <string name="pro_unlocked">Pro 解除済み</string>
+    <string name="launch_promo">ローンチ -%1$d%%</string>
+    <string name="upgrade_now">今すぐアップグレード — %1$s</string>
+    <string name="lifetime">買い切り</string>
+</resources>

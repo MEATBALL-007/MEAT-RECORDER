@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Sistem Perekaman Lapangan</string>
+    <string name="app_tagline_pro">Pro · Sistem Perekaman Lapangan</string>
+    <string name="tap_to_record">Ketuk untuk Merekam</string>
+    <string name="tap_to_start">Ketuk tombol untuk mulai merekam</string>
+    <string name="settings">Pengaturan</string>
+    <string name="language">Bahasa</string>
+    <string name="language_hint">Pilih bahasa Anda. Aplikasi langsung diperbarui.</string>
+    <string name="reset_factory">Setel ulang ke setelan pabrik</string>
+    <string name="reset_factory_detail">Menghapus semua pengaturan. Rekaman, preset &amp; Pro tetap aman.</string>
+    <string name="reset_confirm_title">Setel ulang semua pengaturan?</string>
+    <string name="reset_confirm_body">Pengaturan perekaman kembali ke default. Rekaman, preset, tema, bahasa, dan Pro Anda TIDAK terpengaruh.</string>
+    <string name="reset">Setel ulang</string>
+    <string name="cancel">Batal</string>
+    <string name="privacy_policy">Kebijakan Privasi</string>
+    <string name="upgrade_to_pro">Tingkatkan ke Pro</string>
+    <string name="restore_purchase">Pulihkan pembelian</string>
+    <string name="pro_unlocked">Pro terbuka</string>
+    <string name="launch_promo">PELUNCURAN -%1$d%%</string>
+    <string name="upgrade_now">Tingkatkan sekarang — %1$s</string>
+    <string name="lifetime">seumur hidup</string>
+</resources>

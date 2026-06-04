@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Hệ thống ghi âm hiện trường</string>
+    <string name="app_tagline_pro">Pro · Hệ thống ghi âm hiện trường</string>
+    <string name="tap_to_record">Chạm để ghi âm</string>
+    <string name="tap_to_start">Chạm nút để bắt đầu ghi âm</string>
+    <string name="settings">Cài đặt</string>
+    <string name="language">Ngôn ngữ</string>
+    <string name="language_hint">Chọn ngôn ngữ của bạn. Ứng dụng cập nhật ngay.</string>
+    <string name="reset_factory">Khôi phục cài đặt gốc</string>
+    <string name="reset_factory_detail">Xóa mọi cài đặt. Bản ghi, cài đặt sẵn và Pro vẫn an toàn.</string>
+    <string name="reset_confirm_title">Đặt lại toàn bộ cài đặt?</string>
+    <string name="reset_confirm_body">Cài đặt ghi âm trở về mặc định. Bản ghi, cài đặt sẵn, giao diện, ngôn ngữ và Pro của bạn KHÔNG bị ảnh hưởng.</string>
+    <string name="reset">Đặt lại</string>
+    <string name="cancel">Hủy</string>
+    <string name="privacy_policy">Chính sách quyền riêng tư</string>
+    <string name="upgrade_to_pro">Nâng cấp lên Pro</string>
+    <string name="restore_purchase">Khôi phục giao dịch</string>
+    <string name="pro_unlocked">Đã mở khóa Pro</string>
+    <string name="launch_promo">RA MẮT -%1$d%%</string>
+    <string name="upgrade_now">Nâng cấp ngay — %1$s</string>
+    <string name="lifetime">trọn đời</string>
+</resources>

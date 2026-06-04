@@ -34,6 +34,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,7 +80,9 @@ fun SettingsScreenV2(
     onChangeMode: () -> Unit = {},
     onPickCloudLocation: () -> Unit = {},
     onSignInDrive: () -> Unit = {},
+    onOpenLanguage: () -> Unit = {},
 ) {
+    var showResetDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
@@ -250,12 +255,26 @@ fun SettingsScreenV2(
                 onPick = onPickSaveLocation,
             )
 
+            SectionHeader("LANGUAGE", accent = Color(0xFF3DC399))
+            NavRow(
+                label = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.language),
+                detail = com.example.recorderproject.i18n.AppLanguages.currentDisplayName(),
+                onClick = onOpenLanguage,
+            )
+
             SectionHeader("ACCESSIBILITY", accent = Color(0xFF7B8189))
             ToggleRow(
                 label = "Reduce motion",
                 detail = "Disables splash intro and non-essential animations",
                 value = reduceMotion,
                 onChange = onToggleReduceMotion,
+            )
+
+            SectionHeader("DATA", accent = RecorderOrange)
+            NavRow(
+                label = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_factory),
+                detail = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_factory_detail),
+                onClick = { showResetDialog = true },
             )
 
             SectionHeader("ABOUT", accent = RecorderOrange)
@@ -312,7 +331,52 @@ fun SettingsScreenV2(
             ) {
                 Text("Privacy Policy", fontSize = 13.sp)
             }
+            Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showResetDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            containerColor = RecorderCharcoalCard,
+            title = { Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_confirm_title), color = Color.White, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Text(
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_confirm_body),
+                    color = RecorderBlueGrey,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.resetFactory(); showResetDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
+                ) { Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset), color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showResetDialog = false }) {
+                    Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.cancel), color = RecorderBlueGrey)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun NavRow(label: String, detail: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RecorderCharcoalCard)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = RecorderBlueGrey, fontSize = 12.sp)
+        }
+        Text("›", color = RecorderOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
 }
 

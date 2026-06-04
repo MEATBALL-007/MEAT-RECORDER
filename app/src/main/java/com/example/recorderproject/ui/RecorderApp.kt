@@ -92,6 +92,7 @@ fun RecorderApp(
     onRequestPermission: () -> Unit,
     onOpenEQOnLast: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenPresets: () -> Unit = {},
 ) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val files by viewModel.visibleRecordFiles.collectAsStateWithLifecycle()
@@ -214,7 +215,7 @@ fun RecorderApp(
         sortOrder = sortOrder,
         onSortChange = { viewModel.setSortOrder(it) },
         currentMode = viewModel.recorderMode.collectAsStateWithLifecycle().value,
-        onChangeMode = onOpenSettings,
+        onChangeMode = onOpenPresets,
         cueCount = viewModel.liveCueCount.collectAsStateWithLifecycle().value,
         isPaused = viewModel.isPaused.collectAsStateWithLifecycle().value,
         onDropCue = { viewModel.dropCueMarker() },
