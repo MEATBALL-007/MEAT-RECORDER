@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -171,7 +172,7 @@ fun MeatRecHome(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         // Save-location warning banner — shown until the user picks a folder
         // ============== 1. ORANGE TOP BAR (with gradient depth) ==============
@@ -457,7 +458,7 @@ fun MeatRecHome(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF1F1F1F))
+                                .background(MaterialTheme.colorScheme.surface)
                                 .clickable(onClick = onClearSelection)
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                         )
@@ -469,7 +470,7 @@ fun MeatRecHome(
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF1F1F1F))
+                                    .background(MaterialTheme.colorScheme.surface)
                                     .clickable(onClick = onBulkCompareAb)
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                             )
@@ -817,7 +818,7 @@ private fun RecordingSettingsCard(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (stableActive) MeatOrange else Color(0xFF1F1F1F))
+                                .background(if (stableActive) MeatOrange else MaterialTheme.colorScheme.surface)
                                 .clickable { onChangeMaxDuration(stableValue) }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center,
@@ -992,7 +993,7 @@ private fun <T> PillRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1F1F1F))
+            .background(MaterialTheme.colorScheme.surface)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
