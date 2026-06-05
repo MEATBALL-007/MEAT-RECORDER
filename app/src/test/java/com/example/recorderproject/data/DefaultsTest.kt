@@ -58,8 +58,8 @@ class DefaultsTest {
         assertEquals(false, Defaults.EQ_BYPASSED)
     }
 
-    @Test fun defaults_include_loudness_target_podcast() {
-        assertEquals("PODCAST", Defaults.defaultLoudnessTarget)
+    @Test fun defaults_include_loudness_target_off() {
+        assertEquals("OFF", Defaults.defaultLoudnessTarget)
         assertEquals(-16f, Defaults.customLoudnessLufs, 0.001f)
         assertEquals(-1f, Defaults.customLoudnessTpCeiling, 0.001f)
     }

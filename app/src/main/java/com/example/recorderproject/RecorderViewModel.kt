@@ -1197,6 +1197,39 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
     fun cancelAutoStop() { autoStopJob?.cancel() }
 
+    private var recordingLimitJob: Job? = null
+
+    private fun startFreeTierLimitTimer() {
+        recordingLimitJob?.cancel()
+        if (isPro.value) return
+        val limitMs = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS * 1000L
+        val warnMs  = (com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS -
+                       com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS) * 1000L
+        val warnMinutes = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS / 60
+        recordingLimitJob = viewModelScope.launch {
+            delay(warnMs)
+            if (_isRecording.value && !isPro.value) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        app,
+                        "$warnMinutes minute left — upgrade to Pro for unlimited recording",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+            delay(limitMs - warnMs)
+            if (_isRecording.value && !isPro.value) {
+                stopRecording()
+                openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
+            }
+        }
+    }
+
+    private fun cancelFreeTierLimitTimer() {
+        recordingLimitJob?.cancel()
+        recordingLimitJob = null
+    }
+
     /** G23: which files were viewed/played recently (FIFO, capped 10). */
     private val _recentIds = MutableStateFlow<List<String>>(emptyList())
     val recentIds: StateFlow<List<String>> = _recentIds
@@ -1725,6 +1758,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             }
             Log.d(TAG, "Recording started successfully")
             Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
+            startFreeTierLimitTimer()
             // Persist active-take path so a crash-then-relaunch can recover it
             viewModelScope.launch {
                 try {
@@ -1748,6 +1782,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Log.d(TAG, "Not recording, ignoring")
             return
         }
+        cancelFreeTierLimitTimer()
         abandonAudioFocus()
         if (becomingNoisyRegistered) {
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
@@ -1794,22 +1829,24 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 val renamedPath = withContext(Dispatchers.IO) {
                     recorder.autoRenameFile(recordedFile.path, capturedScene, capturedNotes)
                 }
-                val renamedFile = if (renamedPath != recordedFile.path) {
+                val wasRenamed = renamedPath != recordedFile.path
+                val renamedFile = if (wasRenamed) {
                     val newFile = File(renamedPath)
-                    Toast.makeText(app, "Auto-named file: ${newFile.name}", Toast.LENGTH_SHORT).show()
                     recordedFile.copy(name = newFile.name, path = newFile.absolutePath)
                 } else {
                     recordedFile
                 }.copy(locationTag = pendingLocationTag ?: recordedFile.locationTag)
 
-                // Tell the user exactly where the file landed, especially important when
-                // no save folder is set and the file went to internal app storage.
+                // Single toast: merge auto-rename + save-location info to avoid two back-to-back
+                // notifications when both conditions are true (no save folder + scene name triggered rename).
                 if (_saveDirectoryUri.value == null) {
-                    Toast.makeText(
-                        app,
-                        "✅ Saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder.",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    val msg = if (wasRenamed)
+                        "✅ Auto-named & saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder."
+                    else
+                        "✅ Saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder."
+                    Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
+                } else if (wasRenamed) {
+                    Toast.makeText(app, "Auto-named file: ${renamedFile.name}", Toast.LENGTH_SHORT).show()
                 }
 
                 // Surface the take in the list NOW — the WAV is on disk and playable.

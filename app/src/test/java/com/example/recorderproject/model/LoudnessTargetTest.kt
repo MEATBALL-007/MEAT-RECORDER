@@ -7,11 +7,11 @@ import org.junit.Test
 
 class LoudnessTargetTest {
 
-    @Test fun default_is_podcast_at_minus_16() {
+    @Test fun default_is_off_with_null_targets() {
         val t = LoudnessTarget.DEFAULT
-        assertTrue(t is LoudnessTarget.Podcast)
-        assertEquals(-16f, t.targetLufs)
-        assertEquals(-1f, t.tpCeilingDbtp)
+        assertTrue(t is LoudnessTarget.Off)
+        assertNull(t.targetLufs)
+        assertNull(t.tpCeilingDbtp)
     }
 
     @Test fun off_has_null_target_and_ceiling() {

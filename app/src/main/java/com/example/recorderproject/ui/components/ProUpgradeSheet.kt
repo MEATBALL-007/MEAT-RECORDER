@@ -70,6 +70,7 @@ private val SlideGreen  = Color(0xFF3DDC97)
 private val SlidePurple = Color(0xFFA78BFA)
 private val SlideTeal   = Color(0xFF2DD4BF)
 private val SlidePink   = Color(0xFFF472B6)
+private val SlideAmber  = Color(0xFFFF9800)
 
 private val proSlides = listOf(
     ProSlide(
@@ -108,6 +109,12 @@ private val proSlides = listOf(
         accentColor = SlidePink,
         draw = { drawThemesVisual() },
     ),
+    ProSlide(
+        title = "Unlimited Recording",
+        blurb = "Remove the 5-min cap — record as long as you need",
+        accentColor = SlideAmber,
+        draw = { drawUnlimitedRecordingVisual() },
+    ),
 )
 
 private fun ProFeature.initialSlide(): Int = when (this) {
@@ -121,7 +128,7 @@ private fun ProFeature.initialSlide(): Int = when (this) {
     ProFeature.CLOUD_BACKUP                  -> 4
     ProFeature.ANALYSIS_TOOLS,
     ProFeature.ALL_THEMES                    -> 5
-    ProFeature.RECORDING_LIMIT               -> 0
+    ProFeature.RECORDING_LIMIT               -> 6
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -483,4 +490,32 @@ private fun DrawScope.drawThemesVisual() {
         drawRect(c.copy(alpha = 0.7f), topLeft = Offset(bx, baseY - h), size = Size(barW, h))
         bx += barW + spacing
     }
+}
+
+private fun DrawScope.drawUnlimitedRecordingVisual() {
+    val midY = size.height * 0.55f
+    val path = Path()
+    val pts  = 100
+    for (i in 0..pts) {
+        val fx       = i / pts.toFloat()
+        val envelope = sin(fx * PI.toFloat()) * size.height * 0.20f
+        val y        = midY + sin(fx * 14f * PI.toFloat()).toFloat() * envelope
+        val px       = fx * size.width * 0.75f
+        if (i == 0) path.moveTo(px, y) else path.lineTo(px, y)
+    }
+    drawPath(path, color = SlideAmber.copy(alpha = 0.85f), style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+    // Dashed continuation — signals recording keeps going
+    drawLine(
+        color = SlideAmber.copy(alpha = 0.40f),
+        start = Offset(size.width * 0.75f, midY),
+        end   = Offset(size.width * 0.95f, midY),
+        strokeWidth = 2.5.dp.toPx(),
+        pathEffect  = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
+    )
+    // Record indicator dot
+    drawCircle(
+        color = SlideAmber,
+        radius = size.width * 0.04f,
+        center = Offset(size.width * 0.08f, midY - size.height * 0.18f),
+    )
 }

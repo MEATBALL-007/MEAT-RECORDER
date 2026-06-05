@@ -166,7 +166,6 @@ fun MeatRecHome(
     isPro: Boolean = true,
     onTapUpgrade: () -> Unit = {},
     hasSaveLocation: Boolean = true,
-    onPickSaveLocation2: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -180,7 +179,7 @@ fun MeatRecHome(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF2D1A00))
-                    .clickable(onClick = onPickSaveLocation2)
+                    .clickable(onClick = onPickSaveLocation)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),

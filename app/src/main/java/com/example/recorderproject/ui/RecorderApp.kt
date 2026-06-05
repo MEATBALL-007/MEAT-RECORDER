@@ -121,28 +121,13 @@ fun RecorderApp(
     val saveDirectoryUri by viewModel.saveDirectoryUri.collectAsStateWithLifecycle()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
-    // Elapsed seconds tracker — increments while recording; enforces 15-min free limit
+    // Elapsed seconds — UI display only; limit enforcement is in RecorderViewModel
     var elapsed by remember { mutableStateOf(0) }
-    val limitSecs = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS
-    val warnSecs  = limitSecs - com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS
     LaunchedEffect(isRecording) {
         elapsed = 0
         while (isRecording) {
             kotlinx.coroutines.delay(1000)
             elapsed++
-            if (!isPro) {
-                when (elapsed) {
-                    warnSecs  -> android.widget.Toast.makeText(
-                        ctx,
-                        "1 minute left — upgrade to Pro for unlimited recording",
-                        android.widget.Toast.LENGTH_LONG,
-                    ).show()
-                    limitSecs -> {
-                        viewModel.stopRecording()
-                        viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
-                    }
-                }
-            }
         }
     }
 
@@ -202,7 +187,6 @@ fun RecorderApp(
         onOpenSourcePicker = { sourcePickerOpen = true },
         onPickSaveLocation = onSelectSaveLocation,
         hasSaveLocation = saveDirectoryUri != null,
-        onPickSaveLocation2 = onSelectSaveLocation,
         onAnalyzeRoom = { viewModel.openRoomProfiler() },
         files = files,
         onTapFile = { viewModel.selectFile(it) },

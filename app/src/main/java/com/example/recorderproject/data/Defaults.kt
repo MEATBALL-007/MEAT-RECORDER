@@ -55,7 +55,7 @@ object Defaults {
     const val PLAYBACK_VOLUME: Float = 1f
 
     // Loudness / delivery
-    const val defaultLoudnessTarget: String = "PODCAST"
+    const val defaultLoudnessTarget: String = "OFF"
     const val customLoudnessLufs: Float = -16f
     const val customLoudnessTpCeiling: Float = -1f
 
