@@ -1610,6 +1610,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         startRecordingInternal()
     }
 
+    @Suppress("DEPRECATION")  // legacy Bluetooth SCO APIs — no pre-API-31 replacement
     private fun startRecordingInternal() {
         if (_vadOn.value) voiceActivityDetector.stop()
         Log.d(TAG, "startRecording() called")
@@ -1626,8 +1627,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _monitorLevel.value = com.example.recorderproject.model.MonitorLevel.Silent
                 val am = app.getSystemService(android.content.Context.AUDIO_SERVICE)
                     as android.media.AudioManager
-                @Suppress("DEPRECATION") am.isBluetoothScoOn = false
-                @Suppress("DEPRECATION") am.stopBluetoothSco()
+                am.isBluetoothScoOn = false
+                am.stopBluetoothSco()
             } catch (_: Exception) {}
             _monitorEnabled.value = false
             Toast.makeText(app, "Monitor stopped to prevent echo while recording", Toast.LENGTH_SHORT).show()
