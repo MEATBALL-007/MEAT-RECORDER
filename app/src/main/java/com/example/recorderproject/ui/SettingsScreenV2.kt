@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,10 +120,16 @@ fun SettingsScreenV2(
         },
         containerColor = RecorderCharcoal,
     ) { padding ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        Column(
+            Modifier
+                .widthIn(max = 600.dp)  // centred column on tablets — avoids edge-to-edge stretch
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -336,6 +343,7 @@ fun SettingsScreenV2(
                 Text("Privacy Policy", fontSize = 13.sp)
             }
             Spacer(Modifier.height(24.dp))
+        }
         }
     }
 

@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
@@ -173,6 +176,7 @@ fun MeatRecHome(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Save-location warning banner — shown until the user picks a folder
         // ============== 1. ORANGE TOP BAR (with gradient depth) ==============
@@ -299,26 +303,32 @@ fun MeatRecHome(
         // ============== 2. SCROLLABLE BODY ==============
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .widthIn(max = 600.dp)  // centred column on tablets — avoids edge-to-edge stretch
+                .fillMaxWidth()
                 .verticalScroll(scroll)
                 .padding(horizontal = 20.dp)
                 .padding(top = 24.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Hero record button + LiquidBlob backdrop + aura halo behind
-            Box(contentAlignment = Alignment.Center) {
+            // Hero record button + LiquidBlob backdrop + aura halo behind.
+            // BoxWithConstraints lets the hero scale down on narrow phones so the
+            // 220dp button / 360dp blob never clip, while capping size on tablets.
+            BoxWithConstraints(contentAlignment = Alignment.Center) {
+                val buttonSize = minOf(maxWidth * 0.6f, 220.dp)
+                val blobSize   = minOf(maxWidth * 0.98f, 360.dp)
                 // Subtle LiquidBlob — only visible while recording, gives a "live"
                 // feel without competing with the button itself
                 if (isRecording) {
-                    Box(modifier = Modifier.size(360.dp).alpha(0.22f)) {
+                    Box(modifier = Modifier.size(blobSize).alpha(0.22f)) {
                         com.example.recorderproject.ui.components.LiquidBlobCanvas(
-                            modifier = Modifier.size(360.dp),
+                            modifier = Modifier.size(blobSize),
                         )
                     }
                 }
-                OrangeAura(diameter = 220.dp, recording = isRecording)
-                BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
+                OrangeAura(diameter = buttonSize, recording = isRecording)
+                BigRecordButton(isRecording = isRecording, onTap = onTapRecord, diameter = buttonSize)
             }
             Text(
                 if (isRecording) "Recording…" else androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.tap_to_record),
@@ -529,7 +539,7 @@ fun MeatRecHome(
 }
 
 @Composable
-private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
+private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit, diameter: Dp = 220.dp) {
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.93f else 1f,
@@ -540,8 +550,8 @@ private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
     Box(
         modifier = Modifier
             .scale(pressScale)
-            .size(220.dp)
-            .clip(RoundedCornerShape(110.dp))
+            .size(diameter)
+            .clip(RoundedCornerShape(diameter / 2))
             .background(
                 brush = Brush.radialGradient(
                     colors = listOf(
