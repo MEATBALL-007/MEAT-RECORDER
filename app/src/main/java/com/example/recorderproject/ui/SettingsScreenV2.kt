@@ -98,6 +98,7 @@ fun SettingsScreenV2(
     val compressorOn by viewModel.compressorOn.collectAsStateWithLifecycle()
     val stereoWidenerOn by viewModel.stereoWidenerOn.collectAsStateWithLifecycle()
     val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
+    val isDriveSignedIn by viewModel.isDriveSignedIn.collectAsStateWithLifecycle()
     val lockScreenControlsOn by viewModel.lockScreenControlsOn.collectAsStateWithLifecycle()
     val groupByScene by viewModel.groupByScene.collectAsStateWithLifecycle()
     val autoStopMin by viewModel.autoStopMinutes.collectAsStateWithLifecycle()
@@ -224,9 +225,12 @@ fun SettingsScreenV2(
             )
             ToggleRow(
                 label = "Cloud backup",
-                detail = "Auto-upload to cloud (provider wiring later)",
+                detail = if (isDriveSignedIn) "Connected to Google Drive" else "Tap to connect Google Drive",
                 value = cloudBackupOn,
-                onChange = { viewModel.toggleCloudBackup() },
+                onChange = {
+                    viewModel.toggleCloudBackup()
+                    if (!cloudBackupOn && !isDriveSignedIn) onSignInDrive()
+                },
             )
             ToggleRow(
                 label = "Lock-screen controls",
