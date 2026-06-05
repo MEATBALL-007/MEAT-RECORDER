@@ -11,7 +11,7 @@
 | App name | **MEAT REC** |
 | Package / applicationId | `com.meatrec.recorder` |
 | versionCode / versionName | `1` / `1.0` |
-| Release AAB | `app/build/outputs/bundle/release/app-release.aab` (6.7 MB) |
+| Release AAB | `app/build/outputs/bundle/release/app-release.aab` (7.4 MB, v1.0/code 1, signed, R8-verified) |
 | Keystore SHA-1 | `87:04:6F:BC:B8:42:AF:2D:45:20:B2:86:78:71:06:7F:DF:F4:51:13` |
 | Keystore SHA-256 | `BB:D9:CB:1B:4F:31:71:AE:C4:65:D9:AC:20:48:04:03:30:EF:83:B0:C7:FE:C4:D7:52:96:83:1A:C4:DE:3B:56` |
 | Keystore backup | `~/Desktop/MEATREC-KEYSTORE-BACKUP/` |
@@ -25,7 +25,7 @@
 | Hi-res icon 512×512 | `docs/play-assets/icon-512.png` | ✅ พร้อม |
 | Feature graphic 1024×500 | `docs/play-assets/feature-1024x500.png` | ✅ พร้อม |
 | Privacy policy URL (live) | **https://meatball-007.github.io/meatrec-privacy/** | ✅ LIVE สาธารณะแล้ว |
-| Screenshots (≥2) | — | ⏳ ถ่ายจาก emulator/มือถือ |
+| Screenshots (≥2) | `docs/play-assets/screenshots/` (5 shots, 1080×2400) | ✅ พร้อม — modes, home, recording, themes, Forest theme |
 
 ### วิธีถ่าย screenshots
 1. Android Studio → Device Manager → สร้าง Pixel emulator (API 34/35)
