@@ -183,7 +183,7 @@ fun RecorderApp(
         },
         onOpenSettings = onOpenSettings,
         isPro = isPro,
-        onTapUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO) },
+        onTapUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.LOUDNESS_DELIVERY) },
         onOpenSourcePicker = { sourcePickerOpen = true },
         onPickSaveLocation = onSelectSaveLocation,
         hasSaveLocation = saveDirectoryUri != null,
