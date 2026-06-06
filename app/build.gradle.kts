@@ -16,7 +16,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.meatrec.recorder"
+        applicationId = "com.meatball.meatrec"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

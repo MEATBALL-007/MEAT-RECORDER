@@ -9,7 +9,7 @@
 | รายการ | ค่า |
 |---|---|
 | App name | **MEAT REC** |
-| Package / applicationId | `com.meatrec.recorder` |
+| Package / applicationId | `com.meatball.meatrec` |
 | versionCode / versionName | `1` / `1.0` |
 | Release AAB | `app/build/outputs/bundle/release/app-release.aab` (7.4 MB, v1.0/code 1, signed, R8-verified) |
 | Keystore SHA-1 | `87:04:6F:BC:B8:42:AF:2D:45:20:B2:86:78:71:06:7F:DF:F4:51:13` |

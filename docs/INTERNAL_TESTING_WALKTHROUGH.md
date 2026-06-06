@@ -13,7 +13,7 @@ up to 100 testers, no review wait). Do these in order. Check each box.
 | Field | Value |
 |---|---|
 | App name | **MEAT REC** |
-| Package name | `com.meatrec.recorder` |
+| Package name | `com.meatball.meatrec` |
 | versionCode / versionName | `1` / `1.0` |
 | **AAB to upload** | `app/build/outputs/bundle/release/app-release.aab` |
 | Privacy policy URL | `https://meatball-007.github.io/meatrec-privacy/` |
@@ -141,4 +141,8 @@ The paywall UI already works; this makes the actual purchase complete.
 - **versionCode must increase** for every new upload. Next build → bump `versionCode` to
   `2` in `app/build.gradle.kts` before rebuilding the AAB.
 - **Namespace** is still `com.example.recorderproject` internally; the **applicationId**
-  `com.meatrec.recorder` is what Play uses, so this is cosmetic and not a blocker.
+  `com.meatball.meatrec` is what Play uses, so this is cosmetic and not a blocker.
+- **Google Drive sign-in (Cloud Backup):** the OAuth client in Google Cloud Console must be
+  registered for package `com.meatball.meatrec` + the **Play app signing** SHA-1 (shown in
+  Play Console after you enroll in Play App Signing). Until that's set, Drive sign-in will
+  fail with a developer error — but recording/EQ/everything else works fine.
