@@ -116,6 +116,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val preRollEnabled: StateFlow<Boolean> = _preRollEnabled
 
     fun togglePreRoll() {
+        // Pre-roll ("pre-recording") is a Pro feature — gate enabling, allow turning off.
+        if (!_preRollEnabled.value &&
+            !requirePro(com.example.recorderproject.billing.ProFeature.PRE_ROLL_VAD)
+        ) return
         val on = !_preRollEnabled.value
         _preRollEnabled.value = on
         if (on) {
@@ -442,6 +446,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _vadOn = MutableStateFlow(false)
     val vadOn: StateFlow<Boolean> = _vadOn
     fun toggleVad() {
+        // VAD ("voice-activated record") is part of the Smart capture Pro bundle — gate enabling.
+        if (!_vadOn.value &&
+            !requirePro(com.example.recorderproject.billing.ProFeature.PRE_ROLL_VAD)
+        ) return
         val on = !_vadOn.value
         _vadOn.value = on
         if (hydrated.value) viewModelScope.launch { settings.setVad(on) }
