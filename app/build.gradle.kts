@@ -11,6 +11,24 @@ val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) load(keystorePropertiesFile.inputStream())
 }
 
+// --- Portable-drive build redirect ---------------------------------------------
+// exFAT/FAT drives (the only filesystems shared read-write by macOS *and* Windows)
+// cannot store the extended attributes the Android dexer/AGP set on build outputs.
+// On macOS that makes the kernel spawn "._" AppleDouble sidecar files, which break
+// D8 dexing and Gradle's incremental cleanup. So when this project lives on a
+// portable (non-system) drive, redirect build OUTPUT to the local machine's home
+// dir. Source + git stay on the drive (portable); build/ is regenerable per machine.
+run {
+    val root = rootDir.absolutePath
+    val onPortableDrive = root.startsWith("/Volumes/") ||                        // macOS external mount
+        (root.length > 2 && root[1] == ':' && !root.startsWith("C:", ignoreCase = true)) // Windows non-C: drive
+    if (onPortableDrive) {
+        val localBuild = "${System.getProperty("user.home")}/.meatrec-build/${project.name}"
+        layout.buildDirectory.set(file(localBuild))
+        logger.lifecycle("MEATREC: building from portable drive → output redirected to $localBuild")
+    }
+}
+
 android {
     namespace = "com.example.recorderproject"
     compileSdk = 35

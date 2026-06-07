@@ -5,6 +5,9 @@ local.properties
 .superpowers/
 *.iml
 .DS_Store
+._*
+.AppleDouble
+.kotlin/
 recovery/
 keystore.properties
 meatrec-release.jks
