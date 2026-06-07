@@ -11,3 +11,4 @@ local.properties
 recovery/
 keystore.properties
 meatrec-release.jks
+dist/
