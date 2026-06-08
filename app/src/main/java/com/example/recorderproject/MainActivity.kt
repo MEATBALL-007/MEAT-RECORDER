@@ -113,6 +113,11 @@ class MainActivity : AppCompatActivity() {
             // Persist theme by display name across launches so user's pick survives restart.
             val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
             var appTheme by remember { mutableStateOf(AppTheme.fromName(savedThemeName)) }
+            val onThemeChange = { theme: AppTheme ->
+                appTheme = theme
+                getPreferences(MODE_PRIVATE).edit()
+                    .putString("app_theme", theme.displayName).apply()
+            }
             var reduceMotion by remember { mutableStateOf(false) }
             RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
@@ -182,11 +187,7 @@ class MainActivity : AppCompatActivity() {
                             viewModel = viewModel,
                             theme = appTheme,
                             reduceMotion = reduceMotion,
-                            onChangeTheme = {
-                                appTheme = it
-                                getPreferences(MODE_PRIVATE).edit()
-                                    .putString("app_theme", it.displayName).apply()
-                            },
+                            onChangeTheme = onThemeChange,
                             onToggleReduceMotion = { reduceMotion = it },
                             onPickSaveLocation = { directoryLauncher.launch(null) },
                             onBack = { settingsOpen = false },
@@ -285,11 +286,7 @@ class MainActivity : AppCompatActivity() {
                                 getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", false).apply()
                             },
                             theme = appTheme,
-                            onChangeTheme = {
-                                appTheme = it
-                                getPreferences(MODE_PRIVATE).edit()
-                                    .putString("app_theme", it.displayName).apply()
-                            },
+                            onChangeTheme = onThemeChange,
                             onSignInDrive = { signInToGoogleDrive() },
                             onOpenFullSettings = { settingsOpen = true },
                         )
