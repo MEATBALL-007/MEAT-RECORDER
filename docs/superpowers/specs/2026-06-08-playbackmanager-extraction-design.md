@@ -14,7 +14,7 @@ This is step 3 of the decomposition, reusing the established template: move the 
 
 - `_selectedFile`, `_isPlaying`, and `mediaPlayer` are read/written **only** within the playback + A/B cluster — no external ViewModel readers. (`_selectedFileIds` is the separate multi-select state for the file library and is unrelated.)
 - Recording does **not** touch playback (no `mediaPlayer`/`_isPlaying` access in the recording path).
-- The only outward ties are: persistence (`settings` + the `hydrated` gate), `mediaPlayer.release()` in `onCleared`, and `openAbCompareFromSelection()` reading `_selectedFileIds` + `_recordFiles` to resolve two files.
+- The only outward ties are: persistence (`settings` + the `hydrated` gate), `mediaPlayer.release()` in `onCleared`, `openAbCompareFromSelection()` reading `_selectedFileIds` + `_recordFiles` to resolve two files, and `preparePlayback()` writing the general `_errorMessage` flow (which stays in the ViewModel) on prepare/decode failure — bridged via an `onError` callback.
 
 ## Scope
 
@@ -32,6 +32,7 @@ class PlaybackManager(
     private val settings: SettingsDataStore,
     private val scope: CoroutineScope,       // viewModelScope
     private val isHydrated: () -> Boolean,    // gates persistence writes
+    private val onError: (String) -> Unit,    // forwards to the VM's _errorMessage flow
 ) {
     // Playback state
     val isPlaying: StateFlow<Boolean>
@@ -69,11 +70,12 @@ Internals (moved verbatim except for state/scope/persistence references):
 - `preparePlayback(file)` and `startPositionUpdates()` become private members of the manager.
 - Persistence writes use `if (isHydrated()) scope.launch { settings.setPlaybackSpeed/Loop/Volume(...) }`, exactly mirroring the current `hydrated.value` gating.
 - `selectFile` calls `preparePlayback` (auto-start on prepared, as today).
+- `preparePlayback` reports prepare/decode failures via `onError(...)` instead of writing `_errorMessage` directly.
 - `release()` performs the current `onCleared` `mediaPlayer.release()`.
 
 ### ViewModel changes (public surface unchanged)
 
-- Declare `private val playback = PlaybackManager(app, settings, viewModelScope) { hydrated.value }` after `settings`/`hydrated` and before first use.
+- Declare `private val playback = PlaybackManager(app, settings, viewModelScope, { hydrated.value }, { _errorMessage.value = it })` after `settings`/`hydrated` and before first use.
 - Replace the 11 state declarations with delegations:
   ```kotlin
   val isPlaying = playback.isPlaying
