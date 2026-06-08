@@ -39,13 +39,18 @@ class RecordingScanner(private val app: Context) {
                     val hasNr = RecordingNaming.hasNr(base)
                     val hasEq = File(f.parentFile, RecordingNaming.eqSidecarName(base)).exists()
 
-                    val durationSeconds = try {
+                    val durationSeconds = run {
                         val mmr = MediaMetadataRetriever()
-                        mmr.setDataSource(f.absolutePath)
-                        val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                        mmr.release()
-                        (ms / 1000L).toInt()
-                    } catch (_: Exception) { 0 }
+                        try {
+                            mmr.setDataSource(f.absolutePath)
+                            val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                            (ms / 1000L).toInt()
+                        } catch (_: Exception) {
+                            0
+                        } finally {
+                            mmr.release()
+                        }
+                    }
 
                     val deliveryWav = File(f.parentFile, RecordingNaming.deliveryWavName(base))
                     val deliveryJson = File(f.parentFile, RecordingNaming.deliveryJsonName(base))
@@ -72,6 +77,8 @@ class RecordingScanner(private val app: Context) {
             }
 
         // Orphan delivery sweep: `_delivery.wav` with no original and no sidecar JSON.
+        // Computed over ALL wavs (not the existingPaths-filtered scan list) on purpose, so an
+        // orphan is detected even when its original was already loaded elsewhere.
         val originalBases = allWavs
             .filter { !RecordingNaming.isDeliverySibling(it.nameWithoutExtension) }
             .map { it.nameWithoutExtension }
@@ -107,13 +114,18 @@ class RecordingScanner(private val app: Context) {
                     val path = doc.uri.toString()
                     if (path in existingPaths) return@mapNotNull null
 
-                    val durationSeconds = try {
+                    val durationSeconds = run {
                         val mmr = MediaMetadataRetriever()
-                        mmr.setDataSource(app, doc.uri)
-                        val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                        mmr.release()
-                        (ms / 1000L).toInt()
-                    } catch (_: Exception) { 0 }
+                        try {
+                            mmr.setDataSource(app, doc.uri)
+                            val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                            (ms / 1000L).toInt()
+                        } catch (_: Exception) {
+                            0
+                        } finally {
+                            mmr.release()
+                        }
+                    }
 
                     val deliveryDoc = byName[RecordingNaming.deliveryWavName(base)]
                     val deliveryResult = runCatching {
