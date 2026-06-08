@@ -62,10 +62,21 @@ class MainActivity : AppCompatActivity() {
         // still works; the user just won't see the recording notification.
     }
 
+    // True while we're waiting for the folder-picker result mid-onboarding, so the record
+    // flow can resume automatically once a folder is chosen.
+    private var pendingRecordAfterFolderPick = false
+
     private val directoryLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { viewModel.setSaveDirectoryUri(it) }
+        if (pendingRecordAfterFolderPick) {
+            pendingRecordAfterFolderPick = false
+            // Re-enter the record flow; the gate now passes (a folder is set) and we
+            // fall through to permissions + recording. If the user cancelled the picker
+            // (uri == null) we do nothing — they tap Record again, now bound for app storage.
+            if (uri != null) requestRecordingPermissions()
+        }
     }
 
     private val cloudDirectoryLauncher = registerForActivityResult(
@@ -327,11 +338,42 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestRecordingPermissions() {
         val prefs = getPreferences(MODE_PRIVATE)
+        if (SaveLocationOnboarding.shouldPrompt(
+                hasFolder = viewModel.saveDirectoryUri.value != null,
+                alreadyPrompted = prefs.getBoolean("save_location_prompted", false),
+            )
+        ) {
+            showSaveLocationDialog()
+            return
+        }
         if (!prefs.getBoolean("location_disclosure_shown", false)) {
             showLocationDisclosureDialog()
             return
         }
         proceedWithRecordingPermissions()
+    }
+
+    private fun showSaveLocationDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Where should recordings be saved?")
+            .setMessage(
+                "Pick a folder you'll find in your Files app and that stays even if you " +
+                "uninstall MEAT REC — or keep using private app storage."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Choose folder") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("save_location_prompted", true).apply()
+                pendingRecordAfterFolderPick = true
+                selectSaveDirectory()
+            }
+            .setNegativeButton("Use app storage") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("save_location_prompted", true).apply()
+                // Gate now passes; re-enter to continue to the location-disclosure / record flow.
+                requestRecordingPermissions()
+            }
+            .show()
     }
 
     private fun showLocationDisclosureDialog() {
@@ -393,6 +435,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectSaveDirectory() {
-        directoryLauncher.launch(null)
+        // Best-effort initial location hint (ignored by some OEM pickers).
+        val initial: android.net.Uri? = try {
+            android.provider.DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents", "primary:Music"
+            )
+        } catch (_: Exception) { null }
+        directoryLauncher.launch(initial)
     }
 }
