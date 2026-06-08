@@ -224,12 +224,11 @@ fun MeatRecHome(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("⚠️", fontSize = 11.sp)
                         Text(
-                            "No save folder — tap to set",
-                            color = Color(0xFFFFC72C),
+                            "Saving to app storage · tap to choose a folder",
+                            color = Color.White.copy(alpha = 0.6f),
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                 } else {
