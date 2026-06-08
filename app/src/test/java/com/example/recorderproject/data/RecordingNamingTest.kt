@@ -31,6 +31,10 @@ class RecordingNamingTest {
         assertEquals(emptySet<String>(), RecordingNaming.nrShadowedBases(listOf("take1", "take2")))
     }
 
+    @Test fun `nrShadowedBases handles an uppercase NR twin`() {
+        assertEquals(setOf("take1"), RecordingNaming.nrShadowedBases(listOf("take1", "take1_NR")))
+    }
+
     @Test fun `isHidden hides delivery siblings`() {
         assertTrue(RecordingNaming.isHidden("take1_delivery", emptySet()))
     }

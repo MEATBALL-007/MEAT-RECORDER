@@ -16,7 +16,7 @@ object RecordingNaming {
     /** A noise-reduced file (base ends with `_nr`, case-insensitive). */
     fun hasNr(base: String): Boolean = base.lowercase().endsWith(NR_SUFFIX)
 
-    /** A delivery render sibling (base ends with `_delivery`). */
+    /** A delivery render sibling (base ends with `_delivery`). Case-sensitive — the on-disk convention is always lowercase. */
     fun isDeliverySibling(base: String): Boolean = base.endsWith(DELIVERY_SUFFIX)
 
     /** Original base names that have an `_nr` twin — these originals are hidden in favor of the twin. */
@@ -29,6 +29,7 @@ object RecordingNaming {
     fun isHidden(base: String, nrShadowed: Set<String>): Boolean =
         isDeliverySibling(base) || (!hasNr(base) && nrShadowed.contains(base))
 
+    /** Sidecar/companion file names for a given recording base. */
     fun eqSidecarName(base: String): String = "${base}_eq.json"
     fun deliveryWavName(base: String): String = "${base}_delivery.wav"
     fun deliveryJsonName(base: String): String = "${base}_delivery.json"
