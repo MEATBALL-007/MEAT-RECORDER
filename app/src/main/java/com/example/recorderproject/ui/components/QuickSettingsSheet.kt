@@ -185,12 +185,12 @@ private fun QuickToggle(label: String, value: Boolean, onToggle: () -> Unit, mod
         Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Switch(
             checked = value,
-            onCheckedChange = { onToggle() },
+            onCheckedChange = { if (it != value) onToggle() },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = RecorderOrange,
                 uncheckedThumbColor = RecorderBlueGrey,
-                uncheckedTrackColor = Color(0xFF0C0C10),
+                uncheckedTrackColor = RecorderCharcoal,
             ),
         )
     }
@@ -201,7 +201,7 @@ private fun QualityChipRow(current: RecordingQuality, enabled: Boolean, onChange
     Row(
         Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF0C0C10))
+            .background(RecorderCharcoal)
             .padding(3.dp)
             .alpha(if (enabled) 1f else 0.4f),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -281,6 +281,7 @@ private fun StorageRows(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(RecorderCharcoalCard)
+                .clickable(onClick = onToggleCloudBackup)
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -294,12 +295,12 @@ private fun StorageRows(
             }
             Switch(
                 checked = cloudBackupOn,
-                onCheckedChange = { onToggleCloudBackup() },
+                onCheckedChange = { if (it != cloudBackupOn) onToggleCloudBackup() },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = RecorderOrange,
                     uncheckedThumbColor = RecorderBlueGrey,
-                    uncheckedTrackColor = Color(0xFF0C0C10),
+                    uncheckedTrackColor = RecorderCharcoal,
                 ),
             )
         }
