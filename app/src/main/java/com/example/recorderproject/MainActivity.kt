@@ -284,6 +284,14 @@ class MainActivity : AppCompatActivity() {
                                 modeChosen = false
                                 getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", false).apply()
                             },
+                            theme = appTheme,
+                            onChangeTheme = {
+                                appTheme = it
+                                getPreferences(MODE_PRIVATE).edit()
+                                    .putString("app_theme", it.displayName).apply()
+                            },
+                            onSignInDrive = { signInToGoogleDrive() },
+                            onOpenFullSettings = { settingsOpen = true },
                         )
                     }
 
