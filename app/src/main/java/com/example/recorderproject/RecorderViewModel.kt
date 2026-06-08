@@ -30,14 +30,11 @@ import com.example.recorderproject.model.RecordingQuality
 import com.example.recorderproject.model.SortOrder
 import com.example.recorderproject.model.applyAudioSample
 import com.example.recorderproject.model.applyDecayTick
-import com.example.recorderproject.audio.DeliveryRenderer
 import com.example.recorderproject.model.DeliveryResult
 import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -521,19 +518,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // finalized RecordFile so IxmlWriter emits a <LOCATION> tag.
     @Volatile private var pendingLocationTag: String? = null
 
-    // D: current loudness delivery target (session-level)
-    private val _loudnessTarget = MutableStateFlow<LoudnessTarget>(LoudnessTarget.DEFAULT)
-    val loudnessTarget: StateFlow<LoudnessTarget> = _loudnessTarget
-
-    // D: in-progress delivery render
-    private val _isRenderingDelivery = MutableStateFlow(false)
-    val isRenderingDelivery: StateFlow<Boolean> = _isRenderingDelivery
-
-    // D: rolling render result for snackbar / UI
-    private val _lastDeliveryResult = MutableStateFlow<DeliveryResult?>(null)
-    val lastDeliveryResult: StateFlow<DeliveryResult?> = _lastDeliveryResult
-
-    private val renderSemaphore = Semaphore(permits = 2)
+    // D: loudness/delivery extracted into LoudnessManager (issue #13). The constructor lambda
+    // and method reference defer-resolve _saveDirectoryUri / rebindDeliveryResult (declared later)
+    // — legal because their bodies execute only when renderFor() is later called.
+    private val loudness = com.example.recorderproject.audio.LoudnessManager(
+        app = app,
+        settings = settings,
+        scope = viewModelScope,
+        saveDirectoryUri = { _saveDirectoryUri.value },
+        onDeliveryResult = ::rebindDeliveryResult,
+    )
+    val loudnessTarget: StateFlow<LoudnessTarget> = loudness.target
+    val isRenderingDelivery: StateFlow<Boolean> = loudness.isRendering
+    val lastDeliveryResult: StateFlow<DeliveryResult?> = loudness.lastResult
 
     // K.2: Stereo phase correlation (-1..1) — populated only while recording stereo
     private val _phaseCorrelation = MutableStateFlow(0f)
@@ -1906,40 +1903,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _recordFiles.value = _recordFiles.value.filterNot { it.id == provisionalId } + finalFile
 
                 // D: kick off delivery render if a target is active
-                val deliveryTarget = _loudnessTarget.value
-                if (deliveryTarget !is LoudnessTarget.Off && finalFile.path.startsWith("content://")) {
-                    renderDeliverySaf(finalFile, deliveryTarget)
-                } else if (deliveryTarget !is LoudnessTarget.Off) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        renderSemaphore.withPermit {
-                            _isRenderingDelivery.value = true
-                            try {
-                                val src = java.io.File(finalFile.path)
-                                val dst = java.io.File(
-                                    src.parentFile,
-                                    src.nameWithoutExtension + "_delivery.wav"
-                                )
-                                val result = runCatching {
-                                    DeliveryRenderer.render(src, dst, deliveryTarget)
-                                }.getOrNull()
-
-                                if (result != null) {
-                                    java.io.File(
-                                        src.parentFile,
-                                        src.nameWithoutExtension + "_delivery.json"
-                                    ).writeText(DeliveryResult.toJson(result))
-                                    _lastDeliveryResult.value = result
-                                    rebindDeliveryResult(src.absolutePath, dst.absolutePath, result)
-                                } else {
-                                    _lastDeliveryResult.value = null
-                                    if (dst.exists() && dst.length() < 100) dst.delete()
-                                }
-                            } finally {
-                                _isRenderingDelivery.value = false
-                            }
-                        }
-                    }
-                }
+                loudness.renderFor(finalFile)
 
                 viewModelScope.launch {
                     try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
@@ -2015,52 +1979,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _recordFiles.update { list ->
             list.map { f ->
                 if (f.path == srcPath) f.copy(deliveryPath = dstPath, deliveryResult = r) else f
-            }
-        }
-    }
-
-    /**
-     * Loudness/delivery render for a SAF (content://) recording. Bridges the document to a
-     * cache temp, runs [DeliveryRenderer], and writes sibling `_delivery.wav` + `_delivery.json`
-     * documents into the folder — the SAF counterpart of the local delivery render in stopRecording.
-     */
-    private fun renderDeliverySaf(finalFile: RecordFile, target: LoudnessTarget) {
-        val srcUri = android.net.Uri.parse(finalFile.path)
-        val base = if (finalFile.name.contains('.')) finalFile.name.substringBeforeLast('.') else finalFile.name
-        viewModelScope.launch(Dispatchers.IO) {
-            renderSemaphore.withPermit {
-                val tree = _saveDirectoryUri.value?.let {
-                    androidx.documentfile.provider.DocumentFile.fromTreeUri(app, it)
-                } ?: return@withPermit
-                val deliveryDoc = tree.createFile("audio/wav", "${base}_delivery.wav") ?: return@withPermit
-                _isRenderingDelivery.value = true
-                try {
-                    var result: DeliveryResult? = null
-                    runCatching {
-                        com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
-                            cacheDir = app.cacheDir,
-                            openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
-                            openOutput = { app.contentResolver.openOutputStream(deliveryDoc.uri) ?: error("cannot open output") },
-                            process = { s, d -> result = DeliveryRenderer.render(s, d, target) },
-                        )
-                    }
-                    val r = result
-                    if (r != null) {
-                        tree.createFile("application/json", "${base}_delivery.json")?.let { jsonDoc ->
-                            app.contentResolver.openOutputStream(jsonDoc.uri)?.use { out ->
-                                out.write(DeliveryResult.toJson(r).toByteArray())
-                            }
-                        }
-                        _lastDeliveryResult.value = r
-                        rebindDeliveryResult(finalFile.path, deliveryDoc.uri.toString(), r)
-                    } else {
-                        // render produced nothing usable (e.g. too short) — drop the empty doc.
-                        _lastDeliveryResult.value = null
-                        runCatching { deliveryDoc.delete() }
-                    }
-                } finally {
-                    _isRenderingDelivery.value = false
-                }
             }
         }
     }
@@ -2792,7 +2710,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             preRollCapture.stop()
         }
 
-        _loudnessTarget.value = LoudnessTarget.decode(
+        loudness.applySnapshot(
             s.defaultLoudnessTarget,
             s.customLoudnessLufs,
             s.customLoudnessTpCeiling,
@@ -2800,27 +2718,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** Change the active session target. Does not persist. */
-    fun setSessionLoudnessTarget(t: LoudnessTarget) {
-        _loudnessTarget.value = t
-    }
+    fun setSessionLoudnessTarget(t: LoudnessTarget) = loudness.setSessionTarget(t)
 
-    /**
-     * Persist as default + update session target.
-     *
-     * NOTE: SettingsDataStore exposes individual setters (not bulk apply).
-     * If the setter names don't exist yet, call the closest equivalent — e.g.
-     * settings.setDefaultLoudnessTarget(...), settings.setCustomLoudnessLufs(...),
-     * settings.setCustomLoudnessTpCeiling(...). These were added in Task B3.
-     */
-    fun saveAsDefaultLoudnessTarget(t: LoudnessTarget) {
-        _loudnessTarget.value = t
-        viewModelScope.launch {
-            val (key, lufs, tp) = LoudnessTarget.encode(t)
-            settings.setDefaultLoudnessTarget(key)
-            settings.setCustomLoudnessLufs(lufs)
-            settings.setCustomLoudnessTpCeiling(tp)
-        }
-    }
+    /** Persist as default + update session target. */
+    fun saveAsDefaultLoudnessTarget(t: LoudnessTarget) = loudness.saveAsDefault(t)
 
     /**
      * Reset every persisted setting to its declared default. Does NOT touch:
