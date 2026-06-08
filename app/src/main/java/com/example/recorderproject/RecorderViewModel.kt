@@ -4,7 +4,6 @@ package com.example.recorderproject
 
 import android.app.Application
 import android.net.Uri
-import android.media.MediaPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
@@ -144,12 +143,23 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
     private var stopReceiverRegistered = false
-    private val mediaPlayer = MediaPlayer()
     private val settings = SettingsDataStore(application)
     // Library scanning extracted into RecordingScanner (issue #13). Declared before the init
     // block (which calls the scan functions), so it is initialized in time. Only needs `app`.
     private val scanner = com.example.recorderproject.data.RecordingScanner(app)
     private val hydrated = MutableStateFlow(false)
+
+    // Playback + A/B compare extracted into PlaybackManager (issue #13). Declared before the
+    // init block (hydration's applySnapshot delegates here). The constructor lambdas
+    // defer-resolve hydrated / _errorMessage (declared later) — legal, they run only on
+    // later playback calls.
+    private val playback = com.example.recorderproject.audio.PlaybackManager(
+        app = app,
+        settings = settings,
+        scope = viewModelScope,
+        isHydrated = { hydrated.value },
+        onError = { _errorMessage.value = it },
+    )
 
     private val gainDbPersist = MutableSharedFlow<Float>(extraBufferCapacity = 64)
     private val eqBandGainsPersist = MutableSharedFlow<FloatArray>(extraBufferCapacity = 64)
@@ -835,60 +845,20 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
 
-    // A/B compare: two takes selected from the list. Playback plays A, then B, in sequence.
-    private val _abFiles = MutableStateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?>(null)
-    val abFiles: StateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?> = _abFiles
+    // A/B compare state — delegated to PlaybackManager (issue #13).
+    val abFiles = playback.abFiles
+    val abPlayingSlot = playback.abPlayingSlot
+    val abCompareOpen = playback.abCompareOpen
 
-    private val _abPlayingSlot = MutableStateFlow(0) // 0=idle, 1=A playing, 2=B playing
-    val abPlayingSlot: StateFlow<Int> = _abPlayingSlot
+    fun openAbCompare(a: com.example.recorderproject.model.RecordFile, b: com.example.recorderproject.model.RecordFile) =
+        playback.openAbCompare(a, b)
 
-    private val _abCompareOpen = MutableStateFlow(false)
-    val abCompareOpen: StateFlow<Boolean> = _abCompareOpen
+    fun closeAbCompare() = playback.closeAbCompare()
 
-    fun openAbCompare(a: com.example.recorderproject.model.RecordFile, b: com.example.recorderproject.model.RecordFile) {
-        _abFiles.value = a to b
-        _abCompareOpen.value = true
-        _abPlayingSlot.value = 0
-    }
+    /** Play slot A or B. Stops any current playback then plays the requested file. */
+    fun abPlay(slot: Int) = playback.abPlay(slot)
 
-    fun closeAbCompare() {
-        _abCompareOpen.value = false
-        _abFiles.value = null
-        _abPlayingSlot.value = 0
-        try { mediaPlayer.reset() } catch (_: Exception) {}
-        _isPlaying.value = false
-    }
-
-    /**
-     * Play slot A or B. Stops any current playback then plays the requested file.
-     */
-    fun abPlay(slot: Int) {
-        val pair = _abFiles.value ?: return
-        val file = if (slot == 1) pair.first else pair.second
-        _abPlayingSlot.value = slot
-        try {
-            mediaPlayer.reset()
-            if (file.path.startsWith("content://")) {
-                mediaPlayer.setDataSource(app, android.net.Uri.parse(file.path))
-            } else {
-                mediaPlayer.setDataSource(file.path)
-            }
-            mediaPlayer.setOnCompletionListener {
-                _abPlayingSlot.value = 0
-            }
-            mediaPlayer.prepare()
-            mediaPlayer.start()
-            _isPlaying.value = true
-        } catch (e: Exception) {
-            Log.e(TAG, "abPlay failed: ${e.message}", e)
-        }
-    }
-
-    fun abStop() {
-        try { mediaPlayer.reset() } catch (_: Exception) {}
-        _isPlaying.value = false
-        _abPlayingSlot.value = 0
-    }
+    fun abStop() = playback.abStop()
 
     /** Open A/B compare with the two currently selected files. Requires exactly 2. */
     fun openAbCompareFromSelection() {
@@ -904,18 +874,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         clearSelection()
     }
 
-    // Playback states
-    private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying
-
-    private val _currentPlaybackPosition = MutableStateFlow(0)
-    val currentPlaybackPosition: StateFlow<Int> = _currentPlaybackPosition
-
-    private val _playbackDuration = MutableStateFlow(0)
-    val playbackDuration: StateFlow<Int> = _playbackDuration
-
-    private val _selectedFile = MutableStateFlow<RecordFile?>(null)
-    val selectedFile: StateFlow<RecordFile?> = _selectedFile
+    // Playback states — delegated to PlaybackManager (issue #13).
+    val isPlaying = playback.isPlaying
+    val currentPlaybackPosition = playback.currentPlaybackPosition
+    val playbackDuration = playback.playbackDuration
+    val selectedFile = playback.selectedFile
 
     private val _audioSource = MutableStateFlow(1) // Default MIC
     val audioSource: StateFlow<Int> = _audioSource
@@ -929,10 +892,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _needsPermission = MutableStateFlow(false)
     val needsPermission: StateFlow<Boolean> = _needsPermission
 
-    private var positionUpdateJob: Job? = null
-
-    private val _isPlayerReady = MutableStateFlow(false)
-    val isPlayerReady: StateFlow<Boolean> = _isPlayerReady
+    val isPlayerReady = playback.isPlayerReady
 
     // ------------- EQ state (Phase 1) -------------
 
@@ -2121,130 +2081,26 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // Playback functions
-    fun selectFile(file: RecordFile) {
-        _selectedFile.value = file
-        preparePlayback(file)
-    }
+    // Playback functions — delegated to PlaybackManager (issue #13).
+    fun selectFile(file: RecordFile) = playback.selectFile(file)
 
-    private fun preparePlayback(file: RecordFile) {
-        _isPlayerReady.value = false
-        try {
-            mediaPlayer.reset()
-            mediaPlayer.setOnCompletionListener {
-                positionUpdateJob?.cancel()
-                _isPlaying.value = false
-                _currentPlaybackPosition.value = 0
-            }
-            mediaPlayer.setOnPreparedListener { mp ->
-                _playbackDuration.value = mp.duration
-                _currentPlaybackPosition.value = 0
-                _isPlayerReady.value = true
-                // G1: auto-start on selectFile so tapping a row plays immediately
-                try {
-                    mp.start()
-                    _isPlaying.value = true
-                    startPositionUpdates()
-                } catch (_: Exception) {}
-            }
-            // Surface async prepare/playback failures instead of hanging silently.
-            // (e.g. some devices can't decode 24-bit WAV via MediaPlayer — the file is
-            // still valid on disk, the user just gets told rather than a dead Play button.)
-            mediaPlayer.setOnErrorListener { _, what, extra ->
-                Log.e(TAG, "MediaPlayer error: what=$what extra=$extra for ${file.name}")
-                _isPlayerReady.value = false
-                _isPlaying.value = false
-                positionUpdateJob?.cancel()
-                _errorMessage.value = "Can't play ${file.name} (code $what/$extra)"
-                true
-            }
-            if (file.path.startsWith("content://")) {
-                mediaPlayer.setDataSource(app, android.net.Uri.parse(file.path))
-            } else {
-                mediaPlayer.setDataSource(file.path)
-            }
-            mediaPlayer.prepareAsync()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to prepare playback: ${e.message}", e)
-            _errorMessage.value = "Failed to prepare playback: ${e.message}"
-        }
-    }
+    fun playPause() = playback.playPause()
 
-    fun playPause() {
-        if (!_isPlayerReady.value) return
-        if (_isPlaying.value) {
-            mediaPlayer.pause()
-            _isPlaying.value = false
-            positionUpdateJob?.cancel()
-        } else {
-            mediaPlayer.start()
-            _isPlaying.value = true
-            startPositionUpdates()
-        }
-    }
+    fun stopPlayback() = playback.stopPlayback()
 
-    fun stopPlayback() {
-        positionUpdateJob?.cancel()
-        _isPlaying.value = false
-        _currentPlaybackPosition.value = 0
-        // preparePlayback calls reset() (valid from any state) and re-prepares async
-        _selectedFile.value?.let { preparePlayback(it) }
-    }
+    fun seekTo(position: Int) = playback.seekTo(position)
 
-    fun seekTo(position: Int) {
-        mediaPlayer.seekTo(position)
-        _currentPlaybackPosition.value = position
-    }
+    fun closePlayer() = playback.closePlayer()
 
-    fun closePlayer() {
-        try { mediaPlayer.reset() } catch (_: Exception) {}
-        _isPlaying.value = false
-        _selectedFile.value = null
-        _currentPlaybackPosition.value = 0
-        positionUpdateJob?.cancel()
-    }
+    // G5/G6/G7: playback speed / loop / volume — delegated to PlaybackManager (issue #13).
+    val playbackSpeed = playback.playbackSpeed
+    fun setPlaybackSpeed(speed: Float) = playback.setPlaybackSpeed(speed)
 
-    // G5: playback speed
-    private val _playbackSpeed = MutableStateFlow(1f)
-    val playbackSpeed: StateFlow<Float> = _playbackSpeed
-    fun setPlaybackSpeed(speed: Float) {
-        _playbackSpeed.value = speed
-        try {
-            val params = mediaPlayer.playbackParams
-            params.speed = speed
-            mediaPlayer.playbackParams = params
-        } catch (_: Exception) {}
-        if (hydrated.value) viewModelScope.launch { settings.setPlaybackSpeed(speed) }
-    }
+    val playbackLoop = playback.playbackLoop
+    fun toggleLoop() = playback.toggleLoop()
 
-    // G6: loop playback
-    private val _playbackLoop = MutableStateFlow(false)
-    val playbackLoop: StateFlow<Boolean> = _playbackLoop
-    fun toggleLoop() {
-        _playbackLoop.value = !_playbackLoop.value
-        mediaPlayer.isLooping = _playbackLoop.value
-        if (hydrated.value) viewModelScope.launch { settings.setPlaybackLoop(_playbackLoop.value) }
-    }
-
-    // G7: playback volume (0..1)
-    private val _playbackVolume = MutableStateFlow(1f)
-    val playbackVolume: StateFlow<Float> = _playbackVolume
-    fun setPlaybackVolume(v: Float) {
-        val vv = v.coerceIn(0f, 1f)
-        _playbackVolume.value = vv
-        mediaPlayer.setVolume(vv, vv)
-        if (hydrated.value) viewModelScope.launch { settings.setPlaybackVolume(vv) }
-    }
-
-    private fun startPositionUpdates() {
-        positionUpdateJob?.cancel()
-        positionUpdateJob = viewModelScope.launch {
-            while (_isPlaying.value && mediaPlayer.isPlaying) {
-                _currentPlaybackPosition.value = mediaPlayer.currentPosition
-                delay(100)
-            }
-        }
-    }
+    val playbackVolume = playback.playbackVolume
+    fun setPlaybackVolume(v: Float) = playback.setPlaybackVolume(v)
 
     // ============= EQ actions (Phase 1) =============
 
@@ -2695,9 +2551,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             .getOrDefault(ApplySaveMode.BOTH)
         _currentEQChain.value = _currentEQChain.value.copy(bypassed = s.eqBypassed)
 
-        _playbackSpeed.value = s.playbackSpeed
-        _playbackLoop.value = s.playbackLoop
-        _playbackVolume.value = s.playbackVolume
+        playback.applySnapshot(s.playbackSpeed, s.playbackLoop, s.playbackVolume)
 
         _saveDirectoryUri.value = s.saveDirectoryUri?.let { Uri.parse(it) }
         _groupByScene.value = s.groupByScene
@@ -2895,6 +2749,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         try { voiceActivityDetector.stop() } catch (_: Exception) {}
         try { billing.stop() } catch (_: Exception) {}
         abandonAudioFocus()
-        mediaPlayer.release()
+        playback.release()
     }
 }
