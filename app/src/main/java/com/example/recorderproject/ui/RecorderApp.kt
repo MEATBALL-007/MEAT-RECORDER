@@ -80,6 +80,7 @@ import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.SortPicker
+import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.LocalAppTypography
 import com.example.recorderproject.ui.theme.Spacing
 
@@ -93,8 +94,8 @@ fun RecorderApp(
     onOpenEQOnLast: () -> Unit,
     onOpenSettings: () -> Unit = {},
     onOpenPresets: () -> Unit = {},
-    theme: com.example.recorderproject.ui.theme.AppTheme = com.example.recorderproject.ui.theme.AppTheme.Default,
-    onChangeTheme: (com.example.recorderproject.ui.theme.AppTheme) -> Unit = {},
+    theme: AppTheme = AppTheme.Default,
+    onChangeTheme: (AppTheme) -> Unit = {},
     onSignInDrive: () -> Unit = {},
     onOpenFullSettings: () -> Unit = {},
 ) {
@@ -169,10 +170,11 @@ fun RecorderApp(
     val antiClipOn by viewModel.antiClipOn.collectAsStateWithLifecycle()
     val compressorOn by viewModel.compressorOn.collectAsStateWithLifecycle()
     val stereoWidenerOn by viewModel.stereoWidenerOn.collectAsStateWithLifecycle()
-    val vadOnQs by viewModel.vadOn.collectAsStateWithLifecycle()
+    val vadOn by viewModel.vadOn.collectAsStateWithLifecycle()
     val quality by viewModel.quality.collectAsStateWithLifecycle()
     val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
     val isDriveSignedIn by viewModel.isDriveSignedIn.collectAsStateWithLifecycle()
+
     Box(modifier = Modifier.fillMaxSize()) {
     // Faithful rebuild of 22 May APK home — see recovery/screenshots/04-after-skip.png
     MeatRecHome(
@@ -255,7 +257,7 @@ fun RecorderApp(
         onChangeLiveEqBand = { band, gain -> viewModel.setLiveEqBand(band, gain) },
         preRollOn = viewModel.preRollEnabled.collectAsStateWithLifecycle().value,
         onTogglePreRoll = { viewModel.togglePreRoll() },
-        vadOn = viewModel.vadOn.collectAsStateWithLifecycle().value,
+        vadOn = vadOn,
         onToggleVad = { viewModel.toggleVad() },
         lufsDb = viewModel.liveLufs.collectAsStateWithLifecycle().value,
         liveTpDbtp = viewModel.liveTpDbTp.collectAsStateWithLifecycle().value,
@@ -280,37 +282,6 @@ fun RecorderApp(
         micSource = micSource,
         phaseCorrelation = viewModel.phaseCorrelation.collectAsStateWithLifecycle().value,
     )
-
-    if (quickSettingsOpen) {
-        com.example.recorderproject.ui.components.QuickSettingsSheet(
-            agcOn = agcOn,
-            onToggleAgc = { viewModel.toggleAgc() },
-            hiPassOn = hiPassOn,
-            onToggleHiPass = { viewModel.toggleHiPass() },
-            antiClipOn = antiClipOn,
-            onToggleAntiClip = { viewModel.toggleAntiClip() },
-            compressorOn = compressorOn,
-            onToggleCompressor = { viewModel.toggleCompressor() },
-            stereoWidenerOn = stereoWidenerOn,
-            onToggleStereoWidener = { viewModel.toggleStereoWidener() },
-            vadOn = vadOnQs,
-            onToggleVad = { viewModel.toggleVad() },
-            quality = quality,
-            onChangeQuality = { viewModel.setQuality(it) },
-            isRecording = isRecording,
-            currentTheme = theme,
-            onChangeTheme = onChangeTheme,
-            saveLocationLabel = saveDirectoryUri?.toString() ?: "Default app folder",
-            onPickSaveLocation = onSelectSaveLocation,
-            cloudBackupOn = cloudBackupOn,
-            onToggleCloudBackup = {
-                viewModel.toggleCloudBackup()
-                if (!cloudBackupOn && !isDriveSignedIn) onSignInDrive()
-            },
-            onOpenFullSettings = { quickSettingsOpen = false; onOpenFullSettings() },
-            onDismiss = { quickSettingsOpen = false },
-        )
-    }
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
     Box(
@@ -347,6 +318,37 @@ fun RecorderApp(
                 viewModel.selectInputDevice(device)
             },
             onDismiss = { sourcePickerOpen = false },
+        )
+    }
+
+    if (quickSettingsOpen) {
+        com.example.recorderproject.ui.components.QuickSettingsSheet(
+            agcOn = agcOn,
+            onToggleAgc = { viewModel.toggleAgc() },
+            hiPassOn = hiPassOn,
+            onToggleHiPass = { viewModel.toggleHiPass() },
+            antiClipOn = antiClipOn,
+            onToggleAntiClip = { viewModel.toggleAntiClip() },
+            compressorOn = compressorOn,
+            onToggleCompressor = { viewModel.toggleCompressor() },
+            stereoWidenerOn = stereoWidenerOn,
+            onToggleStereoWidener = { viewModel.toggleStereoWidener() },
+            vadOn = vadOn,
+            onToggleVad = { viewModel.toggleVad() },
+            quality = quality,
+            onChangeQuality = { viewModel.setQuality(it) },
+            isRecording = isRecording,
+            currentTheme = theme,
+            onChangeTheme = onChangeTheme,
+            saveLocationLabel = saveDirectoryUri?.toString() ?: "Default app folder",
+            onPickSaveLocation = onSelectSaveLocation,
+            cloudBackupOn = cloudBackupOn,
+            onToggleCloudBackup = {
+                viewModel.toggleCloudBackup()
+                if (!cloudBackupOn && !isDriveSignedIn) onSignInDrive()
+            },
+            onOpenFullSettings = { quickSettingsOpen = false; onOpenFullSettings() },
+            onDismiss = { quickSettingsOpen = false },
         )
     }
 
