@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.ui.components.IconLineSettings
+import com.example.recorderproject.ui.components.IconLineSliders
 import com.example.recorderproject.ui.components.OrangeAura
 import com.example.recorderproject.ui.components.OrangeUnderglow
 
@@ -295,7 +296,7 @@ fun MeatRecHome(
                         .clickable(onClick = onOpenQuickSettings),
                     contentAlignment = Alignment.Center,
                 ) {
-                    com.example.recorderproject.ui.components.IconLineSliders(tint = Color.White, size = 24.dp)
+                    IconLineSliders(tint = Color.White, size = 24.dp)
                 }
                 Box(
                     modifier = Modifier
