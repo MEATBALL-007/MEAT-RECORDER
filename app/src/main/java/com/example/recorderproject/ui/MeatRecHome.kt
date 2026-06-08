@@ -98,6 +98,7 @@ fun MeatRecHome(
     onChangeChannelCount: (Int) -> Unit,
     onTapRecord: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenQuickSettings: () -> Unit = {},
     onOpenSourcePicker: () -> Unit = {},
     onPickSaveLocation: () -> Unit = {},
     onAnalyzeRoom: () -> Unit = {},
@@ -287,13 +288,23 @@ fun MeatRecHome(
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(onClick = onOpenSettings),
-                contentAlignment = Alignment.Center,
-            ) {
-                IconLineSettings(tint = Color.White, size = 26.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(onClick = onOpenQuickSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    com.example.recorderproject.ui.components.IconLineSliders(tint = Color.White, size = 24.dp)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(onClick = onOpenSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconLineSettings(tint = Color.White, size = 26.dp)
+                }
             }
         }
 
