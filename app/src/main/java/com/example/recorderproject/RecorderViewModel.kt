@@ -846,9 +846,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
 
     // A/B compare state — delegated to PlaybackManager (issue #13).
-    val abFiles = playback.abFiles
-    val abPlayingSlot = playback.abPlayingSlot
-    val abCompareOpen = playback.abCompareOpen
+    val abFiles: StateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?> = playback.abFiles
+    val abPlayingSlot: StateFlow<Int> = playback.abPlayingSlot
+    val abCompareOpen: StateFlow<Boolean> = playback.abCompareOpen
 
     fun openAbCompare(a: com.example.recorderproject.model.RecordFile, b: com.example.recorderproject.model.RecordFile) =
         playback.openAbCompare(a, b)
@@ -875,10 +875,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     // Playback states — delegated to PlaybackManager (issue #13).
-    val isPlaying = playback.isPlaying
-    val currentPlaybackPosition = playback.currentPlaybackPosition
-    val playbackDuration = playback.playbackDuration
-    val selectedFile = playback.selectedFile
+    val isPlaying: StateFlow<Boolean> = playback.isPlaying
+    val currentPlaybackPosition: StateFlow<Int> = playback.currentPlaybackPosition
+    val playbackDuration: StateFlow<Int> = playback.playbackDuration
+    val selectedFile: StateFlow<RecordFile?> = playback.selectedFile
 
     private val _audioSource = MutableStateFlow(1) // Default MIC
     val audioSource: StateFlow<Int> = _audioSource
@@ -892,7 +892,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _needsPermission = MutableStateFlow(false)
     val needsPermission: StateFlow<Boolean> = _needsPermission
 
-    val isPlayerReady = playback.isPlayerReady
+    val isPlayerReady: StateFlow<Boolean> = playback.isPlayerReady
 
     // ------------- EQ state (Phase 1) -------------
 
@@ -2092,14 +2092,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun closePlayer() = playback.closePlayer()
 
-    // G5/G6/G7: playback speed / loop / volume — delegated to PlaybackManager (issue #13).
-    val playbackSpeed = playback.playbackSpeed
+    // Playback speed / loop / volume — delegated to PlaybackManager (issue #13).
+    val playbackSpeed: StateFlow<Float> = playback.playbackSpeed
     fun setPlaybackSpeed(speed: Float) = playback.setPlaybackSpeed(speed)
 
-    val playbackLoop = playback.playbackLoop
+    val playbackLoop: StateFlow<Boolean> = playback.playbackLoop
     fun toggleLoop() = playback.toggleLoop()
 
-    val playbackVolume = playback.playbackVolume
+    val playbackVolume: StateFlow<Float> = playback.playbackVolume
     fun setPlaybackVolume(v: Float) = playback.setPlaybackVolume(v)
 
     // ============= EQ actions (Phase 1) =============
