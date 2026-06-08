@@ -146,6 +146,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private var stopReceiverRegistered = false
     private val mediaPlayer = MediaPlayer()
     private val settings = SettingsDataStore(application)
+    // Library scanning extracted into RecordingScanner (issue #13). Declared before the init
+    // block (which calls the scan functions), so it is initialized in time. Only needs `app`.
+    private val scanner = com.example.recorderproject.data.RecordingScanner(app)
     private val hydrated = MutableStateFlow(false)
 
     private val gainDbPersist = MutableSharedFlow<Float>(extraBufferCapacity = 64)
@@ -2785,93 +2788,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * to the list when NR is enabled.
      */
     private fun scanRecordingsFromDisk() {
-        val dir = java.io.File(
-            app.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
-            "Recordings",
-        )
-        if (!dir.exists()) return
-        val allWavs = dir.listFiles { f ->
-            f.isFile && f.extension.equals("wav", ignoreCase = true)
-        }?.toList() ?: return
-
-        // Build set of "base names" that have a _nr companion — we'll hide those originals
-        val nrBaseNames = allWavs
-            .filter { it.nameWithoutExtension.lowercase().endsWith("_nr") }
-            .map { it.nameWithoutExtension.dropLast(3) } // strip "_nr"
-            .toSet()
-
-        // Files already in the list (e.g., from PR2 recovery) — don't double-add
-        val existingPaths = _recordFiles.value.map { it.path }.toSet()
-
-        val scanned = allWavs
-            .filter { f ->
-                val base = f.nameWithoutExtension
-                val isOriginalShadowedByNr =
-                    !base.lowercase().endsWith("_nr") && nrBaseNames.contains(base)
-                val isDeliverySibling = base.endsWith("_delivery")
-                !isOriginalShadowedByNr && !isDeliverySibling && f.absolutePath !in existingPaths
-            }
-            .sortedByDescending { it.lastModified() }
-            .mapNotNull { f ->
-                try {
-                    val nameLower = f.nameWithoutExtension.lowercase()
-                    val hasNr = nameLower.endsWith("_nr")
-                    val eqSidecar = java.io.File(f.parentFile, "${f.nameWithoutExtension}_eq.json")
-                    val hasEq = eqSidecar.exists()
-
-                    val durationSeconds = try {
-                        val mmr = android.media.MediaMetadataRetriever()
-                        mmr.setDataSource(f.absolutePath)
-                        val ms = mmr.extractMetadata(
-                            android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
-                        )?.toLongOrNull() ?: 0L
-                        mmr.release()
-                        (ms / 1000L).toInt()
-                    } catch (_: Exception) { 0 }
-
-                    // Pick up delivery sibling if present.
-                    val deliveryWav  = java.io.File(f.parentFile, "${f.nameWithoutExtension}_delivery.wav")
-                    val deliveryJson = java.io.File(f.parentFile, "${f.nameWithoutExtension}_delivery.json")
-                    val deliveryResult = runCatching {
-                        if (deliveryJson.exists()) DeliveryResult.fromJson(deliveryJson.readText()) else null
-                    }.getOrNull()
-                    val deliveryPath = if (deliveryWav.exists()) deliveryWav.absolutePath else null
-
-                    RecordFile(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = f.name,
-                        path = f.absolutePath,
-                        durationSeconds = durationSeconds,
-                        sceneName = "",
-                        hasNoiseReduction = hasNr,
-                        hasEQ = hasEq,
-                        deliveryPath = deliveryPath,
-                        deliveryResult = deliveryResult,
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "scanRecordingsFromDisk: skipping ${f.name}: ${e.message}")
-                    null
-                }
-            }
-
-        // Orphan delivery sweep: _delivery.wav without matching original AND without sidecar JSON.
-        val originalNames = allWavs
-            .filter { !it.nameWithoutExtension.endsWith("_delivery") }
-            .map { it.nameWithoutExtension }
-            .toSet()
-        allWavs
-            .filter { f ->
-                val base = f.nameWithoutExtension
-                if (!base.endsWith("_delivery")) return@filter false
-                val originalBase = base.removeSuffix("_delivery")
-                val sidecar = java.io.File(f.parentFile, "${base}.json")
-                originalBase !in originalNames && !sidecar.exists()
-            }
-            .forEach { runCatching { it.delete() } }
-
-        if (scanned.isNotEmpty()) {
-            _recordFiles.value = _recordFiles.value + scanned
-            Log.i(TAG, "scanRecordingsFromDisk: added ${scanned.size} files from disk")
+        val added = scanner.scanDisk(_recordFiles.value.map { it.path }.toSet())
+        if (added.isNotEmpty()) {
+            _recordFiles.value = _recordFiles.value + added
+            Log.i(TAG, "scanRecordingsFromDisk: added ${added.size} files from disk")
         }
     }
 
@@ -2883,75 +2803,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      */
     private suspend fun scanSafRecordings() = withContext(Dispatchers.IO) {
         val uri = _saveDirectoryUri.value ?: return@withContext
-        val tree = try {
-            androidx.documentfile.provider.DocumentFile.fromTreeUri(app, uri)
-        } catch (_: Exception) { null } ?: return@withContext
-        val docs = try { tree.listFiles().toList() } catch (_: Exception) { return@withContext }
-
-        fun baseOf(n: String) = if (n.contains('.')) n.substringBeforeLast('.') else n
-        // name -> doc, for sidecar/companion (_eq.json, _delivery.*) lookups
-        val byName = docs.mapNotNull { d -> d.name?.let { it to d } }.toMap()
-
-        val wavs = docs.filter { it.isFile && (it.name?.endsWith(".wav", ignoreCase = true) == true) }
-        val nrBaseNames = wavs.mapNotNull { it.name }
-            .map { baseOf(it) }
-            .filter { it.lowercase().endsWith("_nr") }
-            .map { it.dropLast(3) }
-            .toSet()
-        val existingPaths = _recordFiles.value.map { it.path }.toSet()
-
-        val scanned = wavs
-            .sortedByDescending { it.lastModified() }
-            .mapNotNull { doc ->
-                try {
-                    val fullName = doc.name ?: return@mapNotNull null
-                    val base = baseOf(fullName)
-                    val baseLower = base.lowercase()
-                    // Hide _delivery siblings and NR-shadowed originals, mirroring the internal scan.
-                    if (base.endsWith("_delivery")) return@mapNotNull null
-                    if (!baseLower.endsWith("_nr") && nrBaseNames.contains(base)) return@mapNotNull null
-                    val path = doc.uri.toString()
-                    if (path in existingPaths) return@mapNotNull null
-
-                    val durationSeconds = try {
-                        val mmr = android.media.MediaMetadataRetriever()
-                        mmr.setDataSource(app, doc.uri)
-                        val ms = mmr.extractMetadata(
-                            android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
-                        )?.toLongOrNull() ?: 0L
-                        mmr.release()
-                        (ms / 1000L).toInt()
-                    } catch (_: Exception) { 0 }
-
-                    val deliveryDoc = byName["${base}_delivery.wav"]
-                    val deliveryResult = runCatching {
-                        byName["${base}_delivery.json"]?.let { d ->
-                            app.contentResolver.openInputStream(d.uri)?.use { ins ->
-                                DeliveryResult.fromJson(ins.readBytes().decodeToString())
-                            }
-                        }
-                    }.getOrNull()
-
-                    RecordFile(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = fullName,
-                        path = path,
-                        durationSeconds = durationSeconds,
-                        sceneName = "",
-                        hasNoiseReduction = baseLower.endsWith("_nr"),
-                        hasEQ = byName.containsKey("${base}_eq.json"),
-                        deliveryPath = deliveryDoc?.uri?.toString(),
-                        deliveryResult = deliveryResult,
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "scanSafRecordings: skipping ${doc.name}: ${e.message}")
-                    null
-                }
-            }
-
-        if (scanned.isNotEmpty()) {
-            _recordFiles.value = _recordFiles.value + scanned
-            Log.i(TAG, "scanSafRecordings: added ${scanned.size} files from SAF folder")
+        val added = scanner.scanSaf(uri, _recordFiles.value.map { it.path }.toSet())
+        if (added.isNotEmpty()) {
+            _recordFiles.value = _recordFiles.value + added
+            Log.i(TAG, "scanSafRecordings: added ${added.size} files from SAF folder")
         }
     }
 
