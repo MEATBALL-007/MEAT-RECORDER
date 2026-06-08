@@ -42,8 +42,24 @@ class NoiseReductionProcessor {
         val outputName = sourceFile.nameWithoutExtension + "_nr.wav"
         val outputFile = File(sourceFile.parentFile, outputName)
 
-        FileInputStream(sourceFile).use { inputStream ->
-            BufferedOutputStream(FileOutputStream(outputFile)).use { outputStream ->
+        processFile(sourceFile, outputFile)
+
+        return file.copy(
+            id = System.currentTimeMillis().toString(),
+            name = outputFile.name,
+            path = outputFile.absolutePath,
+            hasNoiseReduction = true
+        )
+    }
+
+    /**
+     * Core soft-gate transform from one WAV [src] to another [dst]. Works on plain
+     * `java.io.File`s so it can run on either local storage or, via [SafAudioBridge],
+     * a temp copy of a SAF (content://) document.
+     */
+    fun processFile(src: File, dst: File) {
+        FileInputStream(src).use { inputStream ->
+            BufferedOutputStream(FileOutputStream(dst)).use { outputStream ->
                 // Copy the 44-byte WAV header unchanged
                 val header = ByteArray(44)
                 inputStream.read(header)
@@ -80,12 +96,5 @@ class NoiseReductionProcessor {
                 }
             }
         }
-
-        return file.copy(
-            id = System.currentTimeMillis().toString(),
-            name = outputFile.name,
-            path = outputFile.absolutePath,
-            hasNoiseReduction = true
-        )
     }
 }

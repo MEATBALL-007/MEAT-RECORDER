@@ -1907,7 +1907,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
                 // D: kick off delivery render if a target is active
                 val deliveryTarget = _loudnessTarget.value
-                if (deliveryTarget !is LoudnessTarget.Off && !finalFile.path.startsWith("content://")) {
+                if (deliveryTarget !is LoudnessTarget.Off && finalFile.path.startsWith("content://")) {
+                    renderDeliverySaf(finalFile, deliveryTarget)
+                } else if (deliveryTarget !is LoudnessTarget.Off) {
                     viewModelScope.launch(Dispatchers.IO) {
                         renderSemaphore.withPermit {
                             _isRenderingDelivery.value = true
@@ -2017,6 +2019,52 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Loudness/delivery render for a SAF (content://) recording. Bridges the document to a
+     * cache temp, runs [DeliveryRenderer], and writes sibling `_delivery.wav` + `_delivery.json`
+     * documents into the folder — the SAF counterpart of the local delivery render in stopRecording.
+     */
+    private fun renderDeliverySaf(finalFile: RecordFile, target: LoudnessTarget) {
+        val srcUri = android.net.Uri.parse(finalFile.path)
+        val base = if (finalFile.name.contains('.')) finalFile.name.substringBeforeLast('.') else finalFile.name
+        viewModelScope.launch(Dispatchers.IO) {
+            renderSemaphore.withPermit {
+                val tree = _saveDirectoryUri.value?.let {
+                    androidx.documentfile.provider.DocumentFile.fromTreeUri(app, it)
+                } ?: return@withPermit
+                val deliveryDoc = tree.createFile("audio/wav", "${base}_delivery.wav") ?: return@withPermit
+                _isRenderingDelivery.value = true
+                try {
+                    var result: DeliveryResult? = null
+                    runCatching {
+                        com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
+                            cacheDir = app.cacheDir,
+                            openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
+                            openOutput = { app.contentResolver.openOutputStream(deliveryDoc.uri) ?: error("cannot open output") },
+                            process = { s, d -> result = DeliveryRenderer.render(s, d, target) },
+                        )
+                    }
+                    val r = result
+                    if (r != null) {
+                        tree.createFile("application/json", "${base}_delivery.json")?.let { jsonDoc ->
+                            app.contentResolver.openOutputStream(jsonDoc.uri)?.use { out ->
+                                out.write(DeliveryResult.toJson(r).toByteArray())
+                            }
+                        }
+                        _lastDeliveryResult.value = r
+                        rebindDeliveryResult(finalFile.path, deliveryDoc.uri.toString(), r)
+                    } else {
+                        // render produced nothing usable (e.g. too short) — drop the empty doc.
+                        _lastDeliveryResult.value = null
+                        runCatching { deliveryDoc.delete() }
+                    }
+                } finally {
+                    _isRenderingDelivery.value = false
+                }
+            }
+        }
+    }
+
     // Phase 4 — cue points dropped while recording
     private val _liveCueCount = MutableStateFlow(0)
     val liveCueCount: StateFlow<Int> = _liveCueCount
@@ -2100,10 +2148,54 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun applyNoiseReduce(file: RecordFile) {
+        if (file.path.startsWith("content://")) {
+            applyNoiseReduceSaf(file)
+            return
+        }
         viewModelScope.launch {
             val updated = withContext(Dispatchers.IO) { noiseProcessor.process(file) }
             _recordFiles.value = _recordFiles.value.map {
                 if (it.id == file.id) updated else it
+            }
+        }
+    }
+
+    /**
+     * Noise reduction for SAF (content://) sources. Bridges the document to a cache temp,
+     * runs [NoiseReductionProcessor.processFile], and writes a sibling `_nr.wav` into the
+     * folder — then swaps the list entry for the NR version, mirroring the local flow.
+     */
+    private fun applyNoiseReduceSaf(file: RecordFile) {
+        val srcUri = android.net.Uri.parse(file.path)
+        val base = if (file.name.contains('.')) file.name.substringBeforeLast('.') else file.name
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val tree = _saveDirectoryUri.value?.let {
+                    androidx.documentfile.provider.DocumentFile.fromTreeUri(app, it)
+                } ?: throw IllegalStateException("Save folder unavailable")
+                val nrDoc = tree.createFile("audio/wav", "${base}_nr.wav")
+                    ?: throw IllegalStateException("Could not create NR file in folder")
+                com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
+                    cacheDir = app.cacheDir,
+                    openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
+                    openOutput = { app.contentResolver.openOutputStream(nrDoc.uri) ?: error("cannot open output") },
+                    process = { s, d -> noiseProcessor.processFile(s, d) },
+                )
+                val updated = file.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = nrDoc.name ?: "${base}_nr.wav",
+                    path = nrDoc.uri.toString(),
+                    hasNoiseReduction = true,
+                )
+                _recordFiles.value = _recordFiles.value.map { if (it.id == file.id) updated else it }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "Noise reduction applied", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "NR (SAF) failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "Noise reduction failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -2475,7 +2567,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             return
         }
         if (src.path.startsWith("content://")) {
-            Toast.makeText(app, "SAF (content://) sources not supported for Apply yet — save to a local folder", Toast.LENGTH_LONG).show()
+            onEQApplySaf(src, _currentEQChain.value, mode)
             return
         }
         val srcFile = File(src.path)
@@ -2524,6 +2616,74 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 }
                 _eqRenderProgress.value = -1f
                 eqFile.delete()
+            }
+        }
+    }
+
+    /**
+     * EQ Apply for SAF (content://) sources. The DSP pipeline only reads/writes java.io.File,
+     * so [SafAudioBridge] materializes the document to a cache temp, runs [EQProcessor], and
+     * publishes the result back into the folder — either as a sibling `_eq.wav` (BOTH) or by
+     * overwriting the original document in place (EQ_ONLY).
+     */
+    private fun onEQApplySaf(src: RecordFile, chain: EQChain, mode: ApplySaveMode) {
+        if (mode == ApplySaveMode.ORIGINAL_ONLY) return
+        val srcUri = android.net.Uri.parse(src.path)
+        val base = if (src.name.contains('.')) src.name.substringBeforeLast('.') else src.name
+        val runEq: (File, File) -> Unit = { s, d ->
+            com.example.recorderproject.audio.EQProcessor.process(s, d, chain) { p -> _eqRenderProgress.value = p }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _eqRenderProgress.value = 0f
+            try {
+                when (mode) {
+                    ApplySaveMode.BOTH -> {
+                        val tree = _saveDirectoryUri.value?.let {
+                            androidx.documentfile.provider.DocumentFile.fromTreeUri(app, it)
+                        } ?: throw IllegalStateException("Save folder unavailable")
+                        val eqDoc = tree.createFile("audio/wav", "${base}_eq.wav")
+                            ?: throw IllegalStateException("Could not create EQ file in folder")
+                        com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
+                            cacheDir = app.cacheDir,
+                            openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
+                            openOutput = { app.contentResolver.openOutputStream(eqDoc.uri) ?: error("cannot open output") },
+                            process = runEq,
+                        )
+                        // EQ-metadata sidecar so the badge survives a folder rescan.
+                        tree.createFile("application/json", "${base}_eq.json")?.let { jsonDoc ->
+                            app.contentResolver.openOutputStream(jsonDoc.uri)?.use { out ->
+                                out.write(com.example.recorderproject.model.EQChainJson.toJsonString(chain).toByteArray())
+                            }
+                        }
+                        _recordFiles.value = _recordFiles.value.map {
+                            if (it.id == src.id) it.copy(hasEQ = true) else it
+                        }
+                    }
+                    ApplySaveMode.EQ_ONLY -> {
+                        com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
+                            cacheDir = app.cacheDir,
+                            openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
+                            openOutput = { app.contentResolver.openOutputStream(srcUri, "wt") ?: error("cannot open output") },
+                            process = runEq,
+                        )
+                        _recordFiles.value = _recordFiles.value.map {
+                            if (it.id == src.id) it.copy(hasEQ = true) else it
+                        }
+                    }
+                    ApplySaveMode.ORIGINAL_ONLY -> Unit
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "EQ applied", Toast.LENGTH_SHORT).show()
+                    delay(600)
+                    _eqRenderProgress.value = -1f
+                    onEQClose()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "EQ render (SAF) failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, "EQ render failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+                _eqRenderProgress.value = -1f
             }
         }
     }
