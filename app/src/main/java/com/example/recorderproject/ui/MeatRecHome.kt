@@ -380,93 +380,28 @@ fun MeatRecHome(
                 onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
             )
 
-            // Q6: bulk-select action bar — only visible when items are selected
-            if (selectedIds.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MeatOrange.copy(alpha = 0.18f))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "${selectedIds.size} selected",
-                        color = MeatOrange,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "Clear",
-                            color = Color.White.copy(alpha = 0.65f),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .clickable(onClick = onClearSelection)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                        if (selectedIds.size == 2) {
-                            Text(
-                                "A/B",
-                                color = Color(0xFFFFC72C),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .clickable(onClick = onBulkCompareAb)
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                            )
-                        }
-                        Text(
-                            "Delete",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MeatOrange)
-                                .clickable(onClick = onBulkDelete)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                    }
-                }
-            }
-
-            // Batch 4: Toolbar above the recordings list (search + filter + sort).
-            // Also show it when a filter/search is ACTIVE even if the resulting list is
-            // empty — otherwise a filter that hides everything (e.g. "NR") would also hide
-            // the only control that can reset it, leaving the library stuck looking empty.
-            if (files.isNotEmpty() || searchQuery.isNotEmpty() ||
-                fileFilter != com.example.recorderproject.RecorderViewModel.FileFilter.ALL
-            ) {
-                com.example.recorderproject.ui.components.RecordingsToolbar(
-                    searchQuery = searchQuery,
-                    onSearchChange = onSearchChange,
-                    currentFilter = fileFilter,
-                    onFilterChange = onFilterChange,
-                    currentSort = sortOrder,
-                    onSortChange = onSortChange,
-                )
-            }
-
-            // L1: Recordings list card — Batch 1, file library
-            com.example.recorderproject.ui.components.RecordingsListCard(
+            LibraryPage(
                 files = files,
-                selectedId = selectedFileId,
+                selectedFileId = selectedFileId,
                 isPlaying = isPlaying,
-                onTap = onTapFile,
-                onShare = onShareFile,
-                onRename = onRenameFile,
-                onToggleStar = onToggleStarFile,
-                onToggleLock = onToggleLockFile,
-                onDelete = onDeleteFile,
-                onOpenTrim = onTrimFile,
-                onOpenEQ = onEQFile,
+                onTapFile = onTapFile,
+                onShareFile = onShareFile,
+                onRenameFile = onRenameFile,
+                onToggleStarFile = onToggleStarFile,
+                onToggleLockFile = onToggleLockFile,
+                onDeleteFile = onDeleteFile,
+                onTrimFile = onTrimFile,
+                onEQFile = onEQFile,
+                selectedIds = selectedIds,
+                onClearSelection = onClearSelection,
+                onBulkDelete = onBulkDelete,
+                onBulkCompareAb = onBulkCompareAb,
+                searchQuery = searchQuery,
+                onSearchChange = onSearchChange,
+                fileFilter = fileFilter,
+                onFilterChange = onFilterChange,
+                sortOrder = sortOrder,
+                onSortChange = onSortChange,
             )
 
             // Padding at the bottom so the MiniPlayer doesn't cover the last row
