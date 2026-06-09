@@ -8,7 +8,11 @@ import com.example.recorderproject.model.EQChain
  * redo; [undo]/[redo] move the "current" state between the two stacks. Capped at [cap].
  */
 class EqHistory(private val cap: Int = 10) {
+    init { require(cap >= 1) { "cap must be >= 1, was $cap" } }
+
     private val undoStack = ArrayDeque<EQChain>()
+    // Redo is intentionally uncapped — it only ever grows from undone items, so it is
+    // self-bounded by the undo stack. (Mirrors the original ViewModel, which also left redo uncapped.)
     private val redoStack = ArrayDeque<EQChain>()
 
     /** Record [current] as a pre-change checkpoint; clears redo; evicts oldest past [cap]. */

@@ -41,6 +41,15 @@ class EqHistoryTest {
         assertNull(EqHistory().redo(a))
     }
 
+    @Test fun `clear empties both stacks`() {
+        val h = EqHistory()
+        h.push(a)
+        h.undo(b)          // undo stack now empty-ish, redo holds b
+        h.clear()
+        assertNull(h.undo(c))
+        assertNull(h.redo(c))
+    }
+
     @Test fun `cap keeps only the most recent states`() {
         val h = EqHistory(cap = 2)
         h.push(a); h.push(b); h.push(c)   // 'a' evicted; undo stack = [b, c]
