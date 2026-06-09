@@ -1,6 +1,5 @@
 package com.example.recorderproject.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -11,15 +10,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,7 +54,6 @@ import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.ui.components.IconLineSettings
 import com.example.recorderproject.ui.components.IconLineSliders
-import com.example.recorderproject.ui.components.OrangeAura
 import com.example.recorderproject.ui.components.OrangeUnderglow
 
 /**
@@ -323,113 +316,8 @@ fun MeatRecHome(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Hero record button + LiquidBlob backdrop + aura halo behind.
-            // BoxWithConstraints lets the hero scale down on narrow phones so the
-            // 220dp button / 360dp blob never clip, while capping size on tablets.
-            BoxWithConstraints(contentAlignment = Alignment.Center) {
-                val buttonSize = minOf(maxWidth * 0.6f, 220.dp)
-                val blobSize   = minOf(maxWidth * 0.98f, 360.dp)
-                // Subtle LiquidBlob — only visible while recording, gives a "live"
-                // feel without competing with the button itself
-                if (isRecording) {
-                    Box(modifier = Modifier.size(blobSize).alpha(0.22f)) {
-                        com.example.recorderproject.ui.components.LiquidBlobCanvas(
-                            modifier = Modifier.size(blobSize),
-                        )
-                    }
-                }
-                OrangeAura(diameter = buttonSize, recording = isRecording)
-                BigRecordButton(isRecording = isRecording, onTap = onTapRecord, diameter = buttonSize)
-            }
-            Text(
-                if (isRecording) "Recording…" else androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.tap_to_record),
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            if (!isRecording) {
-                Text(
-                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.tap_to_start),
-                    color = Color.White.copy(alpha = 0.50f),
-                    fontSize = 14.sp,
-                )
-            }
-
-            // D: Loudness delivery target chip
-            com.example.recorderproject.ui.components.LoudnessTargetChip(
-                current = loudnessTarget,
-                onSelectSession = onSelectLoudnessTarget,
-                onSaveAsDefault = onSaveLoudnessAsDefault,
-            )
-
-            // G: Raw input level + gain — always visible, dial in before tapping record
-            com.example.recorderproject.ui.components.InputGainCard(
-                peakDbfs = liveRawPeakDbfs,
-                inputGainDb = inputGainDb,
-                onChangeInputGain = onChangeInputGain,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            )
-
-            // H: Take ± / Scene ± manual bump buttons
-            com.example.recorderproject.ui.components.TakeSceneBumpRow(
-                onTakeMinus = onTakeMinus1,
-                onTakePlus = onBumpTake,
-                onSceneMinus = onSceneMinus1,
-                onSceneMinusDot1 = onSubsceneMinus,
-                onSceneDot1 = onBumpSubscene,
-                onScenePlus = onScenePlus1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            )
-
-            // K1: rich recording-active section — Live Waveform + SPECTRUM + PITCH
-            AnimatedVisibility(
-                visible = isRecording,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                com.example.recorderproject.ui.components.RecordingActiveSection(
-                    elapsedSeconds = elapsedSeconds,
-                    waveform = waveform,
-                    inputLevelPercent = inputLevelPercent,
-                    spectrumHistory = spectrumHistory,
-                    pitchHz = pitchHz,
-                    cueCount = cueCount,
-                    isPaused = isPaused,
-                    onDropCue = onDropCue,
-                    onTogglePause = onTogglePause,
-                    liveEqOn = liveEqOn,
-                    onToggleLiveEq = onToggleLiveEq,
-                    onOpenEqEditor = onOpenEqEditor,
-                    liveNoiseGateOn = liveNoiseGateOn,
-                    onToggleLiveNoiseGate = onToggleLiveNoiseGate,
-                    liveEqBandGains = liveEqBandGains,
-                    onChangeLiveEqBand = onChangeLiveEqBand,
-                    preRollOn = preRollOn,
-                    onTogglePreRoll = onTogglePreRoll,
-                    vadOn = vadOn,
-                    onToggleVad = onToggleVad,
-                    lufsDb = lufsDb,
-                    shortTermLufs = lufsDb,
-                    integratedLufs = lufsDb,
-                    truePeakDbtp = liveTpDbtp,
-                    loudnessTarget = loudnessTarget,
-                    onSlateTone = onSlateTone,
-                    sceneName = sceneName,
-                    fileName = fileName,
-                    micSource = micSource,
-                    phaseCorrelation = phaseCorrelation,
-                    channelCount = channelCount,
-                )
-            }
-
-            Box(modifier = Modifier.height(8.dp))
-
-            // Recording Settings card
-            RecordingSettingsCard(
+            RecordPage(
+                isRecording = isRecording,
                 fileName = fileName,
                 sceneName = sceneName,
                 notes = notes,
@@ -444,14 +332,52 @@ fun MeatRecHome(
                 onChangeSampleRate = onChangeSampleRate,
                 onChangeBitDepth = onChangeBitDepth,
                 onChangeChannelCount = onChangeChannelCount,
+                onTapRecord = onTapRecord,
                 onOpenSourcePicker = onOpenSourcePicker,
                 onPickSaveLocation = onPickSaveLocation,
                 onAnalyzeRoom = onAnalyzeRoom,
+                elapsedSeconds = elapsedSeconds,
+                waveform = waveform,
+                inputLevelPercent = inputLevelPercent,
+                spectrumHistory = spectrumHistory,
+                pitchHz = pitchHz,
+                cueCount = cueCount,
+                isPaused = isPaused,
+                onDropCue = onDropCue,
+                onTogglePause = onTogglePause,
+                liveEqOn = liveEqOn,
+                onToggleLiveEq = onToggleLiveEq,
+                onOpenEqEditor = onOpenEqEditor,
+                liveNoiseGateOn = liveNoiseGateOn,
+                onToggleLiveNoiseGate = onToggleLiveNoiseGate,
+                liveEqBandGains = liveEqBandGains,
+                onChangeLiveEqBand = onChangeLiveEqBand,
+                preRollOn = preRollOn,
+                onTogglePreRoll = onTogglePreRoll,
+                vadOn = vadOn,
+                onToggleVad = onToggleVad,
+                lufsDb = lufsDb,
+                liveTpDbtp = liveTpDbtp,
+                loudnessTarget = loudnessTarget,
+                onSlateTone = onSlateTone,
+                micSource = micSource,
+                phaseCorrelation = phaseCorrelation,
                 monitorOn = monitorOn,
                 onToggleMonitor = onToggleMonitor,
                 monitorRmsDb = monitorRmsDb,
                 maxDurationMinutes = maxDurationMinutes,
                 onChangeMaxDuration = onChangeMaxDuration,
+                liveRawPeakDbfs = liveRawPeakDbfs,
+                inputGainDb = inputGainDb,
+                onChangeInputGain = onChangeInputGain,
+                onBumpTake = onBumpTake,
+                onBumpSubscene = onBumpSubscene,
+                onSubsceneMinus = onSubsceneMinus,
+                onTakeMinus1 = onTakeMinus1,
+                onSceneMinus1 = onSceneMinus1,
+                onScenePlus1 = onScenePlus1,
+                onSelectLoudnessTarget = onSelectLoudnessTarget,
+                onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
             )
 
             // Q6: bulk-select action bar — only visible when items are selected
@@ -550,7 +476,7 @@ fun MeatRecHome(
 }
 
 @Composable
-private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit, diameter: Dp = 220.dp) {
+internal fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit, diameter: Dp = 220.dp) {
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.93f else 1f,
@@ -606,7 +532,7 @@ private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit, diameter: D
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RecordingSettingsCard(
+internal fun RecordingSettingsCard(
     fileName: String,
     sceneName: String,
     notes: String,
