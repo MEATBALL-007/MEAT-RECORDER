@@ -22,10 +22,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,9 +52,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
+import com.example.recorderproject.ui.components.HomeSegmentedControl
 import com.example.recorderproject.ui.components.IconLineSettings
 import com.example.recorderproject.ui.components.IconLineSliders
 import com.example.recorderproject.ui.components.OrangeUnderglow
+import kotlinx.coroutines.launch
 
 /**
  * MeatRec home screen — pixel-faithful rebuild of the 22 May APK home.
@@ -72,7 +74,7 @@ import com.example.recorderproject.ui.components.OrangeUnderglow
  *      / NR toggle / Sample Rate pills / Channel Mode / Bit Depth / Audio Source
  *      / Save Location / Recording Limit / BT Monitor / Ghost Take / Room Profile
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MeatRecHome(
     isRecording: Boolean,
@@ -166,7 +168,6 @@ fun MeatRecHome(
     onTapUpgrade: () -> Unit = {},
     hasSaveLocation: Boolean = true,
 ) {
-    val scroll = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -304,108 +305,112 @@ fun MeatRecHome(
         // Underglow strip below the top bar
         OrangeUnderglow(modifier = Modifier.fillMaxWidth())
 
-        // ============== 2. SCROLLABLE BODY ==============
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .widthIn(max = 600.dp)  // centred column on tablets — avoids edge-to-edge stretch
-                .fillMaxWidth()
-                .verticalScroll(scroll)
-                .padding(horizontal = 20.dp)
-                .padding(top = 24.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            RecordPage(
-                isRecording = isRecording,
-                fileName = fileName,
-                sceneName = sceneName,
-                notes = notes,
-                noiseReductionEnabled = noiseReductionEnabled,
-                sampleRate = sampleRate,
-                bitDepth = bitDepth,
-                channelCount = channelCount,
-                onFileNameChange = onFileNameChange,
-                onSceneNameChange = onSceneNameChange,
-                onNotesChange = onNotesChange,
-                onToggleNR = onToggleNR,
-                onChangeSampleRate = onChangeSampleRate,
-                onChangeBitDepth = onChangeBitDepth,
-                onChangeChannelCount = onChangeChannelCount,
-                onTapRecord = onTapRecord,
-                onOpenSourcePicker = onOpenSourcePicker,
-                onPickSaveLocation = onPickSaveLocation,
-                onAnalyzeRoom = onAnalyzeRoom,
-                elapsedSeconds = elapsedSeconds,
-                waveform = waveform,
-                inputLevelPercent = inputLevelPercent,
-                spectrumHistory = spectrumHistory,
-                pitchHz = pitchHz,
-                cueCount = cueCount,
-                isPaused = isPaused,
-                onDropCue = onDropCue,
-                onTogglePause = onTogglePause,
-                liveEqOn = liveEqOn,
-                onToggleLiveEq = onToggleLiveEq,
-                onOpenEqEditor = onOpenEqEditor,
-                liveNoiseGateOn = liveNoiseGateOn,
-                onToggleLiveNoiseGate = onToggleLiveNoiseGate,
-                liveEqBandGains = liveEqBandGains,
-                onChangeLiveEqBand = onChangeLiveEqBand,
-                preRollOn = preRollOn,
-                onTogglePreRoll = onTogglePreRoll,
-                vadOn = vadOn,
-                onToggleVad = onToggleVad,
-                lufsDb = lufsDb,
-                liveTpDbtp = liveTpDbtp,
-                loudnessTarget = loudnessTarget,
-                onSlateTone = onSlateTone,
-                micSource = micSource,
-                phaseCorrelation = phaseCorrelation,
-                monitorOn = monitorOn,
-                onToggleMonitor = onToggleMonitor,
-                monitorRmsDb = monitorRmsDb,
-                maxDurationMinutes = maxDurationMinutes,
-                onChangeMaxDuration = onChangeMaxDuration,
-                liveRawPeakDbfs = liveRawPeakDbfs,
-                inputGainDb = inputGainDb,
-                onChangeInputGain = onChangeInputGain,
-                onBumpTake = onBumpTake,
-                onBumpSubscene = onBumpSubscene,
-                onSubsceneMinus = onSubsceneMinus,
-                onTakeMinus1 = onTakeMinus1,
-                onSceneMinus1 = onSceneMinus1,
-                onScenePlus1 = onScenePlus1,
-                onSelectLoudnessTarget = onSelectLoudnessTarget,
-                onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
-            )
+        // ============== 2. SECTION PAGER (Record | Library) ==============
+        val pagerState = rememberPagerState(initialPage = 0) { 2 }
+        val pagerScope = rememberCoroutineScope()
 
-            LibraryPage(
-                files = files,
-                selectedFileId = selectedFileId,
-                isPlaying = isPlaying,
-                onTapFile = onTapFile,
-                onShareFile = onShareFile,
-                onRenameFile = onRenameFile,
-                onToggleStarFile = onToggleStarFile,
-                onToggleLockFile = onToggleLockFile,
-                onDeleteFile = onDeleteFile,
-                onTrimFile = onTrimFile,
-                onEQFile = onEQFile,
-                selectedIds = selectedIds,
-                onClearSelection = onClearSelection,
-                onBulkDelete = onBulkDelete,
-                onBulkCompareAb = onBulkCompareAb,
-                searchQuery = searchQuery,
-                onSearchChange = onSearchChange,
-                fileFilter = fileFilter,
-                onFilterChange = onFilterChange,
-                sortOrder = sortOrder,
-                onSortChange = onSortChange,
-            )
+        HomeSegmentedControl(
+            selectedIndex = pagerState.currentPage,
+            onSelect = { i -> pagerScope.launch { pagerState.animateScrollToPage(i) } },
+        )
 
-            // Padding at the bottom so the MiniPlayer doesn't cover the last row
-            Box(modifier = Modifier.height(80.dp))
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { page ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                when (page) {
+                    0 -> RecordPage(
+                        isRecording = isRecording,
+                        fileName = fileName,
+                        sceneName = sceneName,
+                        notes = notes,
+                        noiseReductionEnabled = noiseReductionEnabled,
+                        sampleRate = sampleRate,
+                        bitDepth = bitDepth,
+                        channelCount = channelCount,
+                        onFileNameChange = onFileNameChange,
+                        onSceneNameChange = onSceneNameChange,
+                        onNotesChange = onNotesChange,
+                        onToggleNR = onToggleNR,
+                        onChangeSampleRate = onChangeSampleRate,
+                        onChangeBitDepth = onChangeBitDepth,
+                        onChangeChannelCount = onChangeChannelCount,
+                        onTapRecord = onTapRecord,
+                        onOpenSourcePicker = onOpenSourcePicker,
+                        onPickSaveLocation = onPickSaveLocation,
+                        onAnalyzeRoom = onAnalyzeRoom,
+                        elapsedSeconds = elapsedSeconds,
+                        waveform = waveform,
+                        inputLevelPercent = inputLevelPercent,
+                        spectrumHistory = spectrumHistory,
+                        pitchHz = pitchHz,
+                        cueCount = cueCount,
+                        isPaused = isPaused,
+                        onDropCue = onDropCue,
+                        onTogglePause = onTogglePause,
+                        liveEqOn = liveEqOn,
+                        onToggleLiveEq = onToggleLiveEq,
+                        onOpenEqEditor = onOpenEqEditor,
+                        liveNoiseGateOn = liveNoiseGateOn,
+                        onToggleLiveNoiseGate = onToggleLiveNoiseGate,
+                        liveEqBandGains = liveEqBandGains,
+                        onChangeLiveEqBand = onChangeLiveEqBand,
+                        preRollOn = preRollOn,
+                        onTogglePreRoll = onTogglePreRoll,
+                        vadOn = vadOn,
+                        onToggleVad = onToggleVad,
+                        lufsDb = lufsDb,
+                        liveTpDbtp = liveTpDbtp,
+                        loudnessTarget = loudnessTarget,
+                        onSlateTone = onSlateTone,
+                        micSource = micSource,
+                        phaseCorrelation = phaseCorrelation,
+                        monitorOn = monitorOn,
+                        onToggleMonitor = onToggleMonitor,
+                        monitorRmsDb = monitorRmsDb,
+                        maxDurationMinutes = maxDurationMinutes,
+                        onChangeMaxDuration = onChangeMaxDuration,
+                        liveRawPeakDbfs = liveRawPeakDbfs,
+                        inputGainDb = inputGainDb,
+                        onChangeInputGain = onChangeInputGain,
+                        onBumpTake = onBumpTake,
+                        onBumpSubscene = onBumpSubscene,
+                        onSubsceneMinus = onSubsceneMinus,
+                        onTakeMinus1 = onTakeMinus1,
+                        onSceneMinus1 = onSceneMinus1,
+                        onScenePlus1 = onScenePlus1,
+                        onSelectLoudnessTarget = onSelectLoudnessTarget,
+                        onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
+                    )
+                    else -> LibraryPage(
+                        files = files,
+                        selectedFileId = selectedFileId,
+                        isPlaying = isPlaying,
+                        onTapFile = onTapFile,
+                        onShareFile = onShareFile,
+                        onRenameFile = onRenameFile,
+                        onToggleStarFile = onToggleStarFile,
+                        onToggleLockFile = onToggleLockFile,
+                        onDeleteFile = onDeleteFile,
+                        onTrimFile = onTrimFile,
+                        onEQFile = onEQFile,
+                        selectedIds = selectedIds,
+                        onClearSelection = onClearSelection,
+                        onBulkDelete = onBulkDelete,
+                        onBulkCompareAb = onBulkCompareAb,
+                        searchQuery = searchQuery,
+                        onSearchChange = onSearchChange,
+                        fileFilter = fileFilter,
+                        onFilterChange = onFilterChange,
+                        sortOrder = sortOrder,
+                        onSortChange = onSortChange,
+                    )
+                }
+            }
         }
     }
 }
