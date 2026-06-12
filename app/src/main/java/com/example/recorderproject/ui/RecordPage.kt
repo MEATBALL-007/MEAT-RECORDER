@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -94,6 +95,10 @@ fun RecordPage(
     onScenePlus1: () -> Unit,
     onSelectLoudnessTarget: (com.example.recorderproject.model.LoudnessTarget) -> Unit,
     onSaveLoudnessAsDefault: (com.example.recorderproject.model.LoudnessTarget) -> Unit,
+    workspaceLayout: com.example.recorderproject.model.WorkspaceLayout = com.example.recorderproject.model.WorkspaceLayout.DEFAULT,
+    isProUser: Boolean = true,
+    onUpgradeFeature: (com.example.recorderproject.billing.ProFeature) -> Unit = {},
+    onOpenCustomize: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -207,8 +212,23 @@ fun RecordPage(
                 micSource = micSource,
                 phaseCorrelation = phaseCorrelation,
                 channelCount = channelCount,
+                layout = workspaceLayout,
+                isPro = isProUser,
+                onUpgrade = onUpgradeFeature,
             )
         }
+
+        Text(
+            "✎ Customize layout",
+            color = com.example.recorderproject.ui.theme.MeatYellow,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenCustomize)
+                .padding(vertical = 12.dp),
+        )
 
         Box(modifier = Modifier.height(8.dp))
 

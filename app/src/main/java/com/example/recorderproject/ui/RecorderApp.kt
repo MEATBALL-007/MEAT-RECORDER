@@ -124,6 +124,9 @@ fun RecorderApp(
 
     val isPro by viewModel.isPro.collectAsStateWithLifecycle()
     val saveDirectoryUri by viewModel.saveDirectoryUri.collectAsStateWithLifecycle()
+    val workspaceLayout by viewModel.workspaceLayout.collectAsStateWithLifecycle()
+    val customizeOpen by viewModel.customizeOpen.collectAsStateWithLifecycle()
+    val currentMode by viewModel.recorderMode.collectAsStateWithLifecycle()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     // Elapsed seconds — UI display only; limit enforcement is in RecorderViewModel
@@ -234,7 +237,7 @@ fun RecorderApp(
         onFilterChange = { viewModel.setFileFilter(it) },
         sortOrder = sortOrder,
         onSortChange = { viewModel.setSortOrder(it) },
-        currentMode = viewModel.recorderMode.collectAsStateWithLifecycle().value,
+        currentMode = currentMode,
         onChangeMode = onOpenPresets,
         cueCount = viewModel.liveCueCount.collectAsStateWithLifecycle().value,
         isPaused = viewModel.isPaused.collectAsStateWithLifecycle().value,
@@ -281,6 +284,9 @@ fun RecorderApp(
         onSlateTone = { viewModel.fireSlateTone() },
         micSource = micSource,
         phaseCorrelation = viewModel.phaseCorrelation.collectAsStateWithLifecycle().value,
+        onUpgradeFeature = { feature -> viewModel.openPaywall(feature) },
+        workspaceLayout = workspaceLayout,
+        onOpenCustomize = { viewModel.openCustomize() },
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
@@ -349,6 +355,18 @@ fun RecorderApp(
             },
             onOpenFullSettings = { quickSettingsOpen = false; onOpenFullSettings() },
             onDismiss = { quickSettingsOpen = false },
+        )
+    }
+
+    if (customizeOpen) {
+        com.example.recorderproject.ui.components.WorkspaceCustomizeSheet(
+            layout = workspaceLayout,
+            isPro = isPro,
+            modeName = currentMode.displayName,
+            onSave = { viewModel.saveWorkspace(it) },
+            onReset = { viewModel.resetWorkspace() },
+            onUpgrade = { feature -> viewModel.openPaywall(feature) },
+            onDismiss = { viewModel.closeCustomize() },
         )
     }
 
