@@ -93,7 +93,7 @@ fun WorkspaceCustomizeSheet(
             ) { Text("Done", color = Color.White, fontWeight = FontWeight.Bold) }
 
             TextButton(
-                onClick = { working = WorkspaceLayout.DEFAULT; onReset() },
+                onClick = { working = WorkspaceLayout.DEFAULT; onReset(); onDismiss() },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Reset to default", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp) }
         }
