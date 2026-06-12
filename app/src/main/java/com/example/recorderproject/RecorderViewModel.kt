@@ -1011,6 +1011,23 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
     val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = _recorderMode
 
+    // ── Customizable workspace ──────────────────────────────────────────
+    val workspace = com.example.recorderproject.workspace.WorkspaceManager(
+        settings = settings,
+        scope = viewModelScope,
+        isPro = isPro,
+        mode = recorderMode,
+    )
+    val workspaceLayout: StateFlow<com.example.recorderproject.model.WorkspaceLayout> = workspace.layout
+
+    private val _customizeOpen = MutableStateFlow(false)
+    val customizeOpen: StateFlow<Boolean> = _customizeOpen
+    fun openCustomize() { _customizeOpen.value = true }
+    fun closeCustomize() { _customizeOpen.value = false }
+
+    fun saveWorkspace(layout: com.example.recorderproject.model.WorkspaceLayout) = workspace.save(layout)
+    fun resetWorkspace() = workspace.resetToDefault()
+
     fun selectRecorderMode(mode: com.example.recorderproject.model.RecorderMode) {
         _recorderMode.value = mode
         // Apply preset (except for CUSTOM — user controls those themselves)

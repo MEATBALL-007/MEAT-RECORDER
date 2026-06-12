@@ -20,7 +20,8 @@ enum class ProFeature(val title: String, val blurb: String) {
     CLOUD_BACKUP("Cloud backup", "Auto-upload takes to your Google Drive"),
     ANALYSIS_TOOLS("Analysis suite", "Spectrogram, harmonic portrait, room profiler, A/B & multi-take"),
     ALL_THEMES("All themes", "Unlock all 10 appearance themes"),
-    RECORDING_LIMIT("Unlimited recording", "Free recordings are limited to 5 min — go unlimited with Pro");
+    RECORDING_LIMIT("Unlimited recording", "Free recordings are limited to 5 min — go unlimited with Pro"),
+    CUSTOM_WORKSPACE("Custom workspace", "Save a different control layout for each recording mode");
 
     companion object {
         /** Free users are capped to these. */

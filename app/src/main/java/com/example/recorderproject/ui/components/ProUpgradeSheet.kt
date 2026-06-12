@@ -115,6 +115,12 @@ private val proSlides = listOf(
         accentColor = SlideAmber,
         draw = { drawUnlimitedRecordingVisual() },
     ),
+    ProSlide(
+        title = "Custom Workspace",
+        blurb = "Save a different control layout for each recording mode",
+        accentColor = SlideBlue,
+        draw = { drawWorkspaceVisual() },
+    ),
 )
 
 private fun ProFeature.initialSlide(): Int = when (this) {
@@ -129,6 +135,7 @@ private fun ProFeature.initialSlide(): Int = when (this) {
     ProFeature.ANALYSIS_TOOLS,
     ProFeature.ALL_THEMES                    -> 5
     ProFeature.RECORDING_LIMIT               -> 6
+    ProFeature.CUSTOM_WORKSPACE              -> 7
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -518,4 +525,27 @@ private fun DrawScope.drawUnlimitedRecordingVisual() {
         radius = size.width * 0.04f,
         center = Offset(size.width * 0.08f, midY - size.height * 0.18f),
     )
+}
+
+private fun DrawScope.drawWorkspaceVisual() {
+    // Three stacked "control chips" with a reorder caret — evokes a movable layout.
+    val rowH = size.height * 0.16f
+    val gap = size.height * 0.07f
+    val w = size.width * 0.56f
+    val x = (size.width - w) / 2f
+    var y = size.height * 0.22f
+    val colors = listOf(SlideBlue, RecorderYellow, SlideGreen)
+    colors.forEach { c ->
+        drawRoundRect(
+            color = c.copy(alpha = 0.75f),
+            topLeft = Offset(x, y),
+            size = Size(w, rowH),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(rowH / 2f, rowH / 2f),
+        )
+        // Up/down caret on the right edge of each row.
+        val cx = x + w - rowH * 0.6f
+        drawLine(Color.White, Offset(cx, y + rowH * 0.35f), Offset(cx + rowH * 0.25f, y + rowH * 0.2f), 2.dp.toPx())
+        drawLine(Color.White, Offset(cx + rowH * 0.5f, y + rowH * 0.2f), Offset(cx + rowH * 0.75f, y + rowH * 0.35f), 2.dp.toPx())
+        y += rowH + gap
+    }
 }

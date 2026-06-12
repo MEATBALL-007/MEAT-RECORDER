@@ -167,6 +167,9 @@ fun MeatRecHome(
     isPro: Boolean = true,
     onTapUpgrade: () -> Unit = {},
     hasSaveLocation: Boolean = true,
+    onUpgradeFeature: (com.example.recorderproject.billing.ProFeature) -> Unit = {},
+    workspaceLayout: com.example.recorderproject.model.WorkspaceLayout = com.example.recorderproject.model.WorkspaceLayout.DEFAULT,
+    onOpenCustomize: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -385,6 +388,10 @@ fun MeatRecHome(
                         onScenePlus1 = onScenePlus1,
                         onSelectLoudnessTarget = onSelectLoudnessTarget,
                         onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
+                        workspaceLayout = workspaceLayout,
+                        isProUser = isPro,
+                        onUpgradeFeature = onUpgradeFeature,
+                        onOpenCustomize = onOpenCustomize,
                     )
                     else -> LibraryPage(
                         files = files,
