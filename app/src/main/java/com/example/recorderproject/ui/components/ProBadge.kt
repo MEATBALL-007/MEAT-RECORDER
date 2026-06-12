@@ -12,8 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-private val MeatYellow = Color(0xFFFFC72C)
+import com.example.recorderproject.ui.theme.MeatYellow
 
 /**
  * The "★ PRO" pill — single shared definition for the top bar and any pro-gated
