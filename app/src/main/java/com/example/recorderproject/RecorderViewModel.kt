@@ -55,10 +55,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val recorder = AudioRecorderManager(application.applicationContext)
     private val noiseProcessor = NoiseReductionProcessor()
 
-    // External mic detector — covers USB-C, Bluetooth, wired headsets, BLE audio.
-    private val inputDeviceDetector = com.example.recorderproject.audio.UsbAudioDetector(application.applicationContext)
-    val externalInputDevices: StateFlow<List<com.example.recorderproject.audio.UsbAudioDetector.UsbDevice>> = inputDeviceDetector.devices
-
     // ---- Monetization: MEAT REC Pro one-time unlock ----
     val entitlements = com.example.recorderproject.billing.EntitlementStore(application.applicationContext)
     val billing = com.example.recorderproject.billing.BillingManager(application.applicationContext, entitlements)
@@ -147,9 +143,23 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val scanner = com.example.recorderproject.data.RecordingScanner(app)
     private val hydrated = MutableStateFlow(false)
 
+    // Audio-input configuration extracted into AudioInputConfig (issue #13 step 6). Owns the
+    // sample rate / bit depth / channel count / input gain / audio source / mic label / quality
+    // StateFlows + the USB/BT device detector. Declared before eqEditor (which reads
+    // audioConfig.sampleRate). Pushes config to `recorder` (5 setters).
+    private val audioConfig = com.example.recorderproject.audio.AudioInputConfig(
+        app = app,
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        requirePro = ::requirePro,
+        recorder = recorder,
+    )
+    val externalInputDevices: StateFlow<List<com.example.recorderproject.audio.UsbAudioDetector.UsbDevice>> = audioConfig.externalInputDevices
+
     // Offline EQ editor extracted into EqEditor (issue #13 step 4). Declared before the init
     // block (hydration calls eqEditor.applySnapshot). Constructor lambdas defer-resolve
-    // recorder / _liveEqEnabled / _sampleRate / _recordFiles / _saveDirectoryUri (legal — they
+    // recorder / _liveEqEnabled / audioConfig / _recordFiles / _saveDirectoryUri (legal — they
     // run only on later EQ calls).
     private val eqEditor = com.example.recorderproject.audio.EqEditor(
         app = app,
@@ -157,8 +167,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         scope = viewModelScope,
         isHydrated = { hydrated.value },
         requirePro = ::requirePro,
-        sampleRate = { _sampleRate.value },
-        liveChainSink = { chain -> if (_liveEqEnabled.value) recorder.setLiveEqChain(chain, _sampleRate.value.toFloat()) },
+        sampleRate = { audioConfig.sampleRate.value },
+        liveChainSink = { chain -> if (_liveEqEnabled.value) recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat()) },
         markFileHasEq = { id -> _recordFiles.value = _recordFiles.value.map { if (it.id == id) it.copy(hasEQ = true) else it } },
         saveDirectoryUri = { _saveDirectoryUri.value },
     )
@@ -175,11 +185,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         onError = { _errorMessage.value = it },
     )
 
-    private val gainDbPersist = MutableSharedFlow<Float>(extraBufferCapacity = 64)
     private val eqBandGainsPersist = MutableSharedFlow<FloatArray>(extraBufferCapacity = 64)
 
     init {
-        inputDeviceDetector.start()
+        audioConfig.start()
         billing.start()
         viewModelScope.launch {
             try {
@@ -279,13 +288,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        // Debounced persistence for hot-path slider setters — UI state updates instantly,
-        // disk write is coalesced to at most one per 150 ms of quiet time.
-        viewModelScope.launch {
-            gainDbPersist
-                .debounce(150)
-                .collect { settings.setInputGainDb(it) }
-        }
+        // Debounced persistence for the live-EQ band gains — UI state updates instantly,
+        // disk write is coalesced to at most one per 150 ms of quiet time. (Input-gain
+        // persistence moved into AudioInputConfig.)
         viewModelScope.launch {
             eqBandGainsPersist
                 .debounce(150)
@@ -434,21 +439,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setAntiClip(_antiClipOn.value) }
     }
 
-    // G8: Quality presets — applies sampleRate / bitDepth / channelCount in one call.
-    private val _quality = MutableStateFlow(com.example.recorderproject.model.RecordingQuality.Default)
-    val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = _quality
-    fun setQuality(q: com.example.recorderproject.model.RecordingQuality) {
-        _quality.value = q
-        _sampleRate.value = q.sampleRate
-        _bitDepth.value = q.bitDepth
-        _channelCount.value = q.channelCount
-        if (hydrated.value) viewModelScope.launch {
-            settings.setQualityPreset(q.name)
-            settings.setSampleRate(q.sampleRate)
-            settings.setBitDepth(q.bitDepth)
-            settings.setChannelCount(q.channelCount)
-        }
-    }
+    // G8: Quality presets — delegated to AudioInputConfig (issue #13 step 6).
+    val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = audioConfig.quality
+    fun setQuality(q: com.example.recorderproject.model.RecordingQuality) = audioConfig.setQuality(q)
 
     // G12: Recording schedule — start at a given absolute time (epoch ms). 0 = off.
     private val _scheduledStartMs = MutableStateFlow(0L)
@@ -578,30 +571,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _noiseReductionEnabled = MutableStateFlow(true)
     val noiseReductionEnabled: StateFlow<Boolean> = _noiseReductionEnabled
 
-    private val _sampleRate = MutableStateFlow(48000)
-    val sampleRate: StateFlow<Int> = _sampleRate
+    // Audio-input config delegated to AudioInputConfig (issue #13 step 6).
+    val sampleRate: StateFlow<Int> = audioConfig.sampleRate
+    val bitDepth: StateFlow<Int> = audioConfig.bitDepth
+    fun updateBitDepth(v: Int) = audioConfig.updateBitDepth(v)
 
-    private val _bitDepth = MutableStateFlow(16)
-    val bitDepth: StateFlow<Int> = _bitDepth
-
-    fun updateBitDepth(v: Int) {
-        // Free tier caps at 16-bit; 24/32-bit float is Pro.
-        if (v > com.example.recorderproject.billing.ProFeature.FREE_MAX_BIT_DEPTH &&
-            !requirePro(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO)
-        ) return
-        _bitDepth.value = v
-        recorder.setBitDepth(v)
-        if (hydrated.value) viewModelScope.launch { settings.setBitDepth(v) }
-    }
-
-    // Phase A port-back: extended recording settings (from old MEATrec ModeSettings)
-    private val _channelCount = MutableStateFlow(1)
-    val channelCount: StateFlow<Int> = _channelCount
-    fun updateChannelCount(v: Int) {
-        _channelCount.value = v.coerceIn(1, 2)
-        recorder.setChannelCount(_channelCount.value)
-        if (hydrated.value) viewModelScope.launch { settings.setChannelCount(_channelCount.value) }
-    }
+    val channelCount: StateFlow<Int> = audioConfig.channelCount
+    fun updateChannelCount(v: Int) = audioConfig.updateChannelCount(v)
 
     /** Pre-record countdown in seconds (0 = off). */
     private val _countdownSeconds = MutableStateFlow(0)
@@ -619,17 +595,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setMaxDurationMin(_maxDurationMinutes.value) }
     }
 
-    // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop
-    private val _inputGainDb = MutableStateFlow(0f)
-    val inputGainDb: StateFlow<Float> = _inputGainDb
-
-    fun updateInputGainDb(db: Float) {
-        val clamped = db.coerceIn(-12f, 24f)
-        _inputGainDb.value = clamped
-        val linear = kotlin.math.exp(kotlin.math.ln(10.0) * clamped / 20.0).toFloat()
-        recorder.setInputGain(linear)
-        if (hydrated.value) gainDbPersist.tryEmit(clamped)
-    }
+    // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop.
+    // Delegated to AudioInputConfig (issue #13 step 6).
+    val inputGainDb: StateFlow<Float> = audioConfig.inputGainDb
+    fun updateInputGainDb(db: Float) = audioConfig.updateInputGainDb(db)
 
     // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
     // Delegated to MonitorManager (issue #13 step 5). currentChain reads the offline EQ
@@ -715,8 +684,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _liveEqEnabled = MutableStateFlow(false)
     val liveEqEnabled: StateFlow<Boolean> = _liveEqEnabled
 
-    private val _micSourceLabel = MutableStateFlow("Microphone")
-    val micSourceLabel: StateFlow<String> = _micSourceLabel
+    // Mic-source label delegated to AudioInputConfig (issue #13 step 6).
+    val micSourceLabel: StateFlow<String> = audioConfig.micSourceLabel
 
     fun toggleMonitor() = monitorManager.toggle()
 
@@ -725,9 +694,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         // Push the current chain into the recorder right now — if we're mid-recording, EQ takes
         // effect on the very next PCM buffer the AudioRecord loop reads.
         if (_liveEqEnabled.value) {
-            recorder.setLiveEqChain(eqEditor.currentEQChain.value, _sampleRate.value.toFloat())
+            recorder.setLiveEqChain(eqEditor.currentEQChain.value, audioConfig.sampleRate.value.toFloat())
         } else {
-            recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
+            recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
         }
         Toast.makeText(app,
             if (_liveEqEnabled.value) "Live EQ on — applied in real time to recording"
@@ -736,32 +705,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setLiveEqEnabled(_liveEqEnabled.value) }
     }
 
-    fun setMicSource(label: String) {
-        _micSourceLabel.value = label
-        updateAudioSource(label)
-        if (hydrated.value) viewModelScope.launch { settings.setMicSourceLabel(label) }
-    }
+    fun setMicSource(label: String) = audioConfig.setMicSource(label)
 
     /** Select a specific hardware input device (USB, BT, wired headset). */
-    fun selectInputDevice(device: com.example.recorderproject.audio.UsbAudioDetector.UsbDevice) {
-        // External mic routing (USB / BT / wired) is a Pro feature.
-        if (!requirePro(com.example.recorderproject.billing.ProFeature.EXTERNAL_MIC)) return
-        val audioDeviceInfo = inputDeviceDetector.preferredDeviceById(device.id)
-        recorder.setPreferredDevice(audioDeviceInfo)
-        _micSourceLabel.value = device.productName
-        // For Bluetooth SCO mics, also switch to VOICE_COMMUNICATION source so Android
-        // routes the SCO input path (required on most devices to actually capture from BT mic).
-        if (device.category == com.example.recorderproject.audio.UsbAudioDetector.DeviceCategory.BLUETOOTH) {
-            _audioSource.value = android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
-            _audioSourceName.value = "Voice Communication"
-        }
-        if (hydrated.value) viewModelScope.launch { settings.setMicSourceLabel(device.productName) }
-    }
+    fun selectInputDevice(device: com.example.recorderproject.audio.UsbAudioDetector.UsbDevice) =
+        audioConfig.selectInputDevice(device)
 
     /** Clear hardware device preference — fall back to OS default for chosen AudioSource. */
-    fun clearInputDevice() {
-        recorder.setPreferredDevice(null)
-    }
+    fun clearInputDevice() = audioConfig.clearInputDevice()
 
     // Save directory
     private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
@@ -802,11 +753,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val playbackDuration: StateFlow<Int> = playback.playbackDuration
     val selectedFile: StateFlow<RecordFile?> = playback.selectedFile
 
-    private val _audioSource = MutableStateFlow(1) // Default MIC
-    val audioSource: StateFlow<Int> = _audioSource
-
-    private val _audioSourceName = MutableStateFlow("Microphone")
-    val audioSourceName: StateFlow<String> = _audioSourceName
+    // Audio source delegated to AudioInputConfig (issue #13 step 6).
+    val audioSource: StateFlow<Int> = audioConfig.audioSource
+    val audioSourceName: StateFlow<String> = audioConfig.audioSourceName
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
@@ -897,7 +846,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 }
                 recorder.setLiveEqChain(
                     com.example.recorderproject.model.EQChain(bands = bands, bypassed = false),
-                    _sampleRate.value.toFloat(),
+                    audioConfig.sampleRate.value.toFloat(),
                 )
             }
         }
@@ -936,19 +885,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun selectRecorderMode(mode: com.example.recorderproject.model.RecorderMode) {
         _recorderMode.value = mode
-        // Apply preset (except for CUSTOM — user controls those themselves)
+        // Apply preset (except for CUSTOM — user controls those themselves). The
+        // sample/bit/channel slice (incl. persistence) is delegated to AudioInputConfig.
         if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
-            _sampleRate.value = mode.sampleRate
-            _bitDepth.value = mode.bitDepth
-            _channelCount.value = mode.channelCount
+            audioConfig.applyQualityValues(mode.sampleRate, mode.bitDepth, mode.channelCount)
             _noiseReductionEnabled.value = mode.noiseReduction
         }
         if (hydrated.value) viewModelScope.launch {
             settings.setRecorderMode(mode.name)
             if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
-                settings.setSampleRate(_sampleRate.value)
-                settings.setBitDepth(_bitDepth.value)
-                settings.setChannelCount(_channelCount.value)
                 settings.setNoiseReduction(_noiseReductionEnabled.value)
             }
         }
@@ -1378,23 +1323,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setNoiseReduction(enabled) }
     }
 
-    fun updateSampleRate(value: Int) {
-        // Free tier caps at 48 kHz; 96 kHz is Pro.
-        if (value > com.example.recorderproject.billing.ProFeature.FREE_MAX_SAMPLE_RATE &&
-            !requirePro(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO)
-        ) return
-        _sampleRate.value = value
-        if (hydrated.value) viewModelScope.launch { settings.setSampleRate(value) }
-    }
+    fun updateSampleRate(value: Int) = audioConfig.updateSampleRate(value)
 
-    fun updateAudioSource(name: String) {
-        val source = AudioRecorderManager.AUDIO_SOURCES.find { it.first == name }
-        if (source != null) {
-            _audioSource.value = source.second
-            _audioSourceName.value = source.first
-            if (hydrated.value) viewModelScope.launch { settings.setAudioSourceName(source.first) }
-        }
-    }
+    fun updateAudioSource(name: String) = audioConfig.updateAudioSource(name)
 
     fun setSaveDirectoryUri(uri: Uri) {
         _saveDirectoryUri.value = uri
@@ -1434,7 +1365,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             return false
         }
 
-        if (_sampleRate.value !in listOf(44100, 48000, 96000)) {
+        if (audioConfig.sampleRate.value !in listOf(44100, 48000, 96000)) {
             _errorMessage.value = "Sample rate is not supported."
             Toast.makeText(app, "Sample rate is not supported", Toast.LENGTH_LONG).show()
             return false
@@ -1456,9 +1387,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         return try {
             val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
             val freeBytes = stat.availableBlocksLong * stat.blockSizeLong
-            val bytesPerSec = _sampleRate.value.toLong() *
-                (_bitDepth.value / 8) *
-                _channelCount.value
+            val bytesPerSec = audioConfig.sampleRate.value.toLong() *
+                (audioConfig.bitDepth.value / 8) *
+                audioConfig.channelCount.value
             val minBytes = bytesPerSec * 60L
             if (freeBytes < minBytes) {
                 val freeMb = freeBytes / (1024L * 1024L)
@@ -1560,22 +1491,22 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             becomingNoisyRegistered = true
         }
         _errorMessage.value = null
-        recorder.setAudioSource(_audioSource.value)
+        recorder.setAudioSource(audioConfig.audioSource.value)
         // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
         if (_liveEqEnabled.value) {
-            recorder.setLiveEqChain(eqEditor.currentEQChain.value, _sampleRate.value.toFloat())
+            recorder.setLiveEqChain(eqEditor.currentEQChain.value, audioConfig.sampleRate.value.toFloat())
         } else {
-            recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
+            recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
         }
         recordingStartMs = System.currentTimeMillis()
         // H: snapshot device location for metadata (null if permission denied / no fix)
         pendingLocationTag = com.example.recorderproject.audio.LocationCapture.snapshot(app)
-        Log.d(TAG, "Set audio source to: ${_audioSource.value}, location=${pendingLocationTag ?: "n/a"}")
+        Log.d(TAG, "Set audio source to: ${audioConfig.audioSource.value}, location=${pendingLocationTag ?: "n/a"}")
         try {
             Log.d(TAG, "Calling recorder.start()")
             recorder.start(
                 fileName = _fileName.value,
-                sampleRate = _sampleRate.value,
+                sampleRate = audioConfig.sampleRate.value,
                 saveDirectoryUri = _saveDirectoryUri.value
             ) { level ->
                 _currentWaveform.value = level
@@ -1758,7 +1689,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 } else nrFile
 
                 // Recorder no longer needs the chain after the take
-                recorder.setLiveEqChain(null, _sampleRate.value.toFloat())
+                recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
 
                 // Swap the provisional entry for the fully-processed final file.
                 // (NR assigns a new id, so filter by the provisional id, not finalFile's.)
@@ -2036,16 +1967,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * is not persisted (see spec § Things NOT persisted).
      */
     private fun rewireRecorderFromState() {
-        val gainLinear = kotlin.math.exp(
-            kotlin.math.ln(10.0) * _inputGainDb.value / 20.0,
-        ).toFloat()
-        recorder.setInputGain(gainLinear)
+        // Input-config slice (gain + bit depth + channel count) → AudioInputConfig.
+        audioConfig.rewireRecorder()
         recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
         recorder.setAgc(_agcOn.value)
         recorder.setHiPass(_hiPassOn.value)
         recorder.setAntiClip(_antiClipOn.value)
-        recorder.setBitDepth(_bitDepth.value)
-        recorder.setChannelCount(_channelCount.value)
         // Live EQ chain is pushed on demand in startRecording(); no need here.
     }
 
@@ -2063,22 +1990,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private fun applySnapshot(s: SettingsSnapshot) {
         _recorderMode.value = runCatching { RecorderMode.valueOf(s.recorderMode) }
             .getOrDefault(RecorderMode.CUSTOM)
-        _audioSourceName.value = s.audioSourceName
-        _micSourceLabel.value = s.micSourceLabel
-        // Look up audio source ID by name (mirrors updateAudioSource())
-        AudioRecorderManager.AUDIO_SOURCES.find { it.first == s.audioSourceName }?.let {
-            _audioSource.value = it.second
-        }
-        _inputGainDb.value = s.inputGainDb
+        // Input-config slice (audio source, mic label, gain, sample/bit/channel, quality).
+        audioConfig.applySnapshot(s)
         _noiseReductionEnabled.value = s.noiseReduction
-        _sampleRate.value = s.sampleRate
-        _bitDepth.value = s.bitDepth
-        _channelCount.value = s.channelCount
         _countdownSeconds.value = s.countdownSec
         _maxDurationMinutes.value = s.maxDurationMin
         _autoStopMinutes.value = s.autoStopMin
-        _quality.value = runCatching { RecordingQuality.valueOf(s.qualityPreset) }
-            .getOrDefault(RecordingQuality.Default)
         _sceneName.value = s.sceneName
 
         _liveNoiseGateOn.value = s.liveNoiseGate
@@ -2270,7 +2187,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (becomingNoisyRegistered) {
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
         }
-        try { inputDeviceDetector.stop() } catch (_: Exception) {}
+        try { audioConfig.stop() } catch (_: Exception) {}
         try { voiceActivityDetector.stop() } catch (_: Exception) {}
         try { billing.stop() } catch (_: Exception) {}
         abandonAudioFocus()
