@@ -27,8 +27,6 @@ import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.model.RecorderMode
 import com.example.recorderproject.model.RecordingQuality
 import com.example.recorderproject.model.SortOrder
-import com.example.recorderproject.model.applyAudioSample
-import com.example.recorderproject.model.applyDecayTick
 import com.example.recorderproject.model.DeliveryResult
 import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
@@ -634,8 +632,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     // ------------- Phase 7: Live monitoring (Bluetooth earphone / wired) -------------
-
-    private val audioMonitor = com.example.recorderproject.audio.AudioMonitor()
+    // Delegated to MonitorManager (issue #13 step 5). currentChain reads the offline EQ
+    // chain (defer-resolves eqEditor, declared earlier); onMessage routes toasts.
+    private val monitorManager = com.example.recorderproject.audio.MonitorManager(
+        app = app,
+        scope = viewModelScope,
+        currentChain = { eqEditor.currentEQChain.value },
+        onMessage = { msg -> Toast.makeText(app, msg, Toast.LENGTH_SHORT).show() },
+    )
 
     // ------------- PR3: Audio focus + headphone-unplug handling -------------
 
@@ -704,28 +708,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
     private var becomingNoisyRegistered = false
 
-    private val _monitorEnabled = MutableStateFlow(false)
-    val monitorEnabled: StateFlow<Boolean> = _monitorEnabled
-
-    private val _monitorLevel = MutableStateFlow(MonitorLevel.Silent)
-    val monitorLevel: StateFlow<MonitorLevel> = _monitorLevel
-
-    private var monitorClipUntilMs: Long = 0L
-    private var monitorDecayJob: Job? = null
-
-    /** Called from AudioMonitor's audio thread once per PCM buffer. */
-    private fun onMonitorPcm(rmsDb: Float, peakDb: Float) {
-        val now = System.currentTimeMillis()
-        val update = applyAudioSample(
-            curr = _monitorLevel.value,
-            newRmsDb = rmsDb,
-            newPeakDb = peakDb,
-            nowMs = now,
-            clipUntilMs = monitorClipUntilMs,
-        )
-        monitorClipUntilMs = update.clipUntilMs
-        _monitorLevel.value = update.level
-    }
+    // Monitoring state delegated to MonitorManager (issue #13 step 5).
+    val monitorEnabled: StateFlow<Boolean> = monitorManager.enabled
+    val monitorLevel: StateFlow<MonitorLevel> = monitorManager.level
 
     private val _liveEqEnabled = MutableStateFlow(false)
     val liveEqEnabled: StateFlow<Boolean> = _liveEqEnabled
@@ -733,86 +718,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val _micSourceLabel = MutableStateFlow("Microphone")
     val micSourceLabel: StateFlow<String> = _micSourceLabel
 
-    fun toggleMonitor() {
-        val on = !_monitorEnabled.value
-        if (on) {
-            // Safeguard: refuse to start monitor when no headphones/earphones/BT/USB output
-            // is connected. Without an external output, the monitor plays through the phone
-            // speaker, which feeds back into the mic and ruins the recording.
-            val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-            val devices = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-            val hasExternalOutput = devices.any { d ->
-                val t = d.type
-                t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                t == android.media.AudioDeviceInfo.TYPE_USB_HEADSET ||
-                t == android.media.AudioDeviceInfo.TYPE_USB_DEVICE ||
-                t == android.media.AudioDeviceInfo.TYPE_USB_ACCESSORY ||
-                t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                    t == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET) ||
-                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                    t == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER)
-            }
-            if (!hasExternalOutput) {
-                Toast.makeText(
-                    app,
-                    "Plug in or connect headphones to use monitor — would cause echo through speaker",
-                    Toast.LENGTH_LONG,
-                ).show()
-                // Leave _monitorEnabled at its current value (false)
-                return
-            }
-            audioMonitor.setChain(eqEditor.currentEQChain.value)
-            // Wire level callback BEFORE start so the very first buffer is observed
-            audioMonitor.setLevelListener(::onMonitorPcm)
-            audioMonitor.start()
-            // Peak-hold decay tick — every 50 ms, decay peakDb by 1 toward rmsDb
-            monitorDecayJob?.cancel()
-            monitorDecayJob = viewModelScope.launch {
-                while (true) {
-                    delay(50)
-                    val now = System.currentTimeMillis()
-                    val update = applyDecayTick(
-                        curr = _monitorLevel.value,
-                        nowMs = now,
-                        clipUntilMs = monitorClipUntilMs,
-                    )
-                    monitorClipUntilMs = update.clipUntilMs
-                    _monitorLevel.value = update.level
-                }
-            }
-            // Also start Bluetooth SCO for BT earphone monitoring
-            try {
-                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-                @Suppress("DEPRECATION")
-                am.startBluetoothSco()
-                @Suppress("DEPRECATION")
-                am.isBluetoothScoOn = true
-            } catch (e: Exception) {
-                Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
-            }
-            Toast.makeText(app, "Monitor on", Toast.LENGTH_SHORT).show()
-        } else {
-            audioMonitor.stop()
-            // Cancel decay coroutine, clear listener (after stop so the run-loop has exited)
-            monitorDecayJob?.cancel()
-            monitorDecayJob = null
-            audioMonitor.setLevelListener(null)
-            monitorClipUntilMs = 0L
-            _monitorLevel.value = MonitorLevel.Silent
-            try {
-                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-                @Suppress("DEPRECATION")
-                am.isBluetoothScoOn = false
-                @Suppress("DEPRECATION")
-                am.stopBluetoothSco()
-            } catch (_: Exception) {}
-            Toast.makeText(app, "Monitor off", Toast.LENGTH_SHORT).show()
-        }
-        _monitorEnabled.value = on
-    }
+    fun toggleMonitor() = monitorManager.toggle()
 
     fun toggleLiveEq() {
         _liveEqEnabled.value = !_liveEqEnabled.value
@@ -1591,20 +1497,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         // Safeguard: if monitor is on, stop it before recording. Monitor while
         // recording risks an acoustic feedback loop (speaker → mic → speaker)
         // especially on UNPROCESSED mic which has no echo cancellation.
-        if (_monitorEnabled.value) {
-            try {
-                audioMonitor.stop()
-                monitorDecayJob?.cancel()
-                monitorDecayJob = null
-                audioMonitor.setLevelListener(null)
-                monitorClipUntilMs = 0L
-                _monitorLevel.value = com.example.recorderproject.model.MonitorLevel.Silent
-                val am = app.getSystemService(android.content.Context.AUDIO_SERVICE)
-                    as android.media.AudioManager
-                am.isBluetoothScoOn = false
-                am.stopBluetoothSco()
-            } catch (_: Exception) {}
-            _monitorEnabled.value = false
+        if (monitorManager.stop()) {
             Toast.makeText(app, "Monitor stopped to prevent echo while recording", Toast.LENGTH_SHORT).show()
         }
         // If pre-roll is on, stop the capture thread so the main AudioRecord can open the mic.
@@ -2247,23 +2140,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 settings.clear()
                 // Tear down monitor if running — opening the mic is a session-local
                 // side effect that should not persist past reset.
-                if (_monitorEnabled.value) {
-                    try {
-                        audioMonitor.stop()
-                        monitorDecayJob?.cancel()
-                        monitorDecayJob = null
-                        audioMonitor.setLevelListener(null)
-                        monitorClipUntilMs = 0L
-                        _monitorLevel.value = MonitorLevel.Silent
-                        val am = app.getSystemService(android.content.Context.AUDIO_SERVICE)
-                            as android.media.AudioManager
-                        @Suppress("DEPRECATION")
-                        am.isBluetoothScoOn = false
-                        @Suppress("DEPRECATION")
-                        am.stopBluetoothSco()
-                    } catch (_: Exception) {}
-                    _monitorEnabled.value = false
-                }
+                monitorManager.stop()
                 applyDefaults()
                 rewireRecorderFromState()
                 // Clear EQ undo/redo so post-reset history doesn't reference old chains
@@ -2389,7 +2266,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             try { app.unregisterReceiver(stopBroadcastReceiver) } catch (_: Exception) {}
             stopReceiverRegistered = false
         }
-        try { audioMonitor.stop() } catch (_: Exception) {}
+        try { monitorManager.release() } catch (_: Exception) {}
         if (becomingNoisyRegistered) {
             try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
         }
