@@ -1,5 +1,3 @@
-@file:OptIn(kotlinx.coroutines.FlowPreview::class)
-
 package com.example.recorderproject
 
 import android.app.Application
@@ -17,7 +15,6 @@ import com.example.recorderproject.data.SettingsDataStore
 import com.example.recorderproject.data.SettingsSnapshot
 import com.example.recorderproject.model.ApplySaveMode
 import com.example.recorderproject.model.EQBand
-import com.example.recorderproject.model.EQBandType
 import com.example.recorderproject.model.EQChain
 import com.example.recorderproject.model.EQChainJson
 import com.example.recorderproject.model.EQEditMode
@@ -31,12 +28,10 @@ import com.example.recorderproject.model.DeliveryResult
 import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -53,6 +48,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val app = application
     private val recorder = AudioRecorderManager(application.applicationContext)
     private val noiseProcessor = NoiseReductionProcessor()
+    private val settings = SettingsDataStore(application)
 
     // ---- Monetization: MEAT REC Pro one-time unlock ----
     val entitlements = com.example.recorderproject.billing.EntitlementStore(application.applicationContext)
@@ -101,28 +97,27 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         sampleRate = 48_000,
     )
 
-    private val _preRollEnabled = MutableStateFlow(false)
-    val preRollEnabled: StateFlow<Boolean> = _preRollEnabled
-
-    fun togglePreRoll() {
-        // Pre-roll ("pre-recording") is a Pro feature — gate enabling, allow turning off.
-        if (!_preRollEnabled.value &&
-            !requirePro(com.example.recorderproject.billing.ProFeature.PRE_ROLL_VAD)
-        ) return
-        val on = !_preRollEnabled.value
-        _preRollEnabled.value = on
-        if (on) {
-            preRollCapture.start()
-            recorder.setPreRollBuffer(preRollBuffer)
-            Toast.makeText(app, "Pre-roll on — last 5s captured to next take", Toast.LENGTH_SHORT).show()
-        } else {
-            preRollCapture.stop()
-            preRollBuffer.clear()
-            recorder.setPreRollBuffer(null)
-            Toast.makeText(app, "Pre-roll off", Toast.LENGTH_SHORT).show()
-        }
-        if (hydrated.value) viewModelScope.launch { settings.setPreRollEnabled(on) }
-    }
+    // Recording controls (DSP toggles / live-EQ / VAD / pre-roll / slate / countdown) →
+    // RecordingController (issue #13 step 7d, clean half). The start/stop lifecycle stays in
+    // the VM for now. currentChain/sampleRate/onStartRecording defer-resolve (lambdas).
+    private val recordingController: com.example.recorderproject.audio.RecordingController =
+        com.example.recorderproject.audio.RecordingController(
+        app = app,
+        scope = viewModelScope,
+        recorder = recorder,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        requirePro = ::requirePro,
+        isRecording = { _isRecording.value },
+        onStartRecording = { startRecording() },
+        currentChain = { eqEditor.currentEQChain.value },
+        sampleRate = { audioConfig.sampleRate.value },
+        voiceActivityDetector = voiceActivityDetector,
+        preRollCapture = preRollCapture,
+        preRollBuffer = preRollBuffer,
+    )
+    val preRollEnabled: StateFlow<Boolean> = recordingController.preRollEnabled
+    fun togglePreRoll() = recordingController.togglePreRoll()
 
     // ---- Feature #2: Stop broadcast receiver (notification Stop button) ----
     private val stopBroadcastReceiver = object : android.content.BroadcastReceiver() {
@@ -136,7 +131,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
     private var stopReceiverRegistered = false
-    private val settings = SettingsDataStore(application)
     // Library scanning extracted into RecordingScanner (issue #13). Declared before the init
     // block (which calls the scan functions), so it is initialized in time. Only needs `app`.
     private val scanner = com.example.recorderproject.data.RecordingScanner(app)
@@ -167,7 +161,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         isHydrated = { hydrated.value },
         requirePro = ::requirePro,
         sampleRate = { audioConfig.sampleRate.value },
-        liveChainSink = { chain -> if (_liveEqEnabled.value) recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat()) },
+        liveChainSink = { chain -> if (recordingController.liveEqEnabled.value) recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat()) },
         markFileHasEq = { id -> _recordFiles.value = _recordFiles.value.map { if (it.id == id) it.copy(hasEQ = true) else it } },
         saveDirectoryUri = { _saveDirectoryUri.value },
     )
@@ -184,10 +178,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         onError = { _errorMessage.value = it },
     )
 
-    private val eqBandGainsPersist = MutableSharedFlow<FloatArray>(extraBufferCapacity = 64)
-
     init {
         audioConfig.start()
+        recordingController.start()
         billing.start()
         viewModelScope.launch {
             try {
@@ -285,15 +278,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     stopReceiverRegistered = true
                 }
             }
-        }
-
-        // Debounced persistence for the live-EQ band gains — UI state updates instantly,
-        // disk write is coalesced to at most one per 150 ms of quiet time. (Input-gain
-        // persistence moved into AudioInputConfig.)
-        viewModelScope.launch {
-            eqBandGainsPersist
-                .debounce(150)
-                .collect { settings.setLiveEqBandGains(it) }
         }
     }
 
@@ -402,41 +386,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorder.setPaused(_isPaused.value)
     }
 
-    // G2: Live noise gate while recording — toggle from the feature chips.
-    private val _liveNoiseGateOn = MutableStateFlow(false)
-    val liveNoiseGateOn: StateFlow<Boolean> = _liveNoiseGateOn
-    fun toggleLiveNoiseGate() {
-        _liveNoiseGateOn.value = !_liveNoiseGateOn.value
-        recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
-        if (hydrated.value) viewModelScope.launch { settings.setLiveNoiseGate(_liveNoiseGateOn.value) }
-    }
-
-    // G9: Auto Gain Control toggle
-    private val _agcOn = MutableStateFlow(false)
-    val agcOn: StateFlow<Boolean> = _agcOn
-    fun toggleAgc() {
-        _agcOn.value = !_agcOn.value
-        recorder.setAgc(_agcOn.value)
-        if (hydrated.value) viewModelScope.launch { settings.setAgc(_agcOn.value) }
-    }
-
-    // G10: Hi-pass (rumble removal) toggle
-    private val _hiPassOn = MutableStateFlow(false)
-    val hiPassOn: StateFlow<Boolean> = _hiPassOn
-    fun toggleHiPass() {
-        _hiPassOn.value = !_hiPassOn.value
-        recorder.setHiPass(_hiPassOn.value)
-        if (hydrated.value) viewModelScope.launch { settings.setHiPass(_hiPassOn.value) }
-    }
-
-    // G11: Anti-clipping auto-attenuator toggle
-    private val _antiClipOn = MutableStateFlow(false)
-    val antiClipOn: StateFlow<Boolean> = _antiClipOn
-    fun toggleAntiClip() {
-        _antiClipOn.value = !_antiClipOn.value
-        recorder.setAntiClip(_antiClipOn.value)
-        if (hydrated.value) viewModelScope.launch { settings.setAntiClip(_antiClipOn.value) }
-    }
+    // Recording-DSP toggles → RecordingController (issue #13 step 7d).
+    val liveNoiseGateOn: StateFlow<Boolean> = recordingController.liveNoiseGateOn
+    fun toggleLiveNoiseGate() = recordingController.toggleLiveNoiseGate()
+    val agcOn: StateFlow<Boolean> = recordingController.agcOn
+    fun toggleAgc() = recordingController.toggleAgc()
+    val hiPassOn: StateFlow<Boolean> = recordingController.hiPassOn
+    fun toggleHiPass() = recordingController.toggleHiPass()
+    val antiClipOn: StateFlow<Boolean> = recordingController.antiClipOn
+    fun toggleAntiClip() = recordingController.toggleAntiClip()
 
     // G8: Quality presets — delegated to AudioInputConfig (issue #13 step 6).
     val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = audioConfig.quality
@@ -463,31 +421,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun cancelSchedule() = timers.cancelSchedule()
 
     // G13: VAD (voice-activity detection) — auto-start recording when input rises.
-    private val _vadOn = MutableStateFlow(false)
-    val vadOn: StateFlow<Boolean> = _vadOn
-    fun toggleVad() {
-        // VAD ("voice-activated record") is part of the Smart capture Pro bundle — gate enabling.
-        if (!_vadOn.value &&
-            !requirePro(com.example.recorderproject.billing.ProFeature.PRE_ROLL_VAD)
-        ) return
-        val on = !_vadOn.value
-        _vadOn.value = on
-        if (hydrated.value) viewModelScope.launch { settings.setVad(on) }
-        if (on) {
-            voiceActivityDetector.onVoiceDetected = {
-                if (!_isRecording.value) {
-                    Log.i(TAG, "VAD: voice detected — auto-starting recording")
-                    startRecording()
-                }
-            }
-            voiceActivityDetector.start(viewModelScope)
-            Toast.makeText(app, "VAD on — recording will start when voice is detected", Toast.LENGTH_SHORT).show()
-        } else {
-            voiceActivityDetector.stop()
-            voiceActivityDetector.onVoiceDetected = null
-            Toast.makeText(app, "VAD off", Toast.LENGTH_SHORT).show()
-        }
-    }
+    // VAD (voice-activated record) → RecordingController (issue #13 step 7d).
+    val vadOn: StateFlow<Boolean> = recordingController.vadOn
+    fun toggleVad() = recordingController.toggleVad()
 
     // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
     fun addTagToFile(file: RecordFile, tag: String) {
@@ -579,20 +515,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun updateChannelCount(v: Int) = audioConfig.updateChannelCount(v)
 
     /** Pre-record countdown in seconds (0 = off). */
-    private val _countdownSeconds = MutableStateFlow(0)
-    val countdownSeconds: StateFlow<Int> = _countdownSeconds
-    fun updateCountdownSeconds(v: Int) {
-        _countdownSeconds.value = v.coerceAtLeast(0)
-        if (hydrated.value) viewModelScope.launch { settings.setCountdownSec(_countdownSeconds.value) }
-    }
-
-    /** Auto-stop after this many minutes of recording (0 = off). */
-    private val _maxDurationMinutes = MutableStateFlow(0)
-    val maxDurationMinutes: StateFlow<Int> = _maxDurationMinutes
-    fun updateMaxDurationMinutes(v: Int) {
-        _maxDurationMinutes.value = v.coerceAtLeast(0)
-        if (hydrated.value) viewModelScope.launch { settings.setMaxDurationMin(_maxDurationMinutes.value) }
-    }
+    // Countdown + max-duration config → RecordingController (issue #13 step 7d).
+    val countdownSeconds: StateFlow<Int> = recordingController.countdownSeconds
+    fun updateCountdownSeconds(v: Int) = recordingController.updateCountdownSeconds(v)
+    val maxDurationMinutes: StateFlow<Int> = recordingController.maxDurationMinutes
+    fun updateMaxDurationMinutes(v: Int) = recordingController.updateMaxDurationMinutes(v)
 
     // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop.
     // Delegated to AudioInputConfig (issue #13 step 6).
@@ -622,29 +549,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val monitorEnabled: StateFlow<Boolean> = monitorManager.enabled
     val monitorLevel: StateFlow<MonitorLevel> = monitorManager.level
 
-    private val _liveEqEnabled = MutableStateFlow(false)
-    val liveEqEnabled: StateFlow<Boolean> = _liveEqEnabled
+    // Live EQ (during recording) → RecordingController (issue #13 step 7d).
+    val liveEqEnabled: StateFlow<Boolean> = recordingController.liveEqEnabled
 
     // Mic-source label delegated to AudioInputConfig (issue #13 step 6).
     val micSourceLabel: StateFlow<String> = audioConfig.micSourceLabel
 
     fun toggleMonitor() = monitorManager.toggle()
 
-    fun toggleLiveEq() {
-        _liveEqEnabled.value = !_liveEqEnabled.value
-        // Push the current chain into the recorder right now — if we're mid-recording, EQ takes
-        // effect on the very next PCM buffer the AudioRecord loop reads.
-        if (_liveEqEnabled.value) {
-            recorder.setLiveEqChain(eqEditor.currentEQChain.value, audioConfig.sampleRate.value.toFloat())
-        } else {
-            recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
-        }
-        Toast.makeText(app,
-            if (_liveEqEnabled.value) "Live EQ on — applied in real time to recording"
-            else "Live EQ off",
-            Toast.LENGTH_SHORT).show()
-        if (hydrated.value) viewModelScope.launch { settings.setLiveEqEnabled(_liveEqEnabled.value) }
-    }
+    fun toggleLiveEq() = recordingController.toggleLiveEq()
 
     fun setMicSource(label: String) = audioConfig.setMicSource(label)
 
@@ -761,47 +674,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openDesignPicker() { _designPickerOpen.value = true }
     fun closeDesignPicker() { _designPickerOpen.value = false }
 
-    /** Q1: live EQ band gains (6 bands: 60/200/500/1k/3k/10k Hz) in dB.
-     *  Tapping +/− on the LiveEqBandStrip writes here; ViewModel pushes a new
-     *  EQChain into the recorder if recording is active. */
-    private val _liveEqBandGains = MutableStateFlow(FloatArray(6))
-    val liveEqBandGains: StateFlow<FloatArray> = _liveEqBandGains
-    fun setLiveEqBand(band: Int, gainDb: Float) {
-        val arr = _liveEqBandGains.value.copyOf()
-        if (band in arr.indices) {
-            arr[band] = gainDb.coerceIn(-12f, 12f)
-            _liveEqBandGains.value = arr
-            if (hydrated.value) eqBandGainsPersist.tryEmit(arr.copyOf())
-            // Build an EQChain and push to recorder if recording.
-            if (_isRecording.value) {
-                val freqs = floatArrayOf(60f, 200f, 500f, 1000f, 3000f, 10000f)
-                val bands = arr.mapIndexed { i, g ->
-                    com.example.recorderproject.model.EQBand(
-                        id = i + 1,
-                        type = com.example.recorderproject.model.EQBandType.BELL,
-                        frequencyHz = freqs[i],
-                        gainDb = g,
-                        q = 1.0f,
-                        enabled = kotlin.math.abs(g) > 0.05f,
-                    )
-                }
-                recorder.setLiveEqChain(
-                    com.example.recorderproject.model.EQChain(bands = bands, bypassed = false),
-                    audioConfig.sampleRate.value.toFloat(),
-                )
-            }
-        }
-    }
-
-    /** J.3: Fire a 1 kHz, 1-second slate tone baked into the current recording. */
-    fun fireSlateTone() {
-        if (!_isRecording.value) {
-            Toast.makeText(app, "Start recording first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        recorder.armSlateTone(1000)
-        Toast.makeText(app, "Slate tone 1 kHz, 1s", Toast.LENGTH_SHORT).show()
-    }
+    // Live-EQ band gains + slate tone → RecordingController (issue #13 step 7d).
+    val liveEqBandGains: StateFlow<FloatArray> = recordingController.liveEqBandGains
+    fun setLiveEqBand(band: Int, gainDb: Float) = recordingController.setLiveEqBand(band, gainDb)
+    fun fireSlateTone() = recordingController.fireSlateTone()
 
     /** N2: currently selected recording mode + auto-apply preset on change. */
     private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
@@ -872,21 +748,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** G18: compressor live during record (uses existing MasterLimiter — toggle only). */
-    private val _compressorOn = MutableStateFlow(false)
-    val compressorOn: StateFlow<Boolean> = _compressorOn
-    fun toggleCompressor() {
-        _compressorOn.value = !_compressorOn.value
-        if (hydrated.value) viewModelScope.launch { settings.setCompressor(_compressorOn.value) }
-    }
-
-    /** G19: stereo widener live (only matters when channelCount=2). */
-    private val _stereoWidenerOn = MutableStateFlow(false)
-    val stereoWidenerOn: StateFlow<Boolean> = _stereoWidenerOn
-    fun toggleStereoWidener() {
-        _stereoWidenerOn.value = !_stereoWidenerOn.value
-        if (hydrated.value) viewModelScope.launch { settings.setStereoWidener(_stereoWidenerOn.value) }
-    }
+    // G18/G19: compressor + stereo widener → RecordingController (issue #13 step 7d).
+    val compressorOn: StateFlow<Boolean> = recordingController.compressorOn
+    fun toggleCompressor() = recordingController.toggleCompressor()
+    val stereoWidenerOn: StateFlow<Boolean> = recordingController.stereoWidenerOn
+    fun toggleStereoWidener() = recordingController.toggleStereoWidener()
 
     /** G20: cloud backup toggle. Turning it on prompts for a folder if none is set. */
     private val _cloudBackupOn = MutableStateFlow(false)
@@ -1222,7 +1088,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     @Suppress("DEPRECATION")  // legacy Bluetooth SCO APIs — no pre-API-31 replacement
     private fun startRecordingInternal() {
-        if (_vadOn.value) voiceActivityDetector.stop()
+        if (recordingController.vadOn.value) voiceActivityDetector.stop()
         Log.d(TAG, "startRecording() called")
         // Safeguard: if monitor is on, stop it before recording. Monitor while
         // recording risks an acoustic feedback loop (speaker → mic → speaker)
@@ -1253,7 +1119,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
 
         // Feature I: countdown beep before recording
-        val countdown = _countdownSeconds.value
+        val countdown = recordingController.countdownSeconds.value
         if (countdown > 0) {
             viewModelScope.launch {
                 try {
@@ -1286,7 +1152,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _errorMessage.value = null
         recorder.setAudioSource(audioConfig.audioSource.value)
         // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
-        if (_liveEqEnabled.value) {
+        if (recordingController.liveEqEnabled.value) {
             recorder.setLiveEqChain(eqEditor.currentEQChain.value, audioConfig.sampleRate.value.toFloat())
         } else {
             recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
@@ -1448,7 +1314,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 _isRecording.value = false
                 try { settings.setIsRecording(false) } catch (_: Exception) {}
                 _currentWaveform.value = emptyList()
-                if (_vadOn.value) {
+                if (recordingController.vadOn.value) {
                     voiceActivityDetector.onVoiceDetected = {
                         if (!_isRecording.value) startRecording()
                     }
@@ -1464,7 +1330,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
                 // Phase 7: real-time Live EQ — the chain was baked into the PCM as it was recorded.
                 // Mark the file with hasEQ + write the sidecar JSON so re-opening shows the chain.
-                val finalFile = if (_liveEqEnabled.value && recorder.isLiveEqActive() &&
+                val finalFile = if (recordingController.liveEqEnabled.value && recorder.isLiveEqActive() &&
                     !nrFile.path.startsWith("content://")
                 ) {
                     try {
@@ -1494,7 +1360,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 // (isRecording / waveform already reset above, right after the take was
                 // added to the list, so the UI updates immediately.)
                 // If pre-roll was enabled, restart the capture thread for the next take.
-                if (_preRollEnabled.value) {
+                if (recordingController.preRollEnabled.value) {
                     preRollCapture.start()
                 }
                 // Auto-bump take number for next take in the same scene
@@ -1759,10 +1625,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private fun rewireRecorderFromState() {
         // Input-config slice (gain + bit depth + channel count) → AudioInputConfig.
         audioConfig.rewireRecorder()
-        recorder.setLiveNoiseGate(_liveNoiseGateOn.value, thresholdDb = -46f)
-        recorder.setAgc(_agcOn.value)
-        recorder.setHiPass(_hiPassOn.value)
-        recorder.setAntiClip(_antiClipOn.value)
+        // Recording-DSP slice (gate / AGC / hi-pass / anti-clip) → RecordingController.
+        recordingController.rewireRecorder()
         // Live EQ chain is pushed on demand in startRecording(); no need here.
     }
 
@@ -1783,20 +1647,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         // Input-config slice (audio source, mic label, gain, sample/bit/channel, quality).
         audioConfig.applySnapshot(s)
         _noiseReductionEnabled.value = s.noiseReduction
-        _countdownSeconds.value = s.countdownSec
-        _maxDurationMinutes.value = s.maxDurationMin
         timers.applySnapshot(s.autoStopMin)
         naming.applySnapshot(s.sceneName)
-
-        _liveNoiseGateOn.value = s.liveNoiseGate
-        _agcOn.value = s.agc
-        _hiPassOn.value = s.hiPass
-        _antiClipOn.value = s.antiClip
-        _compressorOn.value = s.compressor
-        _stereoWidenerOn.value = s.stereoWidener
-        _vadOn.value = s.vad
-        _liveEqEnabled.value = s.liveEqEnabled
-        _liveEqBandGains.value = s.liveEqBandGains.copyOf()
+        // Recording-controls slice (DSP toggles, live-EQ, VAD, pre-roll, countdown/max-duration).
+        recordingController.applySnapshot(s)
 
         eqEditor.applySnapshot(s.currentEqChainJson, s.eqMode, s.eqViewMode, s.eqApplySaveMode, s.eqBypassed)
 
@@ -1807,14 +1661,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _lockScreenControlsOn.value = s.lockScreenControls
         _cloudBackupOn.value = s.cloudBackup
         _cloudBackupUri.value = s.cloudBackupUri?.let { android.net.Uri.parse(it) }
-
-        _preRollEnabled.value = s.preRollEnabled
-        if (s.preRollEnabled) {
-            preRollCapture.start()
-            recorder.setPreRollBuffer(preRollBuffer)
-        } else {
-            preRollCapture.stop()
-        }
 
         loudness.applySnapshot(
             s.defaultLoudnessTarget,
