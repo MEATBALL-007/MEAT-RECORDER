@@ -30,7 +30,6 @@ import com.example.recorderproject.model.SortOrder
 import com.example.recorderproject.model.DeliveryResult
 import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -443,21 +442,25 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = audioConfig.quality
     fun setQuality(q: com.example.recorderproject.model.RecordingQuality) = audioConfig.setQuality(q)
 
+    // Recording timers (schedule / auto-stop / free-tier limit) → RecordingTimers (#13 step 7b).
+    // onLimitReached defer-resolves stopRecording/openPaywall (declared later — legal).
+    private val timers = com.example.recorderproject.audio.RecordingTimers(
+        app = app,
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        isRecording = { _isRecording.value },
+        isPro = { isPro.value },
+        onLimitReached = {
+            stopRecording()
+            openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
+        },
+    )
+
     // G12: Recording schedule — start at a given absolute time (epoch ms). 0 = off.
-    private val _scheduledStartMs = MutableStateFlow(0L)
-    val scheduledStartMs: StateFlow<Long> = _scheduledStartMs
-    private var scheduleJob: kotlinx.coroutines.Job? = null
-    fun setScheduledStart(epochMs: Long, onFire: () -> Unit) {
-        _scheduledStartMs.value = epochMs
-        scheduleJob?.cancel()
-        if (epochMs <= 0) return
-        scheduleJob = viewModelScope.launch {
-            val waitMs = (epochMs - System.currentTimeMillis()).coerceAtLeast(0)
-            kotlinx.coroutines.delay(waitMs)
-            if (_scheduledStartMs.value == epochMs) onFire()
-        }
-    }
-    fun cancelSchedule() { scheduleJob?.cancel(); _scheduledStartMs.value = 0L }
+    val scheduledStartMs: StateFlow<Long> = timers.scheduledStartMs
+    fun setScheduledStart(epochMs: Long, onFire: () -> Unit) = timers.setScheduledStart(epochMs, onFire)
+    fun cancelSchedule() = timers.cancelSchedule()
 
     // G13: VAD (voice-activity detection) — auto-start recording when input rises.
     private val _vadOn = MutableStateFlow(false)
@@ -948,58 +951,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         return battery to freeMb
     }
 
-    /** G22: Pomodoro / auto-stop timer that fires while recording. 0 = off. */
-    private val _autoStopMinutes = MutableStateFlow(0)
-    val autoStopMinutes: StateFlow<Int> = _autoStopMinutes
-    private var autoStopJob: kotlinx.coroutines.Job? = null
-    fun setAutoStopMinutes(m: Int) {
-        _autoStopMinutes.value = m.coerceAtLeast(0)
-        if (hydrated.value) viewModelScope.launch { settings.setAutoStopMin(_autoStopMinutes.value) }
-    }
+    // G22: Pomodoro / auto-stop timer + free-tier limit → RecordingTimers (#13 step 7b).
+    val autoStopMinutes: StateFlow<Int> = timers.autoStopMinutes
+    fun setAutoStopMinutes(m: Int) = timers.setAutoStopMinutes(m)
     /** Called by start-recording flow to arm the timer. */
-    fun armAutoStop(onFire: () -> Unit) {
-        autoStopJob?.cancel()
-        val mins = _autoStopMinutes.value
-        if (mins <= 0) return
-        autoStopJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(mins * 60_000L)
-            if (_isRecording.value) onFire()
-        }
-    }
-    fun cancelAutoStop() { autoStopJob?.cancel() }
-
-    private var recordingLimitJob: Job? = null
-
-    private fun startFreeTierLimitTimer() {
-        recordingLimitJob?.cancel()
-        if (isPro.value) return
-        val limitMs = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS * 1000L
-        val warnMs  = (com.example.recorderproject.billing.ProFeature.FREE_RECORDING_LIMIT_SECONDS -
-                       com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS) * 1000L
-        val warnMinutes = com.example.recorderproject.billing.ProFeature.FREE_RECORDING_WARN_SECONDS / 60
-        recordingLimitJob = viewModelScope.launch {
-            delay(warnMs)
-            if (_isRecording.value && !isPro.value) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        app,
-                        "$warnMinutes minute left — upgrade to Pro for unlimited recording",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            }
-            delay(limitMs - warnMs)
-            if (_isRecording.value && !isPro.value) {
-                stopRecording()
-                openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
-            }
-        }
-    }
-
-    private fun cancelFreeTierLimitTimer() {
-        recordingLimitJob?.cancel()
-        recordingLimitJob = null
-    }
+    fun armAutoStop(onFire: () -> Unit) = timers.armAutoStop(onFire)
+    fun cancelAutoStop() = timers.cancelAutoStop()
 
     /** G23: which files were viewed/played recently (FIFO, capped 10). */
     private val _recentIds = MutableStateFlow<List<String>>(emptyList())
@@ -1493,7 +1450,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             }
             Log.d(TAG, "Recording started successfully")
             Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
-            startFreeTierLimitTimer()
+            timers.startFreeTierLimit()
             // Persist active-take path so a crash-then-relaunch can recover it
             viewModelScope.launch {
                 try {
@@ -1517,7 +1474,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Log.d(TAG, "Not recording, ignoring")
             return
         }
-        cancelFreeTierLimitTimer()
+        timers.cancelFreeTierLimit()
         audioFocus.abandonFocus()
         audioFocus.unregisterBecomingNoisy()
 
@@ -1928,7 +1885,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _noiseReductionEnabled.value = s.noiseReduction
         _countdownSeconds.value = s.countdownSec
         _maxDurationMinutes.value = s.maxDurationMin
-        _autoStopMinutes.value = s.autoStopMin
+        timers.applySnapshot(s.autoStopMin)
         _sceneName.value = s.sceneName
 
         _liveNoiseGateOn.value = s.liveNoiseGate
