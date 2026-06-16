@@ -611,71 +611,13 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     )
 
     // ------------- PR3: Audio focus + headphone-unplug handling -------------
-
-    private var audioFocusRequest: android.media.AudioFocusRequest? = null
-    private val audioManager by lazy {
-        application.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-    }
-    private val focusListener = android.media.AudioManager.OnAudioFocusChangeListener { change ->
-        when (change) {
-            android.media.AudioManager.AUDIOFOCUS_LOSS,
-            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (_isRecording.value) {
-                    Log.w(TAG, "Audio focus lost (change=$change) — stopping recording")
-                    Toast.makeText(app, "Recording stopped: another app took audio focus", Toast.LENGTH_LONG).show()
-                    stopRecording()
-                }
-            }
-            else -> {}
-        }
-    }
-
-    private fun requestAudioFocus(): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val attrs = android.media.AudioAttributes.Builder()
-                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            val req = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(attrs)
-                .setOnAudioFocusChangeListener(focusListener)
-                .setAcceptsDelayedFocusGain(false)
-                .build()
-            audioFocusRequest = req
-            audioManager.requestAudioFocus(req) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
-                focusListener,
-                android.media.AudioManager.STREAM_MUSIC,
-                android.media.AudioManager.AUDIOFOCUS_GAIN,
-            ) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        }
-    }
-
-    private fun abandonAudioFocus() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-            audioFocusRequest = null
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(focusListener)
-        }
-    }
-
-    private val becomingNoisyReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            if (intent?.action == android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                if (_isRecording.value) {
-                    Log.w(TAG, "Audio output route changed (headphones unplugged) during recording")
-                    Toast.makeText(app, "Headphones unplugged — recording continues on built-in mic", Toast.LENGTH_LONG).show()
-                    // Note: we don't stop recording — the user might want it to continue.
-                    // Just warn so they know the route changed.
-                }
-            }
-        }
-    }
-    private var becomingNoisyRegistered = false
+    // Delegated to AudioFocusController (issue #13 step 7a). onFocusLost defer-resolves
+    // stopRecording (declared later — legal, runs only on a later focus-loss event).
+    private val audioFocus = com.example.recorderproject.audio.AudioFocusController(
+        app = app,
+        isRecording = { _isRecording.value },
+        onFocusLost = { stopRecording() },
+    )
 
     // Monitoring state delegated to MonitorManager (issue #13 step 5).
     val monitorEnabled: StateFlow<Boolean> = monitorManager.enabled
@@ -1482,14 +1424,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private fun startRecordingNow() {
         _isRecording.value = true
         viewModelScope.launch { try { settings.setIsRecording(true) } catch (_: Exception) {} }
-        requestAudioFocus() // Best-effort — don't block recording if denied
-        if (!becomingNoisyRegistered) {
-            app.registerReceiver(
-                becomingNoisyReceiver,
-                android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY)
-            )
-            becomingNoisyRegistered = true
-        }
+        audioFocus.requestFocus() // Best-effort — don't block recording if denied
+        audioFocus.registerBecomingNoisy()
         _errorMessage.value = null
         recorder.setAudioSource(audioConfig.audioSource.value)
         // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
@@ -1582,11 +1518,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             return
         }
         cancelFreeTierLimitTimer()
-        abandonAudioFocus()
-        if (becomingNoisyRegistered) {
-            try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
-            becomingNoisyRegistered = false
-        }
+        audioFocus.abandonFocus()
+        audioFocus.unregisterBecomingNoisy()
 
         // M1/M2: clear listeners + reset live state
         recorder.setSpectrumListener(null)
@@ -2184,13 +2117,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             stopReceiverRegistered = false
         }
         try { monitorManager.release() } catch (_: Exception) {}
-        if (becomingNoisyRegistered) {
-            try { app.unregisterReceiver(becomingNoisyReceiver) } catch (_: Exception) {}
-        }
+        audioFocus.unregisterBecomingNoisy()
         try { audioConfig.stop() } catch (_: Exception) {}
         try { voiceActivityDetector.stop() } catch (_: Exception) {}
         try { billing.stop() } catch (_: Exception) {}
-        abandonAudioFocus()
+        audioFocus.abandonFocus()
         playback.release()
     }
 }
