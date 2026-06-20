@@ -19,7 +19,6 @@ import com.example.recorderproject.model.EQEditMode
 import com.example.recorderproject.model.EQViewMode
 import com.example.recorderproject.model.MonitorLevel
 import com.example.recorderproject.model.RecordFile
-import com.example.recorderproject.model.RecorderMode
 import com.example.recorderproject.model.RecordingQuality
 import com.example.recorderproject.model.SortOrder
 import com.example.recorderproject.model.DeliveryResult
@@ -613,9 +612,15 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun closeDesignPicker() { _designPickerOpen.value = false }
 
 
-    /** N2: currently selected recording mode + auto-apply preset on change. */
-    private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
-    val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = _recorderMode
+    // N2: recording mode + preset application → RecorderModeManager (issue #13 step 11).
+    private val recorderModeManager = com.example.recorderproject.audio.RecorderModeManager(
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        audioConfig = audioConfig,
+        setNoiseReduction = { _noiseReductionEnabled.value = it },
+    )
+    val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = recorderModeManager.recorderMode
 
     // ── Customizable workspace ──────────────────────────────────────────
     val workspace = com.example.recorderproject.workspace.WorkspaceManager(
@@ -634,21 +639,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun saveWorkspace(layout: com.example.recorderproject.model.WorkspaceLayout) = workspace.save(layout)
     fun resetWorkspace() = workspace.resetToDefault()
 
-    fun selectRecorderMode(mode: com.example.recorderproject.model.RecorderMode) {
-        _recorderMode.value = mode
-        // Apply preset (except for CUSTOM — user controls those themselves). The
-        // sample/bit/channel slice (incl. persistence) is delegated to AudioInputConfig.
-        if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
-            audioConfig.applyQualityValues(mode.sampleRate, mode.bitDepth, mode.channelCount)
-            _noiseReductionEnabled.value = mode.noiseReduction
-        }
-        if (hydrated.value) viewModelScope.launch {
-            settings.setRecorderMode(mode.name)
-            if (mode != com.example.recorderproject.model.RecorderMode.CUSTOM) {
-                settings.setNoiseReduction(_noiseReductionEnabled.value)
-            }
-        }
-    }
+    fun selectRecorderMode(mode: com.example.recorderproject.model.RecorderMode) =
+        recorderModeManager.select(mode)
 
     /** G17: trim editor open for which file (null = none). */
     private val _trimFile = MutableStateFlow<RecordFile?>(null)
@@ -1098,8 +1090,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     /** Apply a SettingsSnapshot to the in-memory StateFlows. */
     private fun applySnapshot(s: SettingsSnapshot) {
-        _recorderMode.value = runCatching { RecorderMode.valueOf(s.recorderMode) }
-            .getOrDefault(RecorderMode.CUSTOM)
+        recorderModeManager.applySnapshot(s.recorderMode)
         // Input-config slice (audio source, mic label, gain, sample/bit/channel, quality).
         audioConfig.applySnapshot(s)
         _noiseReductionEnabled.value = s.noiseReduction
