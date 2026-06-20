@@ -16,7 +16,6 @@ import com.example.recorderproject.data.SettingsSnapshot
 import com.example.recorderproject.model.ApplySaveMode
 import com.example.recorderproject.model.EQBand
 import com.example.recorderproject.model.EQChain
-import com.example.recorderproject.model.EQChainJson
 import com.example.recorderproject.model.EQEditMode
 import com.example.recorderproject.model.EQViewMode
 import com.example.recorderproject.model.MonitorLevel
@@ -30,12 +29,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import android.util.Log
 import android.widget.Toast
 import java.io.File
@@ -97,32 +93,17 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // Recording controls (DSP toggles / live-EQ / VAD / pre-roll / slate / countdown) →
     // RecordingController (issue #13 step 7d, clean half). The start/stop lifecycle stays in
     // the VM for now. currentChain/sampleRate/onStartRecording defer-resolve (lambdas).
-    private val recordingController: com.example.recorderproject.audio.RecordingController =
-        com.example.recorderproject.audio.RecordingController(
-        app = app,
-        scope = viewModelScope,
-        recorder = recorder,
-        settings = settings,
-        isHydrated = { hydrated.value },
-        requirePro = ::requirePro,
-        isRecording = { _isRecording.value },
-        onStartRecording = { startRecording() },
-        currentChain = { eqEditor.currentEQChain.value },
-        sampleRate = { audioConfig.sampleRate.value },
-        voiceActivityDetector = voiceActivityDetector,
-        preRollCapture = preRollCapture,
-        preRollBuffer = preRollBuffer,
-    )
-    val preRollEnabled: StateFlow<Boolean> = recordingController.preRollEnabled
-    fun togglePreRoll() = recordingController.togglePreRoll()
+    // RecordingController (recording engine: controls + lifecycle) is declared LOWER, after all
+    // its collaborator dependencies (audioFocus/timers/naming/monitorManager/fileLibrary/…).
+    // See the "Recording engine" section below.
 
     // ---- Feature #2: Stop broadcast receiver (notification Stop button) ----
     private val stopBroadcastReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action == com.example.recorderproject.audio.RecordingForegroundService.ACTION_STOP_RECORDING) {
                 Log.i(TAG, "Stop broadcast received — stopping recording")
-                if (_isRecording.value) {
-                    stopRecording()
+                if (recordingController.isRecording.value) {
+                    recordingController.stopRecording()
                 }
             }
         }
@@ -158,7 +139,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         isHydrated = { hydrated.value },
         requirePro = ::requirePro,
         sampleRate = { audioConfig.sampleRate.value },
-        liveChainSink = { chain -> if (recordingController.liveEqEnabled.value) recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat()) },
         markFileHasEq = { id -> fileLibrary.updateById(id) { it.copy(hasEQ = true) } },
         saveDirectoryUri = { _saveDirectoryUri.value },
     )
@@ -177,7 +157,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     init {
         audioConfig.start()
-        recordingController.start()
         billing.start()
         viewModelScope.launch {
             try {
@@ -303,28 +282,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         fileLibrary.clearSelection()
     }
 
-    private val _isRecording = MutableStateFlow(false)
-    val isRecording: StateFlow<Boolean> = _isRecording
-
-    /** F2: paused-while-recording state. When true, the recording loop still runs but
-     *  written-sample count is held — the file ends up with no data while paused. */
-    private val _isPaused = MutableStateFlow(false)
-    val isPaused: StateFlow<Boolean> = _isPaused
-    fun togglePause() {
-        if (!_isRecording.value) return
-        _isPaused.value = !_isPaused.value
-        recorder.setPaused(_isPaused.value)
-    }
-
-    // Recording-DSP toggles → RecordingController (issue #13 step 7d).
-    val liveNoiseGateOn: StateFlow<Boolean> = recordingController.liveNoiseGateOn
-    fun toggleLiveNoiseGate() = recordingController.toggleLiveNoiseGate()
-    val agcOn: StateFlow<Boolean> = recordingController.agcOn
-    fun toggleAgc() = recordingController.toggleAgc()
-    val hiPassOn: StateFlow<Boolean> = recordingController.hiPassOn
-    fun toggleHiPass() = recordingController.toggleHiPass()
-    val antiClipOn: StateFlow<Boolean> = recordingController.antiClipOn
-    fun toggleAntiClip() = recordingController.toggleAntiClip()
+    // All recording controls + lifecycle delegations live in the "Recording engine" section below.
 
     // G8: Quality presets — delegated to AudioInputConfig (issue #13 step 6).
     val quality: StateFlow<com.example.recorderproject.model.RecordingQuality> = audioConfig.quality
@@ -337,10 +295,10 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         scope = viewModelScope,
         settings = settings,
         isHydrated = { hydrated.value },
-        isRecording = { _isRecording.value },
+        isRecording = { recordingController.isRecording.value },
         isPro = { isPro.value },
         onLimitReached = {
-            stopRecording()
+            recordingController.stopRecording()
             openPaywall(com.example.recorderproject.billing.ProFeature.RECORDING_LIMIT)
         },
     )
@@ -351,10 +309,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun cancelSchedule() = timers.cancelSchedule()
 
     // G13: VAD (voice-activity detection) — auto-start recording when input rises.
-    // VAD (voice-activated record) → RecordingController (issue #13 step 7d).
-    val vadOn: StateFlow<Boolean> = recordingController.vadOn
-    fun toggleVad() = recordingController.toggleVad()
-
     // G14: Tag list per file (lightweight — stored alongside RecordFile.tags string).
     fun addTagToFile(file: RecordFile, tag: String) {
         if (tag.isBlank()) return
@@ -373,29 +327,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // G15: Auto-name from scene + date/time when filename is left blank.
     fun autoNameForNextTake(): String = naming.autoNameForNextTake()
 
-    private val _currentWaveform = MutableStateFlow<List<Float>>(emptyList())
-    val currentWaveform: StateFlow<List<Float>> = _currentWaveform
-
-    // M1/M2: live spectrum + pitch — populated only while recording
-    private val _liveSpectrum = MutableStateFlow(FloatArray(0))
-    val liveSpectrum: StateFlow<FloatArray> = _liveSpectrum
-    private val _livePitchHz = MutableStateFlow(0f)
-    val livePitchHz: StateFlow<Float> = _livePitchHz
-    // D: live LUFS meter — populated only while recording
-    private val _liveLufs = MutableStateFlow(-70f)
-    val liveLufs: StateFlow<Float> = _liveLufs
-
-    // D: live true-peak — populated only while recording
-    private val _liveTpDbTp = MutableStateFlow(Float.NEGATIVE_INFINITY)
-    val liveTpDbTp: StateFlow<Float> = _liveTpDbTp
-
-    // G: raw peak dBFS — pre-EQ / pre-NR sample-domain peak, populated while recording
-    private val _liveRawPeakDbfs = MutableStateFlow(Float.NEGATIVE_INFINITY)
-    val liveRawPeakDbfs: StateFlow<Float> = _liveRawPeakDbfs
-
-    // H: device location snapshot, captured at recording start; copied onto the
-    // finalized RecordFile so IxmlWriter emits a <LOCATION> tag.
-    @Volatile private var pendingLocationTag: String? = null
+    // Live meters (waveform/spectrum/pitch/LUFS/true-peak/raw-peak) + pendingLocationTag →
+    // RecordingController (recording engine, below).
 
     // D: loudness/delivery extracted into LoudnessManager (issue #13). The constructor lambda
     // and method reference defer-resolve _saveDirectoryUri / rebindDeliveryResult (declared later)
@@ -411,12 +344,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val isRenderingDelivery: StateFlow<Boolean> = loudness.isRendering
     val lastDeliveryResult: StateFlow<DeliveryResult?> = loudness.lastResult
 
-    // K.2: Stereo phase correlation (-1..1) — populated only while recording stereo
-    private val _phaseCorrelation = MutableStateFlow(0f)
-    val phaseCorrelation: StateFlow<Float> = _phaseCorrelation
-    // Rolling window of recent FFT frames so the SPECTRUM heatmap can scroll
-    private val _spectrumHistory = MutableStateFlow<List<FloatArray>>(emptyList())
-    val spectrumHistory: StateFlow<List<FloatArray>> = _spectrumHistory
+    // phaseCorrelation + spectrumHistory → RecordingController (recording engine, below).
 
     // Take/scene/file naming → TakeNaming (#13 step 7c).
     private val naming = com.example.recorderproject.audio.TakeNaming(
@@ -441,11 +369,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun updateChannelCount(v: Int) = audioConfig.updateChannelCount(v)
 
     /** Pre-record countdown in seconds (0 = off). */
-    // Countdown + max-duration config → RecordingController (issue #13 step 7d).
-    val countdownSeconds: StateFlow<Int> = recordingController.countdownSeconds
-    fun updateCountdownSeconds(v: Int) = recordingController.updateCountdownSeconds(v)
-    val maxDurationMinutes: StateFlow<Int> = recordingController.maxDurationMinutes
-    fun updateMaxDurationMinutes(v: Int) = recordingController.updateMaxDurationMinutes(v)
 
     // Input gain (Phase 3): linear multiplier applied before EQ in the recording loop.
     // Delegated to AudioInputConfig (issue #13 step 6).
@@ -467,23 +390,106 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     // stopRecording (declared later — legal, runs only on a later focus-loss event).
     private val audioFocus = com.example.recorderproject.audio.AudioFocusController(
         app = app,
-        isRecording = { _isRecording.value },
-        onFocusLost = { stopRecording() },
+        isRecording = { recordingController.isRecording.value },
+        onFocusLost = { recordingController.stopRecording() },
     )
 
     // Monitoring state delegated to MonitorManager (issue #13 step 5).
     val monitorEnabled: StateFlow<Boolean> = monitorManager.enabled
     val monitorLevel: StateFlow<MonitorLevel> = monitorManager.level
 
-    // Live EQ (during recording) → RecordingController (issue #13 step 7d).
+    // ============ Recording engine (controls + lifecycle) → RecordingController ============
+    // Declared here, AFTER all its collaborator dependencies (issue #13 steps 7 + 9). Explicit
+    // type so eqEditor's liveChainSink (which forward-references recordingController.liveEqEnabled)
+    // resolves without recursive type inference. Cloud/Drive backup, the general error flow, the
+    // save-dir, and the recovery rescan stay in the VM via seams.
+    private val recordingController: com.example.recorderproject.audio.RecordingController =
+        com.example.recorderproject.audio.RecordingController(
+            app = app,
+            scope = viewModelScope,
+            recorder = recorder,
+            settings = settings,
+            isHydrated = { hydrated.value },
+            requirePro = ::requirePro,
+            audioConfig = audioConfig,
+            eqEditor = eqEditor,
+            naming = naming,
+            fileLibrary = fileLibrary,
+            loudness = loudness,
+            monitorManager = monitorManager,
+            audioFocus = audioFocus,
+            timers = timers,
+            voiceActivityDetector = voiceActivityDetector,
+            preRollCapture = preRollCapture,
+            preRollBuffer = preRollBuffer,
+            noiseProcessor = noiseProcessor,
+            hydrated = hydrated,
+            saveDirectoryUri = { _saveDirectoryUri.value },
+            noiseReductionEnabled = { _noiseReductionEnabled.value },
+            onError = { _errorMessage.value = it },
+            onTakeSaved = ::onTakeSaved,
+            rescanFromDisk = ::scanRecordingsFromDisk,
+        )
+
+    // Lifecycle delegations.
+    val isRecording: StateFlow<Boolean> = recordingController.isRecording
+    val isPaused: StateFlow<Boolean> = recordingController.isPaused
+    fun togglePause() = recordingController.togglePause()
+    val currentWaveform: StateFlow<List<Float>> = recordingController.currentWaveform
+    val liveSpectrum: StateFlow<FloatArray> = recordingController.liveSpectrum
+    val livePitchHz: StateFlow<Float> = recordingController.livePitchHz
+    val liveLufs: StateFlow<Float> = recordingController.liveLufs
+    val liveTpDbTp: StateFlow<Float> = recordingController.liveTpDbTp
+    val liveRawPeakDbfs: StateFlow<Float> = recordingController.liveRawPeakDbfs
+    val phaseCorrelation: StateFlow<Float> = recordingController.phaseCorrelation
+    val spectrumHistory: StateFlow<List<FloatArray>> = recordingController.spectrumHistory
+    val liveCueCount: StateFlow<Int> = recordingController.liveCueCount
+    fun dropCueMarker(label: String = "") = recordingController.dropCueMarker(label)
+    fun startRecording() = recordingController.startRecording()
+    fun stopRecording() = recordingController.stopRecording()
+
+    // Control delegations.
+    val preRollEnabled: StateFlow<Boolean> = recordingController.preRollEnabled
+    fun togglePreRoll() = recordingController.togglePreRoll()
+    val liveNoiseGateOn: StateFlow<Boolean> = recordingController.liveNoiseGateOn
+    fun toggleLiveNoiseGate() = recordingController.toggleLiveNoiseGate()
+    val agcOn: StateFlow<Boolean> = recordingController.agcOn
+    fun toggleAgc() = recordingController.toggleAgc()
+    val hiPassOn: StateFlow<Boolean> = recordingController.hiPassOn
+    fun toggleHiPass() = recordingController.toggleHiPass()
+    val antiClipOn: StateFlow<Boolean> = recordingController.antiClipOn
+    fun toggleAntiClip() = recordingController.toggleAntiClip()
+    val compressorOn: StateFlow<Boolean> = recordingController.compressorOn
+    fun toggleCompressor() = recordingController.toggleCompressor()
+    val stereoWidenerOn: StateFlow<Boolean> = recordingController.stereoWidenerOn
+    fun toggleStereoWidener() = recordingController.toggleStereoWidener()
+    val vadOn: StateFlow<Boolean> = recordingController.vadOn
+    fun toggleVad() = recordingController.toggleVad()
+    val countdownSeconds: StateFlow<Int> = recordingController.countdownSeconds
+    fun updateCountdownSeconds(v: Int) = recordingController.updateCountdownSeconds(v)
+    val maxDurationMinutes: StateFlow<Int> = recordingController.maxDurationMinutes
+    fun updateMaxDurationMinutes(v: Int) = recordingController.updateMaxDurationMinutes(v)
     val liveEqEnabled: StateFlow<Boolean> = recordingController.liveEqEnabled
+    fun toggleLiveEq() = recordingController.toggleLiveEq()
+    val liveEqBandGains: StateFlow<FloatArray> = recordingController.liveEqBandGains
+    fun setLiveEqBand(band: Int, gainDb: Float) = recordingController.setLiveEqBand(band, gainDb)
+    fun fireSlateTone() = recordingController.fireSlateTone()
+
+    init {
+        // Runs after recordingController is initialized (second init block, declared below it).
+        recordingController.start()
+        // Wire EQ edits → recorder during live-EQ recording.
+        eqEditor.liveChainSink = { chain ->
+            if (recordingController.liveEqEnabled.value) {
+                recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat())
+            }
+        }
+    }
 
     // Mic-source label delegated to AudioInputConfig (issue #13 step 6).
     val micSourceLabel: StateFlow<String> = audioConfig.micSourceLabel
 
     fun toggleMonitor() = monitorManager.toggle()
-
-    fun toggleLiveEq() = recordingController.toggleLiveEq()
 
     fun setMicSource(label: String) = audioConfig.setMicSource(label)
 
@@ -600,10 +606,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun openDesignPicker() { _designPickerOpen.value = true }
     fun closeDesignPicker() { _designPickerOpen.value = false }
 
-    // Live-EQ band gains + slate tone → RecordingController (issue #13 step 7d).
-    val liveEqBandGains: StateFlow<FloatArray> = recordingController.liveEqBandGains
-    fun setLiveEqBand(band: Int, gainDb: Float) = recordingController.setLiveEqBand(band, gainDb)
-    fun fireSlateTone() = recordingController.fireSlateTone()
 
     /** N2: currently selected recording mode + auto-apply preset on change. */
     private val _recorderMode = MutableStateFlow(com.example.recorderproject.model.RecorderMode.Default)
@@ -674,11 +676,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // G18/G19: compressor + stereo widener → RecordingController (issue #13 step 7d).
-    val compressorOn: StateFlow<Boolean> = recordingController.compressorOn
-    fun toggleCompressor() = recordingController.toggleCompressor()
-    val stereoWidenerOn: StateFlow<Boolean> = recordingController.stereoWidenerOn
-    fun toggleStereoWidener() = recordingController.toggleStereoWidener()
 
     /** G20: cloud backup toggle. Turning it on prompts for a folder if none is set. */
     private val _cloudBackupOn = MutableStateFlow(false)
@@ -931,403 +928,36 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (hydrated.value) viewModelScope.launch { settings.setSaveDirectoryUri(uri.toString()) }
     }
 
-    private fun validateRecordingData(): Boolean {
-        val fileName = naming.fileName.value.trim()
-        val sceneName = naming.sceneName.value.trim()
-
-        if (fileName.isEmpty()) {
-            _errorMessage.value = "Please enter a file name before recording."
-            Toast.makeText(app, "Please enter a file name", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        val sanitized = fileName.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
-        if (sanitized.isEmpty()) {
-            _errorMessage.value = "File name contains invalid characters."
-            Toast.makeText(app, "File name contains invalid characters", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        if (sceneName.isEmpty()) {
-            _errorMessage.value = "Please enter a scene name before recording."
-            Toast.makeText(app, "Please enter a scene name", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        if (audioConfig.sampleRate.value !in listOf(44100, 48000, 96000)) {
-            _errorMessage.value = "Sample rate is not supported."
-            Toast.makeText(app, "Sample rate is not supported", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        return true
-    }
-
     /**
-     * Returns null if there's enough free space to safely start a recording,
-     * or a human-readable error string explaining why we refuse.
-     *
-     * Rule: refuse if free space < bytes-needed-for-60-seconds-at-current-quality.
-     * (60s is a heuristic: long enough that filling disk mid-take would be a
-     * disaster, short enough that we don't block recording on devices that
-     * could comfortably handle a short take.)
+     * Cloud-cluster tail of a finished take — invoked by RecordingController.stopRecording via
+     * the onTakeSaved seam (kept here because cloud/Drive state isn't extracted): Google-Drive
+     * auto-upload + SAF "cloud folder" copy.
      */
-    private fun checkDiskSpaceOrError(): String? {
-        return try {
-            val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
-            val freeBytes = stat.availableBlocksLong * stat.blockSizeLong
-            val bytesPerSec = audioConfig.sampleRate.value.toLong() *
-                (audioConfig.bitDepth.value / 8) *
-                audioConfig.channelCount.value
-            val minBytes = bytesPerSec * 60L
-            if (freeBytes < minBytes) {
-                val freeMb = freeBytes / (1024L * 1024L)
-                val minMb = minBytes / (1024L * 1024L)
-                "Not enough free space (${freeMb} MB free, need at least ${minMb} MB for 60s at current quality)"
-            } else null
-        } catch (e: Exception) {
-            Log.w(TAG, "Disk space check failed: ${e.message}")
-            null  // don't block on failure
-        }
-    }
-
-    fun startRecording() {
-        if (!hydrated.value) {
-            // Hydration races against an early Record tap. Wait up to 500ms.
-            viewModelScope.launch {
+    private fun onTakeSaved(finalFile: RecordFile, capturedFilePath: String?) {
+        // Google Drive backup — auto-upload to Drive if signed in and enabled.
+        capturedFilePath?.let { backupToDrive(it) }
+        // L.2: Cloud backup — copy the WAV to the chosen SAF folder.
+        val cloudUri = _cloudBackupUri.value
+        if (_cloudBackupOn.value && cloudUri != null && !finalFile.path.startsWith("content://")) {
+            viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    withTimeout(500) {
-                        hydrated.filter { it }.first()
-                    }
-                    startRecordingInternal()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Hydration timed out — starting with current state")
-                    startRecordingInternal()
-                }
-            }
-            return
-        }
-        startRecordingInternal()
-    }
-
-    @Suppress("DEPRECATION")  // legacy Bluetooth SCO APIs — no pre-API-31 replacement
-    private fun startRecordingInternal() {
-        if (recordingController.vadOn.value) voiceActivityDetector.stop()
-        Log.d(TAG, "startRecording() called")
-        // Safeguard: if monitor is on, stop it before recording. Monitor while
-        // recording risks an acoustic feedback loop (speaker → mic → speaker)
-        // especially on UNPROCESSED mic which has no echo cancellation.
-        if (monitorManager.stop()) {
-            Toast.makeText(app, "Monitor stopped to prevent echo while recording", Toast.LENGTH_SHORT).show()
-        }
-        // If pre-roll is on, stop the capture thread so the main AudioRecord can open the mic.
-        // The buffer content has been written into preRollBuffer; AudioRecorderManager.start()
-        // will drain + prepend it.
-        if (preRollCapture.isRunning()) {
-            preRollCapture.stop()
-        }
-
-        if (_isRecording.value) {
-            Log.d(TAG, "Already recording, ignoring")
-            return
-        }
-
-        if (!validateRecordingData()) {
-            return
-        }
-
-        checkDiskSpaceOrError()?.let { msg ->
-            _errorMessage.value = msg
-            Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
-            return
-        }
-
-        // Feature I: countdown beep before recording
-        val countdown = recordingController.countdownSeconds.value
-        if (countdown > 0) {
-            viewModelScope.launch {
-                try {
-                    val tg = android.media.ToneGenerator(
-                        android.media.AudioManager.STREAM_MUSIC, 80,
-                    )
-                    for (i in countdown downTo 1) {
+                    val srcFile = java.io.File(finalFile.path)
+                    val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, cloudUri)
+                    val target = tree?.createFile("audio/wav", srcFile.name)
+                    if (target != null) {
+                        app.contentResolver.openOutputStream(target.uri).use { out ->
+                            srcFile.inputStream().use { it.copyTo(out!!) }
+                        }
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(app, "Recording in ${i}…", Toast.LENGTH_SHORT).show()
-                        }
-                        tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 200)
-                        kotlinx.coroutines.delay(1000L)
-                    }
-                    tg.release()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Countdown beep failed: ${e.message}")
-                }
-                startRecordingNow()
-            }
-            return
-        }
-        startRecordingNow()
-    }
-
-    private fun startRecordingNow() {
-        _isRecording.value = true
-        viewModelScope.launch { try { settings.setIsRecording(true) } catch (_: Exception) {} }
-        audioFocus.requestFocus() // Best-effort — don't block recording if denied
-        audioFocus.registerBecomingNoisy()
-        _errorMessage.value = null
-        recorder.setAudioSource(audioConfig.audioSource.value)
-        // Phase 7: real-time EQ during recording — push current chain if Live EQ is on.
-        if (recordingController.liveEqEnabled.value) {
-            recorder.setLiveEqChain(eqEditor.currentEQChain.value, audioConfig.sampleRate.value.toFloat())
-        } else {
-            recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
-        }
-        recordingStartMs = System.currentTimeMillis()
-        // H: snapshot device location for metadata (null if permission denied / no fix)
-        pendingLocationTag = com.example.recorderproject.audio.LocationCapture.snapshot(app)
-        Log.d(TAG, "Set audio source to: ${audioConfig.audioSource.value}, location=${pendingLocationTag ?: "n/a"}")
-        try {
-            Log.d(TAG, "Calling recorder.start()")
-            recorder.start(
-                fileName = naming.fileName.value,
-                sampleRate = audioConfig.sampleRate.value,
-                saveDirectoryUri = _saveDirectoryUri.value
-            ) { level ->
-                _currentWaveform.value = level
-            }
-            // Q2: start foreground service so recording survives screen-off
-            try {
-                val intent = android.content.Intent(
-                    app, com.example.recorderproject.audio.RecordingForegroundService::class.java,
-                )
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not start foreground service: ${e.message}")
-            }
-            // M1/M2: wire live spectrum + pitch listeners
-            recorder.setSpectrumListener { bands ->
-                _liveSpectrum.value = bands
-                val hist = _spectrumHistory.value.toMutableList()
-                hist.add(bands)
-                if (hist.size > 80) hist.removeAt(0) // ~80 frames rolling window
-                _spectrumHistory.value = hist
-            }
-            recorder.setPitchListener { hz ->
-                _livePitchHz.value = hz
-            }
-            recorder.setLufsListener { lufs ->
-                _liveLufs.value = lufs
-            }
-            recorder.setTruePeakListener { tp -> _liveTpDbTp.value = tp }
-            recorder.setRawPeakListener { db -> _liveRawPeakDbfs.value = db }
-            recorder.setPhaseListener { c -> _phaseCorrelation.value = c }
-            recorder.setErrorListener { err ->
-                viewModelScope.launch(Dispatchers.Main) {
-                    val msg = when (err) {
-                        is SecurityException -> "Recording stopped: save folder permission was revoked"
-                        is java.io.IOException -> "Recording stopped: disk write failed (${err.message})"
-                        else -> "Recording stopped due to error: ${err.message}"
-                    }
-                    Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
-                    _errorMessage.value = msg
-                    if (_isRecording.value) {
-                        try { stopRecording() } catch (_: Exception) {}
-                    }
-                }
-            }
-            Log.d(TAG, "Recording started successfully")
-            Toast.makeText(app, "Recording started", Toast.LENGTH_SHORT).show()
-            timers.startFreeTierLimit()
-            // Persist active-take path so a crash-then-relaunch can recover it
-            viewModelScope.launch {
-                try {
-                    val activePath = recorder.currentFilePath()
-                    if (activePath != null) settings.setActiveRecordingPath(activePath)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not persist active recording path: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start recording: ${e.message}", e)
-            _errorMessage.value = "Failed to start recording: ${e.message}"
-            _isRecording.value = false
-            Toast.makeText(app, "Recording failed: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun stopRecording() {
-        Log.d(TAG, "stopRecording() called")
-        if (!_isRecording.value) {
-            Log.d(TAG, "Not recording, ignoring")
-            return
-        }
-        timers.cancelFreeTierLimit()
-        audioFocus.abandonFocus()
-        audioFocus.unregisterBecomingNoisy()
-
-        // M1/M2: clear listeners + reset live state
-        recorder.setSpectrumListener(null)
-        recorder.setPitchListener(null)
-        recorder.setLufsListener(null)
-        recorder.setTruePeakListener(null)
-        recorder.setRawPeakListener(null)
-        recorder.setPhaseListener(null)
-        recorder.setErrorListener(null)
-        _liveSpectrum.value = FloatArray(0)
-        _livePitchHz.value = 0f
-        _liveLufs.value = -70f
-        _liveTpDbTp.value = Float.NEGATIVE_INFINITY
-        _liveRawPeakDbfs.value = Float.NEGATIVE_INFINITY
-        _phaseCorrelation.value = 0f
-        _spectrumHistory.value = emptyList()
-
-        // Q2: stop foreground service
-        try {
-            app.stopService(
-                android.content.Intent(
-                    app, com.example.recorderproject.audio.RecordingForegroundService::class.java,
-                ),
-            )
-        } catch (_: Exception) {}
-
-        val capturedScene = naming.sceneName.value
-        val capturedNotes = naming.notes.value
-        // Capture path before stop() clears it — used for Drive backup after finalize
-        val capturedFilePath = recorder.currentFilePath()
-
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "Calling recorder.stop()")
-                val recordedFile = withContext(Dispatchers.IO) {
-                    recorder.stop(sceneName = capturedScene, notes = capturedNotes)
-                }
-                Log.d(TAG, "Recorder stopped, file: ${recordedFile.name}")
-                val renamedPath = withContext(Dispatchers.IO) {
-                    recorder.autoRenameFile(recordedFile.path, capturedScene, capturedNotes)
-                }
-                val wasRenamed = renamedPath != recordedFile.path
-                val renamedFile = if (wasRenamed) {
-                    val newFile = File(renamedPath)
-                    recordedFile.copy(name = newFile.name, path = newFile.absolutePath)
-                } else {
-                    recordedFile
-                }.copy(locationTag = pendingLocationTag ?: recordedFile.locationTag)
-
-                // Single toast: merge auto-rename + save-location info to avoid two back-to-back
-                // notifications when both conditions are true (no save folder + scene name triggered rename).
-                if (_saveDirectoryUri.value == null) {
-                    val msg = if (wasRenamed)
-                        "✅ Auto-named & saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder."
-                    else
-                        "✅ Saved to App Storage: ${renamedFile.name}\nTip: Set a Save Location in Settings to choose your folder."
-                    Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
-                } else if (wasRenamed) {
-                    Toast.makeText(app, "Auto-named file: ${renamedFile.name}", Toast.LENGTH_SHORT).show()
-                }
-
-                // Surface the take in the list NOW — the WAV is on disk and playable.
-                // NR / EQ below can be slow or throw; if we waited until after them to
-                // add the file, a failure there would make the recording silently vanish
-                // from the list (the original bug). We add it here, then swap in the
-                // fully-processed version below via [provisionalId].
-                val provisionalId = renamedFile.id
-                fileLibrary.add(renamedFile)
-                _isRecording.value = false
-                try { settings.setIsRecording(false) } catch (_: Exception) {}
-                _currentWaveform.value = emptyList()
-                if (recordingController.vadOn.value) {
-                    voiceActivityDetector.onVoiceDetected = {
-                        if (!_isRecording.value) startRecording()
-                    }
-                    voiceActivityDetector.start(viewModelScope)
-                }
-
-                val nrFile = if (_noiseReductionEnabled.value) {
-                    Log.d(TAG, "Applying noise reduction")
-                    withContext(Dispatchers.IO) { noiseProcessor.process(renamedFile) }
-                } else {
-                    renamedFile
-                }
-
-                // Phase 7: real-time Live EQ — the chain was baked into the PCM as it was recorded.
-                // Mark the file with hasEQ + write the sidecar JSON so re-opening shows the chain.
-                val finalFile = if (recordingController.liveEqEnabled.value && recorder.isLiveEqActive() &&
-                    !nrFile.path.startsWith("content://")
-                ) {
-                    try {
-                        val srcFile = File(nrFile.path)
-                        File(srcFile.parentFile, srcFile.nameWithoutExtension + "_eq.json")
-                            .writeText(com.example.recorderproject.model.EQChainJson.toJsonString(eqEditor.currentEQChain.value))
-                        nrFile.copy(hasEQ = true)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Live EQ sidecar write failed: ${e.message}", e)
-                        nrFile.copy(hasEQ = true)
-                    }
-                } else nrFile
-
-                // Recorder no longer needs the chain after the take
-                recorder.setLiveEqChain(null, audioConfig.sampleRate.value.toFloat())
-
-                // Swap the provisional entry for the fully-processed final file.
-                // (NR assigns a new id, so filter by the provisional id, not finalFile's.)
-                fileLibrary.update { it.filterNot { f -> f.id == provisionalId } + finalFile }
-
-                // D: kick off delivery render if a target is active
-                loudness.renderFor(finalFile)
-
-                viewModelScope.launch {
-                    try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
-                }
-                // (isRecording / waveform already reset above, right after the take was
-                // added to the list, so the UI updates immediately.)
-                // If pre-roll was enabled, restart the capture thread for the next take.
-                if (recordingController.preRollEnabled.value) {
-                    preRollCapture.start()
-                }
-                // Auto-bump take number for next take in the same scene
-                refreshAutoFileName()
-                Log.d(TAG, "Recording stopped successfully")
-                Toast.makeText(app, "Recording saved: ${finalFile.name}", Toast.LENGTH_SHORT).show()
-                // Google Drive backup — auto-upload to Drive if signed in and enabled.
-                capturedFilePath?.let { backupToDrive(it) }
-                // L.2: Cloud backup — copy the WAV to the chosen SAF folder.
-                val cloudUri = _cloudBackupUri.value
-                if (_cloudBackupOn.value && cloudUri != null && !finalFile.path.startsWith("content://")) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            val srcFile = java.io.File(finalFile.path)
-                            val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, cloudUri)
-                            val target = tree?.createFile("audio/wav", srcFile.name)
-                            if (target != null) {
-                                app.contentResolver.openOutputStream(target.uri).use { out ->
-                                    srcFile.inputStream().use { it.copyTo(out!!) }
-                                }
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(app, "Backed up to cloud folder", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Cloud backup copy failed: ${e.message}", e)
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(app, "Cloud backup failed: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
+                            Toast.makeText(app, "Backed up to cloud folder", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Cloud backup copy failed: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(app, "Cloud backup failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to stop recording: ${e.message}", e)
-                _errorMessage.value = "Failed to stop recording: ${e.message}"
-                _isRecording.value = false
-                try { settings.setIsRecording(false) } catch (_: Exception) {}
-                _currentWaveform.value = emptyList()
-                // Safety net: even if recorder.stop()/post-processing threw, the WAV was
-                // written to disk (periodic crash-safe finalize). Rescan so the take still
-                // appears in the list and can be played back rather than silently lost.
-                try { scanRecordingsFromDisk() } catch (_: Exception) {}
-                Toast.makeText(app, "Failed to save recording: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1356,19 +986,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // Phase 4 — cue points dropped while recording
-    private val _liveCueCount = MutableStateFlow(0)
-    val liveCueCount: StateFlow<Int> = _liveCueCount
-
-    private val pendingCues = mutableListOf<com.example.recorderproject.model.CuePoint>()
-    private var recordingStartMs = 0L
-
-    fun dropCueMarker(label: String = "") {
-        if (!_isRecording.value) return
-        val tMs = System.currentTimeMillis() - recordingStartMs
-        pendingCues.add(com.example.recorderproject.model.CuePoint(timeMs = tMs, label = label))
-        _liveCueCount.value = pendingCues.size
-    }
+    // Cue markers (liveCueCount / pendingCues / dropCueMarker) → RecordingController (below).
 
     fun toggleStarRecording(file: RecordFile) {
         fileLibrary.updateById(file.id) { it.copy(starred = !it.starred) }
@@ -1598,7 +1216,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      *  - The in-memory _recordFiles list
      */
     fun resetFactory() {
-        if (_isRecording.value) {
+        if (recordingController.isRecording.value) {
             Toast.makeText(app, "Stop recording before resetting", Toast.LENGTH_LONG).show()
             return
         }

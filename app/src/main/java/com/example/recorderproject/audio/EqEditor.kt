@@ -37,10 +37,17 @@ class EqEditor(
     private val isHydrated: () -> Boolean,
     private val requirePro: (ProFeature) -> Boolean,
     private val sampleRate: () -> Int,
-    private val liveChainSink: (EQChain) -> Unit,
     private val markFileHasEq: (id: String) -> Unit,
     private val saveDirectoryUri: () -> Uri?,
 ) {
+    /**
+     * Notified with the new chain whenever the user edits the EQ, so the recorder can pick up
+     * real-time edits while live-EQ recording. Set by the ViewModel after construction (it
+     * forwards into RecordingController, which would otherwise be a forward reference). No-op
+     * until wired.
+     */
+    var liveChainSink: (EQChain) -> Unit = {}
+
     private val history = EqHistory(cap = 10)
 
     private val _currentEQChain = MutableStateFlow(EQChain.empty())
