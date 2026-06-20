@@ -50,8 +50,8 @@ fun LibraryPage(
     onBulkCompareAb: () -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
-    fileFilter: com.example.recorderproject.RecorderViewModel.FileFilter,
-    onFilterChange: (com.example.recorderproject.RecorderViewModel.FileFilter) -> Unit,
+    fileFilter: com.example.recorderproject.model.FileFilter,
+    onFilterChange: (com.example.recorderproject.model.FileFilter) -> Unit,
     sortOrder: SortOrder,
     onSortChange: (SortOrder) -> Unit,
     modifier: Modifier = Modifier,
@@ -129,7 +129,7 @@ fun LibraryPage(
         // empty — otherwise a filter that hides everything (e.g. "NR") would also hide
         // the only control that can reset it, leaving the library stuck looking empty.
         if (files.isNotEmpty() || searchQuery.isNotEmpty() ||
-            fileFilter != com.example.recorderproject.RecorderViewModel.FileFilter.ALL
+            fileFilter != com.example.recorderproject.model.FileFilter.ALL
         ) {
             com.example.recorderproject.ui.components.RecordingsToolbar(
                 searchQuery = searchQuery,

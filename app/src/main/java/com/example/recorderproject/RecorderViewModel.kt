@@ -29,12 +29,9 @@ import com.example.recorderproject.model.LoudnessTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -162,7 +159,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         requirePro = ::requirePro,
         sampleRate = { audioConfig.sampleRate.value },
         liveChainSink = { chain -> if (recordingController.liveEqEnabled.value) recorder.setLiveEqChain(chain, audioConfig.sampleRate.value.toFloat()) },
-        markFileHasEq = { id -> _recordFiles.value = _recordFiles.value.map { if (it.id == id) it.copy(hasEQ = true) else it } },
+        markFileHasEq = { id -> fileLibrary.updateById(id) { it.copy(hasEQ = true) } },
         saveDirectoryUri = { _saveDirectoryUri.value },
     )
 
@@ -231,7 +228,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                             durationSeconds = durationSeconds,
                             sceneName = "Recovered",
                         )
-                        _recordFiles.value = _recordFiles.value + recovered
+                        fileLibrary.add(recovered)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(app, "Recovered take from previous session: ${recoveredFile.name}",
                                 Toast.LENGTH_LONG).show()
@@ -281,96 +278,29 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private val _recordFiles = MutableStateFlow<List<RecordFile>>(emptyList())
-    val recordFiles: StateFlow<List<RecordFile>> = _recordFiles
-
-    // Q5: persisted across sessions via SharedPreferences
+    // Recordings list + sort/search/filter/selection → FileLibrary (issue #13 step 8).
     private val prefs = application.getSharedPreferences("meatrec_ui", 0)
-    private val _sortOrder = MutableStateFlow(
-        runCatching { SortOrder.valueOf(prefs.getString("sort_order", null) ?: "") }
-            .getOrElse { SortOrder.Default }
-    )
-    val sortOrder: StateFlow<SortOrder> = _sortOrder
+    private val fileLibrary = com.example.recorderproject.data.FileLibrary(viewModelScope, prefs)
+    val recordFiles: StateFlow<List<RecordFile>> = fileLibrary.recordFiles
+    val sortOrder: StateFlow<SortOrder> = fileLibrary.sortOrder
+    val sortedRecordFiles: StateFlow<List<RecordFile>> = fileLibrary.sortedRecordFiles
+    val visibleRecordFiles: StateFlow<List<RecordFile>> = fileLibrary.visibleRecordFiles
+    val searchQuery: StateFlow<String> = fileLibrary.searchQuery
+    val fileFilter: StateFlow<com.example.recorderproject.model.FileFilter> = fileLibrary.fileFilter
+    val selectedFileIds: StateFlow<Set<String>> = fileLibrary.selectedFileIds
 
-    /**
-     * Files sorted per `sortOrder`. UI should observe this, not `recordFiles`.
-     * Date sort uses insertion order as a proxy (`_recordFiles` appends on new takes);
-     * `RecordFile` has no explicit timestamp field today.
-     */
-    val sortedRecordFiles: StateFlow<List<RecordFile>> = combine(_recordFiles, _sortOrder) { files, order ->
-        applySort(files, order)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    fun setSortOrder(order: SortOrder) {
-        _sortOrder.value = order
-        prefs.edit().putString("sort_order", order.name).apply()
-    }
-
-    // F6+F7: search query + filter chip
-    enum class FileFilter { ALL, STARRED, LOCKED, NR, EQ }
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery
-    fun setSearchQuery(q: String) { _searchQuery.value = q }
-
-    // NOTE: the filter chip is TRANSIENT view state and is intentionally NOT restored
-    // across launches. Persisting it caused a trap: a stuck non-ALL filter (e.g. "NR")
-    // hid every recording, and since the filter toolbar only shows when the list is
-    // non-empty, there was no way to switch back to "All" — the library looked empty
-    // forever. Always start at ALL so recordings are visible by default.
-    private val _fileFilter = MutableStateFlow(FileFilter.ALL)
-    val fileFilter: StateFlow<FileFilter> = _fileFilter
-    fun setFileFilter(f: FileFilter) {
-        _fileFilter.value = f
-    }
-
-    // F8: bulk multi-select state for RECORDINGS list
-    private val _selectedFileIds = MutableStateFlow<Set<String>>(emptySet())
-    val selectedFileIds: StateFlow<Set<String>> = _selectedFileIds
-
-    fun toggleFileSelection(id: String) {
-        _selectedFileIds.value = _selectedFileIds.value.toMutableSet().also {
-            if (!it.add(id)) it.remove(id)
-        }
-    }
-    fun clearSelection() { _selectedFileIds.value = emptySet() }
-    fun selectAll() { _selectedFileIds.value = _recordFiles.value.map { it.id }.toSet() }
+    fun setSortOrder(order: SortOrder) = fileLibrary.setSortOrder(order)
+    fun setSearchQuery(q: String) = fileLibrary.setSearchQuery(q)
+    fun setFileFilter(f: com.example.recorderproject.model.FileFilter) = fileLibrary.setFileFilter(f)
+    fun toggleFileSelection(id: String) = fileLibrary.toggleFileSelection(id)
+    fun clearSelection() = fileLibrary.clearSelection()
+    fun selectAll() = fileLibrary.selectAll()
 
     fun deleteSelected() {
-        val ids = _selectedFileIds.value
+        val ids = fileLibrary.selectedFileIds.value
         if (ids.isEmpty()) return
-        _recordFiles.value.filter { it.id in ids }.forEach { deleteRecording(it) }
-        _selectedFileIds.value = emptySet()
-    }
-
-    /**
-     * Files filtered by [searchQuery] (case-insensitive substring of name) AND
-     * [fileFilter] chip, then sorted per [sortOrder]. UI should observe this.
-     */
-    val visibleRecordFiles: StateFlow<List<RecordFile>> = kotlinx.coroutines.flow.combine(
-        _recordFiles, _sortOrder, _searchQuery, _fileFilter,
-    ) { files, order, query, filter ->
-        val matched = files.filter { f ->
-            val matchesQuery = query.isBlank() || f.name.contains(query, ignoreCase = true)
-            val matchesFilter = when (filter) {
-                FileFilter.ALL -> true
-                FileFilter.STARRED -> f.starred
-                FileFilter.LOCKED -> f.isLocked
-                FileFilter.NR -> f.hasNoiseReduction
-                FileFilter.EQ -> f.hasEQ
-            }
-            matchesQuery && matchesFilter
-        }
-        applySort(matched, order)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    private fun applySort(files: List<RecordFile>, order: SortOrder): List<RecordFile> = when (order) {
-        SortOrder.DATE_NEWEST    -> files.asReversed()
-        SortOrder.DATE_OLDEST    -> files
-        SortOrder.NAME_ASC       -> files.sortedBy { it.name.lowercase() }
-        SortOrder.NAME_DESC      -> files.sortedByDescending { it.name.lowercase() }
-        SortOrder.DURATION_LONG  -> files.sortedByDescending { it.durationSeconds }
-        SortOrder.DURATION_SHORT -> files.sortedBy { it.durationSeconds }
+        fileLibrary.current().filter { it.id in ids }.forEach { deleteRecording(it) }
+        fileLibrary.clearSelection()
     }
 
     private val _isRecording = MutableStateFlow(false)
@@ -432,16 +362,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (existing.contains(tag)) return
         existing += tag
         val merged = existing.joinToString(",")
-        _recordFiles.value = _recordFiles.value.map {
-            if (it.id == file.id) it.copy(tags = merged) else it
-        }
+        fileLibrary.updateById(file.id) { it.copy(tags = merged) }
     }
     fun removeTagFromFile(file: RecordFile, tag: String) {
         val existing = file.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != tag }
         val merged = existing.joinToString(",")
-        _recordFiles.value = _recordFiles.value.map {
-            if (it.id == file.id) it.copy(tags = merged) else it
-        }
+        fileLibrary.updateById(file.id) { it.copy(tags = merged) }
     }
 
     // G15: Auto-name from scene + date/time when filename is left blank.
@@ -590,12 +516,12 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** Open A/B compare with the two currently selected files. Requires exactly 2. */
     fun openAbCompareFromSelection() {
         if (!requirePro(com.example.recorderproject.billing.ProFeature.ANALYSIS_TOOLS)) return
-        val ids = _selectedFileIds.value
+        val ids = fileLibrary.selectedFileIds.value
         if (ids.size != 2) {
             Toast.makeText(app, "Select exactly 2 files to compare", Toast.LENGTH_SHORT).show()
             return
         }
-        val files = _recordFiles.value.filter { it.id in ids }
+        val files = fileLibrary.current().filter { it.id in ids }
         if (files.size != 2) return
         openAbCompare(files[0], files[1])
         clearSelection()
@@ -739,7 +665,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     path = result.absolutePath,
                     durationSeconds = ((outMs - inMs) / 1000L).toInt().coerceAtLeast(1),
                 )
-                _recordFiles.value = _recordFiles.value + trimRecord
+                fileLibrary.add(trimRecord)
             }
             result
         } catch (e: Exception) {
@@ -887,9 +813,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      */
     fun detectSyncPoint(file: RecordFile): Long? {
         val ms = com.example.recorderproject.audio.SyncDetector.detect(file.path) ?: return null
-        _recordFiles.value = _recordFiles.value.map {
-            if (it.id == file.id) it.copy(syncPointMs = ms) else it
-        }
+        fileLibrary.updateById(file.id) { it.copy(syncPointMs = ms) }
         return ms
     }
 
@@ -907,7 +831,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 name = out.name,
                 path = out.absolutePath,
             )
-            _recordFiles.value = _recordFiles.value + newRecord
+            fileLibrary.add(newRecord)
             out
         } catch (e: Exception) {
             Log.e(TAG, "Pitch shift failed: ${e.message}", e)
@@ -1310,7 +1234,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 // from the list (the original bug). We add it here, then swap in the
                 // fully-processed version below via [provisionalId].
                 val provisionalId = renamedFile.id
-                _recordFiles.value = _recordFiles.value + renamedFile
+                fileLibrary.add(renamedFile)
                 _isRecording.value = false
                 try { settings.setIsRecording(false) } catch (_: Exception) {}
                 _currentWaveform.value = emptyList()
@@ -1349,7 +1273,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
                 // Swap the provisional entry for the fully-processed final file.
                 // (NR assigns a new id, so filter by the provisional id, not finalFile's.)
-                _recordFiles.value = _recordFiles.value.filterNot { it.id == provisionalId } + finalFile
+                fileLibrary.update { it.filterNot { f -> f.id == provisionalId } + finalFile }
 
                 // D: kick off delivery render if a target is active
                 loudness.renderFor(finalFile)
@@ -1418,14 +1342,14 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 val base = srcFile.nameWithoutExtension
                 parent?.listFiles { f -> f.name.startsWith(base) }?.forEach { it.delete() }
             }
-            _recordFiles.value = _recordFiles.value.filter { it.id != file.id }
+            fileLibrary.removeById(file.id)
         } catch (e: Exception) {
             Log.e(TAG, "Delete failed: ${e.message}", e)
         }
     }
 
     private fun rebindDeliveryResult(srcPath: String, dstPath: String, r: DeliveryResult) {
-        _recordFiles.update { list ->
+        fileLibrary.update { list ->
             list.map { f ->
                 if (f.path == srcPath) f.copy(deliveryPath = dstPath, deliveryResult = r) else f
             }
@@ -1447,15 +1371,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun toggleStarRecording(file: RecordFile) {
-        _recordFiles.value = _recordFiles.value.map {
-            if (it.id == file.id) it.copy(starred = !it.starred) else it
-        }
+        fileLibrary.updateById(file.id) { it.copy(starred = !it.starred) }
     }
 
     fun toggleLockRecording(file: RecordFile) {
-        _recordFiles.value = _recordFiles.value.map {
-            if (it.id == file.id) it.copy(isLocked = !it.isLocked) else it
-        }
+        fileLibrary.updateById(file.id) { it.copy(isLocked = !it.isLocked) }
     }
 
     /**
@@ -1467,9 +1387,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         if (file.path.startsWith("content://")) {
             // SAF-backed files can't be renamed via java.io.File — skip the disk side but
             // still update the in-memory label so the UI reflects the new name.
-            _recordFiles.value = _recordFiles.value.map {
-                if (it.id == file.id) it.copy(name = newName) else it
-            }
+            fileLibrary.updateById(file.id) { it.copy(name = newName) }
             return true
         }
         return try {
@@ -1480,9 +1398,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             val target = File(srcFile.parentFile, finalName)
             if (target.exists()) return false
             if (!srcFile.renameTo(target)) return false
-            _recordFiles.value = _recordFiles.value.map {
-                if (it.id == file.id) it.copy(name = finalName, path = target.absolutePath) else it
-            }
+            fileLibrary.updateById(file.id) { it.copy(name = finalName, path = target.absolutePath) }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Rename failed: ${e.message}", e)
@@ -1521,9 +1437,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             val updated = withContext(Dispatchers.IO) { noiseProcessor.process(file) }
-            _recordFiles.value = _recordFiles.value.map {
-                if (it.id == file.id) updated else it
-            }
+            fileLibrary.updateById(file.id) { updated }
         }
     }
 
@@ -1554,7 +1468,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     path = nrDoc.uri.toString(),
                     hasNoiseReduction = true,
                 )
-                _recordFiles.value = _recordFiles.value.map { if (it.id == file.id) updated else it }
+                fileLibrary.updateById(file.id) { updated }
                 withContext(Dispatchers.Main) {
                     Toast.makeText(app, "Noise reduction applied", Toast.LENGTH_SHORT).show()
                 }
@@ -1720,9 +1634,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * to the list when NR is enabled.
      */
     private fun scanRecordingsFromDisk() {
-        val added = scanner.scanDisk(_recordFiles.value.map { it.path }.toSet())
+        val added = scanner.scanDisk(fileLibrary.current().map { it.path }.toSet())
         if (added.isNotEmpty()) {
-            _recordFiles.value = _recordFiles.value + added
+            fileLibrary.addAll(added)
             Log.i(TAG, "scanRecordingsFromDisk: added ${added.size} files from disk")
         }
     }
@@ -1735,9 +1649,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      */
     private suspend fun scanSafRecordings() = withContext(Dispatchers.IO) {
         val uri = _saveDirectoryUri.value ?: return@withContext
-        val added = scanner.scanSaf(uri, _recordFiles.value.map { it.path }.toSet())
+        val added = scanner.scanSaf(uri, fileLibrary.current().map { it.path }.toSet())
         if (added.isNotEmpty()) {
-            _recordFiles.value = _recordFiles.value + added
+            fileLibrary.addAll(added)
             Log.i(TAG, "scanSafRecordings: added ${added.size} files from SAF folder")
         }
     }
@@ -1749,7 +1663,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun exportSoundReport() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val files = _recordFiles.value
+                val files = fileLibrary.current()
                 val sb = StringBuilder()
                 sb.appendLine("Scene,Take,FileName,Duration(s),HasNR,HasEQ,Starred,Locked,Tags,Notes,Integrated,TP_dBTP,LRA,Target_Result")
                 for (f in files) {

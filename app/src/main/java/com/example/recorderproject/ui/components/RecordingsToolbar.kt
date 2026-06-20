@@ -53,8 +53,8 @@ private val MeatYellow = Color(0xFFFFC72C)
 fun RecordingsToolbar(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
-    currentFilter: RecorderViewModel.FileFilter,
-    onFilterChange: (RecorderViewModel.FileFilter) -> Unit,
+    currentFilter: com.example.recorderproject.model.FileFilter,
+    onFilterChange: (com.example.recorderproject.model.FileFilter) -> Unit,
     currentSort: SortOrder,
     onSortChange: (SortOrder) -> Unit,
 ) {
@@ -120,11 +120,11 @@ fun RecordingsToolbar(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                FilterChip("All", RecorderViewModel.FileFilter.ALL, currentFilter, onFilterChange)
-                FilterChip("★ Starred", RecorderViewModel.FileFilter.STARRED, currentFilter, onFilterChange)
-                FilterChip("Locked", RecorderViewModel.FileFilter.LOCKED, currentFilter, onFilterChange)
-                FilterChip("NR", RecorderViewModel.FileFilter.NR, currentFilter, onFilterChange)
-                FilterChip("EQ", RecorderViewModel.FileFilter.EQ, currentFilter, onFilterChange)
+                FilterChip("All", com.example.recorderproject.model.FileFilter.ALL, currentFilter, onFilterChange)
+                FilterChip("★ Starred", com.example.recorderproject.model.FileFilter.STARRED, currentFilter, onFilterChange)
+                FilterChip("Locked", com.example.recorderproject.model.FileFilter.LOCKED, currentFilter, onFilterChange)
+                FilterChip("NR", com.example.recorderproject.model.FileFilter.NR, currentFilter, onFilterChange)
+                FilterChip("EQ", com.example.recorderproject.model.FileFilter.EQ, currentFilter, onFilterChange)
             }
             SortDropdown(currentSort = currentSort, onSortChange = onSortChange)
         }
@@ -134,9 +134,9 @@ fun RecordingsToolbar(
 @Composable
 private fun FilterChip(
     label: String,
-    value: RecorderViewModel.FileFilter,
-    current: RecorderViewModel.FileFilter,
-    onSelect: (RecorderViewModel.FileFilter) -> Unit,
+    value: com.example.recorderproject.model.FileFilter,
+    current: com.example.recorderproject.model.FileFilter,
+    onSelect: (com.example.recorderproject.model.FileFilter) -> Unit,
 ) {
     val active = value == current
     Text(
