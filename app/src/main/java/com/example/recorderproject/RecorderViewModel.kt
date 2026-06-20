@@ -6,7 +6,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
 import com.example.recorderproject.audio.TranscriptionEngine
-import com.example.recorderproject.network.GoogleDriveUploader
 import com.example.recorderproject.audio.VoiceActivityDetector
 import com.example.recorderproject.audio.NoiseReductionProcessor
 import com.example.recorderproject.audio.StaticSpectrum
@@ -72,14 +71,21 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         cooldownMs = 3000,
     )
     private val transcriptionEngine = TranscriptionEngine(app.applicationContext)
-    private val driveUploader = GoogleDriveUploader(app.applicationContext)
-
-    private val _isDriveSignedIn = MutableStateFlow(driveUploader.isSignedIn())
-    val isDriveSignedIn: StateFlow<Boolean> = _isDriveSignedIn
-
-    fun refreshDriveSignInState() {
-        _isDriveSignedIn.value = driveUploader.isSignedIn()
-    }
+    // Cloud backup (Drive + SAF folder) → CloudBackup (issue #13 step 10).
+    private val cloudBackup = com.example.recorderproject.data.CloudBackup(
+        app = app,
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        requirePro = ::requirePro,
+    )
+    val isDriveSignedIn: StateFlow<Boolean> = cloudBackup.isDriveSignedIn
+    fun refreshDriveSignInState() = cloudBackup.refreshSignInState()
+    val cloudBackupOn: StateFlow<Boolean> = cloudBackup.cloudBackupOn
+    fun toggleCloudBackup() = cloudBackup.toggle()
+    val cloudBackupUri: StateFlow<android.net.Uri?> = cloudBackup.cloudBackupUri
+    fun setCloudBackupUri(uri: android.net.Uri?) = cloudBackup.setUri(uri)
+    fun backupToDrive(filePath: String) = cloudBackup.backupToDrive(filePath)
 
     // ---- Feature #1: Pre-roll buffer ----
     private val preRollBuffer = com.example.recorderproject.audio.PreRollBuffer(
@@ -427,7 +433,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             saveDirectoryUri = { _saveDirectoryUri.value },
             noiseReductionEnabled = { _noiseReductionEnabled.value },
             onError = { _errorMessage.value = it },
-            onTakeSaved = ::onTakeSaved,
+            onTakeSaved = cloudBackup::onTakeSaved,
             rescanFromDisk = ::scanRecordingsFromDisk,
         )
 
@@ -677,55 +683,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     }
 
 
-    /** G20: cloud backup toggle. Turning it on prompts for a folder if none is set. */
-    private val _cloudBackupOn = MutableStateFlow(false)
-    val cloudBackupOn: StateFlow<Boolean> = _cloudBackupOn
-    fun toggleCloudBackup() {
-        // Turning cloud backup ON requires Pro; turning it off is always allowed.
-        if (!_cloudBackupOn.value && !requirePro(com.example.recorderproject.billing.ProFeature.CLOUD_BACKUP)) return
-        _cloudBackupOn.value = !_cloudBackupOn.value
-        if (_cloudBackupOn.value && _cloudBackupUri.value == null) {
-            Toast.makeText(app, "Pick a cloud folder in Settings → Cloud Backup Folder", Toast.LENGTH_LONG).show()
-        }
-        if (hydrated.value) viewModelScope.launch { settings.setCloudBackup(_cloudBackupOn.value) }
-    }
-
-    fun backupToDrive(filePath: String) {
-        if (!_cloudBackupOn.value) return
-        if (!driveUploader.isSignedIn()) return
-        viewModelScope.launch {
-            val file = java.io.File(filePath)
-            if (!file.exists()) return@launch
-            val id = driveUploader.upload(file)
-            if (id != null) {
-                Toast.makeText(app, "Backed up: ${file.name}", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(app, "Drive backup failed — check internet connection", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /** L.2: Persisted SAF URI for the cloud backup folder. */
-    private val _cloudBackupUri = MutableStateFlow<android.net.Uri?>(null)
-    val cloudBackupUri: StateFlow<android.net.Uri?> = _cloudBackupUri
-
-    fun setCloudBackupUri(uri: android.net.Uri?) {
-        _cloudBackupUri.value = uri
-        if (uri != null) {
-            try {
-                app.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            } catch (e: SecurityException) {
-                Log.w(TAG, "Cloud backup URI grant failed: ${e.message}")
-            }
-        }
-        if (hydrated.value) viewModelScope.launch {
-            settings.setCloudBackupUri(uri?.toString())
-        }
-    }
+    // Cloud backup (toggle / URI / Drive / onTakeSaved) → CloudBackup (declared near the top).
 
     /** G21: device health snapshot — battery % + remaining storage MB. Computed on demand. */
     fun snapshotHealth(context: android.content.Context): Pair<Int, Long> {
@@ -926,40 +884,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             Log.w(TAG, "Could not take persistable SAF permission: ${e.message}")
         }
         if (hydrated.value) viewModelScope.launch { settings.setSaveDirectoryUri(uri.toString()) }
-    }
-
-    /**
-     * Cloud-cluster tail of a finished take — invoked by RecordingController.stopRecording via
-     * the onTakeSaved seam (kept here because cloud/Drive state isn't extracted): Google-Drive
-     * auto-upload + SAF "cloud folder" copy.
-     */
-    private fun onTakeSaved(finalFile: RecordFile, capturedFilePath: String?) {
-        // Google Drive backup — auto-upload to Drive if signed in and enabled.
-        capturedFilePath?.let { backupToDrive(it) }
-        // L.2: Cloud backup — copy the WAV to the chosen SAF folder.
-        val cloudUri = _cloudBackupUri.value
-        if (_cloudBackupOn.value && cloudUri != null && !finalFile.path.startsWith("content://")) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    val srcFile = java.io.File(finalFile.path)
-                    val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, cloudUri)
-                    val target = tree?.createFile("audio/wav", srcFile.name)
-                    if (target != null) {
-                        app.contentResolver.openOutputStream(target.uri).use { out ->
-                            srcFile.inputStream().use { it.copyTo(out!!) }
-                        }
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(app, "Backed up to cloud folder", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Cloud backup copy failed: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(app, "Cloud backup failed: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
     }
 
     fun deleteRecording(file: RecordFile) {
@@ -1191,8 +1115,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         _saveDirectoryUri.value = s.saveDirectoryUri?.let { Uri.parse(it) }
         _groupByScene.value = s.groupByScene
         _lockScreenControlsOn.value = s.lockScreenControls
-        _cloudBackupOn.value = s.cloudBackup
-        _cloudBackupUri.value = s.cloudBackupUri?.let { android.net.Uri.parse(it) }
+        cloudBackup.applySnapshot(s.cloudBackup, s.cloudBackupUri)
 
         loudness.applySnapshot(
             s.defaultLoudnessTarget,
