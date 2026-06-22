@@ -67,11 +67,10 @@ class RecordingController(
     private val voiceActivityDetector: VoiceActivityDetector,
     private val preRollCapture: PreRollCapture,
     private val preRollBuffer: PreRollBuffer,
-    private val noiseProcessor: NoiseReductionProcessor,
+    private val noiseReduction: NoiseReduction,
     // ViewModel-owned seams.
     private val hydrated: StateFlow<Boolean>,
     private val saveDirectoryUri: () -> Uri?,
-    private val noiseReductionEnabled: () -> Boolean,
     private val onError: (String?) -> Unit,
     private val onTakeSaved: (finalFile: RecordFile, capturedFilePath: String?) -> Unit,
     private val rescanFromDisk: () -> Unit,
@@ -579,9 +578,9 @@ class RecordingController(
                     voiceActivityDetector.start(scope)
                 }
 
-                val nrFile = if (noiseReductionEnabled()) {
+                val nrFile = if (noiseReduction.enabled.value) {
                     Log.d(TAG, "Applying noise reduction")
-                    withContext(Dispatchers.IO) { noiseProcessor.process(renamedFile) }
+                    withContext(Dispatchers.IO) { noiseReduction.process(renamedFile) }
                 } else {
                     renamedFile
                 }

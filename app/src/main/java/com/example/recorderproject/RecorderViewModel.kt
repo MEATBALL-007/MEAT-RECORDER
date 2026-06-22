@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.recorderproject.audio.AudioRecorderManager
 import com.example.recorderproject.audio.TranscriptionEngine
 import com.example.recorderproject.audio.VoiceActivityDetector
-import com.example.recorderproject.audio.NoiseReductionProcessor
 import com.example.recorderproject.audio.StaticSpectrum
 import com.example.recorderproject.data.Defaults
 import com.example.recorderproject.data.SettingsDataStore
@@ -38,7 +37,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     private val TAG = "RecorderViewModel"
     private val app = application
     private val recorder = AudioRecorderManager(application.applicationContext)
-    private val noiseProcessor = NoiseReductionProcessor()
     private val settings = SettingsDataStore(application)
 
     // ---- Monetization: MEAT REC Pro one-time unlock ----
@@ -362,8 +360,19 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     val sceneName: StateFlow<String> = naming.sceneName
     val notes: StateFlow<String> = naming.notes
 
-    private val _noiseReductionEnabled = MutableStateFlow(true)
-    val noiseReductionEnabled: StateFlow<Boolean> = _noiseReductionEnabled
+    // Noise reduction → NoiseReduction (issue #13 step 12). Declared before recordingController
+    // (which reads enabled + calls process at stop time) and recorderModeManager (NR default).
+    private val noiseReduction = com.example.recorderproject.audio.NoiseReduction(
+        app = app,
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+        fileLibrary = fileLibrary,
+        saveDirectoryUri = { _saveDirectoryUri.value },
+    )
+    val noiseReductionEnabled: StateFlow<Boolean> = noiseReduction.enabled
+    fun toggleNoiseReduction(enabled: Boolean) = noiseReduction.setEnabled(enabled)
+    fun applyNoiseReduce(file: RecordFile) = noiseReduction.applyTo(file)
 
     // Audio-input config delegated to AudioInputConfig (issue #13 step 6).
     val sampleRate: StateFlow<Int> = audioConfig.sampleRate
@@ -427,10 +436,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             voiceActivityDetector = voiceActivityDetector,
             preRollCapture = preRollCapture,
             preRollBuffer = preRollBuffer,
-            noiseProcessor = noiseProcessor,
+            noiseReduction = noiseReduction,
             hydrated = hydrated,
             saveDirectoryUri = { _saveDirectoryUri.value },
-            noiseReductionEnabled = { _noiseReductionEnabled.value },
             onError = { _errorMessage.value = it },
             onTakeSaved = cloudBackup::onTakeSaved,
             rescanFromDisk = ::scanRecordingsFromDisk,
@@ -618,7 +626,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         settings = settings,
         isHydrated = { hydrated.value },
         audioConfig = audioConfig,
-        setNoiseReduction = { _noiseReductionEnabled.value = it },
+        setNoiseReduction = { noiseReduction.setEnabledInMemory(it) },
     )
     val recorderMode: StateFlow<com.example.recorderproject.model.RecorderMode> = recorderModeManager.recorderMode
 
@@ -854,11 +862,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     fun bumpScene(delta: Int) = naming.bumpScene(delta)
     fun updateNotes(value: String) = naming.updateNotes(value)
 
-    fun toggleNoiseReduction(enabled: Boolean) {
-        _noiseReductionEnabled.value = enabled
-        if (hydrated.value) viewModelScope.launch { settings.setNoiseReduction(enabled) }
-    }
-
     fun updateSampleRate(value: Int) = audioConfig.updateSampleRate(value)
 
     fun updateAudioSource(name: String) = audioConfig.updateAudioSource(name)
@@ -964,56 +967,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun applyNoiseReduce(file: RecordFile) {
-        if (file.path.startsWith("content://")) {
-            applyNoiseReduceSaf(file)
-            return
-        }
-        viewModelScope.launch {
-            val updated = withContext(Dispatchers.IO) { noiseProcessor.process(file) }
-            fileLibrary.updateById(file.id) { updated }
-        }
-    }
-
-    /**
-     * Noise reduction for SAF (content://) sources. Bridges the document to a cache temp,
-     * runs [NoiseReductionProcessor.processFile], and writes a sibling `_nr.wav` into the
-     * folder — then swaps the list entry for the NR version, mirroring the local flow.
-     */
-    private fun applyNoiseReduceSaf(file: RecordFile) {
-        val srcUri = android.net.Uri.parse(file.path)
-        val base = if (file.name.contains('.')) file.name.substringBeforeLast('.') else file.name
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val tree = _saveDirectoryUri.value?.let {
-                    androidx.documentfile.provider.DocumentFile.fromTreeUri(app, it)
-                } ?: throw IllegalStateException("Save folder unavailable")
-                val nrDoc = tree.createFile("audio/wav", "${base}_nr.wav")
-                    ?: throw IllegalStateException("Could not create NR file in folder")
-                com.example.recorderproject.audio.SafAudioBridge.processViaTemp(
-                    cacheDir = app.cacheDir,
-                    openInput = { app.contentResolver.openInputStream(srcUri) ?: error("cannot open source") },
-                    openOutput = { app.contentResolver.openOutputStream(nrDoc.uri) ?: error("cannot open output") },
-                    process = { s, d -> noiseProcessor.processFile(s, d) },
-                )
-                val updated = file.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    name = nrDoc.name ?: "${base}_nr.wav",
-                    path = nrDoc.uri.toString(),
-                    hasNoiseReduction = true,
-                )
-                fileLibrary.updateById(file.id) { updated }
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(app, "Noise reduction applied", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "NR (SAF) failed: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(app, "Noise reduction failed: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
 
     // Playback functions — delegated to PlaybackManager (issue #13).
     fun selectFile(file: RecordFile) = playback.selectFile(file)
@@ -1093,7 +1046,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         recorderModeManager.applySnapshot(s.recorderMode)
         // Input-config slice (audio source, mic label, gain, sample/bit/channel, quality).
         audioConfig.applySnapshot(s)
-        _noiseReductionEnabled.value = s.noiseReduction
+        noiseReduction.setEnabledInMemory(s.noiseReduction)
         timers.applySnapshot(s.autoStopMin)
         naming.applySnapshot(s.sceneName)
         // Recording-controls slice (DSP toggles, live-EQ, VAD, pre-roll, countdown/max-duration).
