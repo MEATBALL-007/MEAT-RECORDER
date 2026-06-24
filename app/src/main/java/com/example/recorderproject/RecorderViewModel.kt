@@ -143,7 +143,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         requirePro = ::requirePro,
         sampleRate = { audioConfig.sampleRate.value },
         markFileHasEq = { id -> fileLibrary.updateById(id) { it.copy(hasEQ = true) } },
-        saveDirectoryUri = { _saveDirectoryUri.value },
+        saveDirectoryUri = { saveLocation.uri.value },
     )
 
     // Playback + A/B compare extracted into PlaybackManager (issue #13). Declared before the
@@ -165,28 +165,8 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             try {
                 val snapshot = settings.snapshot()
                 applySnapshot(snapshot)
-                // Re-claim SAF URI grant if we have one persisted
-                snapshot.saveDirectoryUri?.let { uriStr ->
-                    try {
-                        val uri = Uri.parse(uriStr)
-                        app.contentResolver.takePersistableUriPermission(
-                            uri,
-                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                        )
-                    } catch (e: SecurityException) {
-                        Log.w(TAG, "Persisted SAF URI no longer granted, clearing: ${e.message}")
-                        _saveDirectoryUri.value = null
-                        settings.setSaveDirectoryUri(null)
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(
-                                app,
-                                "⚠️ Save folder permission expired — recordings will be saved to App Storage. Go to Settings → Save Location to re-select your folder.",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    }
-                }
+                // Re-claim SAF URI grant if we have one persisted (clears + warns if revoked).
+                saveLocation.reclaimPersistedGrant()
                 // Recovery: if a previous session died while recording, the WAV is now
                 // playable (PR1 periodic finalize) — surface it in the recordings list.
                 val activePath = settings.getActiveRecordingPath()
@@ -340,7 +320,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         app = app,
         settings = settings,
         scope = viewModelScope,
-        saveDirectoryUri = { _saveDirectoryUri.value },
+        saveDirectoryUri = { saveLocation.uri.value },
         onDeliveryResult = ::rebindDeliveryResult,
     )
     val loudnessTarget: StateFlow<LoudnessTarget> = loudness.target
@@ -368,7 +348,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         settings = settings,
         isHydrated = { hydrated.value },
         fileLibrary = fileLibrary,
-        saveDirectoryUri = { _saveDirectoryUri.value },
+        saveDirectoryUri = { saveLocation.uri.value },
     )
     val noiseReductionEnabled: StateFlow<Boolean> = noiseReduction.enabled
     fun toggleNoiseReduction(enabled: Boolean) = noiseReduction.setEnabled(enabled)
@@ -438,7 +418,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             preRollBuffer = preRollBuffer,
             noiseReduction = noiseReduction,
             hydrated = hydrated,
-            saveDirectoryUri = { _saveDirectoryUri.value },
+            saveDirectoryUri = { saveLocation.uri.value },
             onError = { _errorMessage.value = it },
             onTakeSaved = cloudBackup::onTakeSaved,
             rescanFromDisk = ::scanRecordingsFromDisk,
@@ -513,9 +493,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     /** Clear hardware device preference — fall back to OS default for chosen AudioSource. */
     fun clearInputDevice() = audioConfig.clearInputDevice()
 
-    // Save directory
-    private val _saveDirectoryUri = MutableStateFlow<Uri?>(null)
-    val saveDirectoryUri: StateFlow<Uri?> = _saveDirectoryUri
+    // Save directory (SAF folder) → SaveLocation (issue #13 step 13). Seam lambdas above
+    // (`{ saveLocation.uri.value }`) defer-resolve this, so declaration order is fine.
+    private val saveLocation = com.example.recorderproject.data.SaveLocation(
+        app = app,
+        scope = viewModelScope,
+        settings = settings,
+        isHydrated = { hydrated.value },
+    )
+    val saveDirectoryUri: StateFlow<Uri?> = saveLocation.uri
+    fun setSaveDirectoryUri(uri: Uri) = saveLocation.set(uri)
 
     // A/B compare state — delegated to PlaybackManager (issue #13).
     val abFiles: StateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?> = playback.abFiles
@@ -866,20 +853,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
     fun updateAudioSource(name: String) = audioConfig.updateAudioSource(name)
 
-    fun setSaveDirectoryUri(uri: Uri) {
-        _saveDirectoryUri.value = uri
-        // Take persistable grant so it survives process death
-        try {
-            app.contentResolver.takePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        } catch (e: SecurityException) {
-            Log.w(TAG, "Could not take persistable SAF permission: ${e.message}")
-        }
-        if (hydrated.value) viewModelScope.launch { settings.setSaveDirectoryUri(uri.toString()) }
-    }
 
     fun deleteRecording(file: RecordFile) {
         try {
@@ -1056,7 +1029,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
         playback.applySnapshot(s.playbackSpeed, s.playbackLoop, s.playbackVolume)
 
-        _saveDirectoryUri.value = s.saveDirectoryUri?.let { Uri.parse(it) }
+        saveLocation.applySnapshot(s.saveDirectoryUri)
         _groupByScene.value = s.groupByScene
         _lockScreenControlsOn.value = s.lockScreenControls
         cloudBackup.applySnapshot(s.cloudBackup, s.cloudBackupUri)
@@ -1133,7 +1106,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
      * though the files are perfectly intact. Best-effort and fully guarded; never throws.
      */
     private suspend fun scanSafRecordings() = withContext(Dispatchers.IO) {
-        val uri = _saveDirectoryUri.value ?: return@withContext
+        val uri = saveLocation.uri.value ?: return@withContext
         val added = scanner.scanSaf(uri, fileLibrary.current().map { it.path }.toSet())
         if (added.isNotEmpty()) {
             fileLibrary.addAll(added)
