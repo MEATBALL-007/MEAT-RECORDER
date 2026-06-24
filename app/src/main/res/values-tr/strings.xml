@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Saha Kayıt Sistemi</string>
+    <string name="app_tagline_pro">Pro · Saha Kayıt Sistemi</string>
+    <string name="tap_to_record">Kaydetmek için dokunun</string>
+    <string name="tap_to_start">Kaydı başlatmak için düğmeye dokunun</string>
+    <string name="settings">Ayarlar</string>
+    <string name="language">Dil</string>
+    <string name="language_hint">Dilinizi seçin. Uygulama anında güncellenir.</string>
+    <string name="reset_factory">Fabrika ayarlarına sıfırla</string>
+    <string name="reset_factory_detail">Tüm ayarları siler. Kayıtlar, ön ayarlar ve Pro korunur.</string>
+    <string name="reset_confirm_title">Tüm ayarlar sıfırlansın mı?</string>
+    <string name="reset_confirm_body">Kayıt ayarları varsayılana döner. Kayıtlarınız, ön ayarlar, tema, dil ve Pro kilidi etkilenmez.</string>
+    <string name="reset">Sıfırla</string>
+    <string name="cancel">İptal</string>
+    <string name="privacy_policy">Gizlilik Politikası</string>
+    <string name="upgrade_to_pro">Pro’ya yükselt</string>
+    <string name="restore_purchase">Satın alımı geri yükle</string>
+    <string name="pro_unlocked">Pro açıldı</string>
+    <string name="launch_promo">LANSMAN -%1$d%%</string>
+    <string name="upgrade_now">Şimdi yükselt — %1$s</string>
+    <string name="lifetime">ömür boyu</string>
+</resources>

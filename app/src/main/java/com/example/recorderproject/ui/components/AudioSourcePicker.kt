@@ -26,14 +26,13 @@ import com.example.recorderproject.ui.theme.RecorderCharcoalCard
 import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 
-/** Phase 3 — Audio source picker. Lists built-ins + detected USB-C devices (VM40, Røde, etc.). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioSourcePicker(
     currentSourceName: String,
-    usbDevices: List<UsbAudioDetector.UsbDevice>,
+    externalDevices: List<UsbAudioDetector.UsbDevice>,
     onPickBuiltin: (String) -> Unit,
-    onPickUsb: (UsbAudioDetector.UsbDevice) -> Unit,
+    onPickExternal: (UsbAudioDetector.UsbDevice) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -50,22 +49,63 @@ fun AudioSourcePicker(
                 SourceRow(src, current = src == currentSourceName) { onPickBuiltin(src); onDismiss() }
             }
 
+            // Group external devices by category
+            val usbDevices = externalDevices.filter { it.category == UsbAudioDetector.DeviceCategory.USB }
+            val btDevices = externalDevices.filter { it.category == UsbAudioDetector.DeviceCategory.BLUETOOTH || it.category == UsbAudioDetector.DeviceCategory.BLE }
+            val wiredDevices = externalDevices.filter { it.category == UsbAudioDetector.DeviceCategory.WIRED }
+
             if (usbDevices.isNotEmpty()) {
-                Header("USB-C devices")
+                Header("USB / USB-C")
                 for (dev in usbDevices) {
+                    val subtitle = buildDeviceSubtitle(dev)
                     SourceRow(
                         title = dev.productName,
-                        subtitle = "${dev.sampleRates.joinToString(",")} Hz · ${dev.channelCounts.joinToString(",")} ch",
-                        current = false,
-                    ) { onPickUsb(dev); onDismiss() }
+                        subtitle = subtitle,
+                        current = dev.productName == currentSourceName,
+                    ) { onPickExternal(dev); onDismiss() }
                 }
-            } else {
-                Header("USB-C devices")
-                Text("Plug in VM40 or any UAC-compliant mic to see it here.",
-                    color = RecorderBlueGrey, fontSize = 12.sp)
+            }
+
+            if (btDevices.isNotEmpty()) {
+                Header("Bluetooth / BLE")
+                for (dev in btDevices) {
+                    SourceRow(
+                        title = dev.productName,
+                        subtitle = "Bluetooth mic · tap to record from this device",
+                        current = dev.productName == currentSourceName,
+                    ) { onPickExternal(dev); onDismiss() }
+                }
+            }
+
+            if (wiredDevices.isNotEmpty()) {
+                Header("Wired Headset")
+                for (dev in wiredDevices) {
+                    val subtitle = buildDeviceSubtitle(dev)
+                    SourceRow(
+                        title = dev.productName,
+                        subtitle = subtitle,
+                        current = dev.productName == currentSourceName,
+                    ) { onPickExternal(dev); onDismiss() }
+                }
+            }
+
+            if (externalDevices.isEmpty()) {
+                Header("External Devices")
+                Text(
+                    "Connect a USB-C mic, wired headset, or Bluetooth headset to see it here.",
+                    color = RecorderBlueGrey,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                )
             }
         }
     }
+}
+
+private fun buildDeviceSubtitle(dev: UsbAudioDetector.UsbDevice): String {
+    val rates = dev.sampleRates.takeIf { it.isNotEmpty() }?.joinToString("/") { "${it / 1000}kHz" }
+    val ch = dev.channelCounts.takeIf { it.isNotEmpty() }?.joinToString("/") { "${it}ch" }
+    return listOfNotNull(rates, ch).joinToString(" · ").ifEmpty { "External mic" }
 }
 
 @Composable

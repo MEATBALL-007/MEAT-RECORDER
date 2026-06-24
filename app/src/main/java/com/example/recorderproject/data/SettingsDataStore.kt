@@ -9,7 +9,10 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.recorderproject.model.RecorderMode
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_settings")
 
@@ -60,6 +63,16 @@ class SettingsDataStore(private val context: Context) {
     private val playbackSpeedKey = floatPreferencesKey("playback_speed")
     private val playbackLoopKey = booleanPreferencesKey("playback_loop")
     private val playbackVolumeKey = floatPreferencesKey("playback_volume")
+
+    // ----- Loudness / delivery -----
+    private val defaultLoudnessTargetKey   = stringPreferencesKey("default_loudness_target")
+    private val customLoudnessLufsKey      = floatPreferencesKey("custom_loudness_lufs")
+    private val customLoudnessTpCeilingKey = floatPreferencesKey("custom_loudness_tp_ceiling")
+
+    // ── Workspace layouts ───────────────────────────────────────────────────
+    private val workspaceGlobalKey = stringPreferencesKey("workspace_layout_global")
+    private fun workspaceModeKey(modeName: String) =
+        stringPreferencesKey("workspace_layout_mode_${modeName.lowercase()}")
 
     // ----- Misc -----
     private val saveDirectoryUriKey = stringPreferencesKey("save_directory_uri")
@@ -114,6 +127,9 @@ class SettingsDataStore(private val context: Context) {
             cloudBackup = p[cloudBackupKey] ?: Defaults.CLOUD_BACKUP,
             preRollEnabled = p[preRollEnabledKey] ?: Defaults.PRE_ROLL_ENABLED,
             cloudBackupUri = p[cloudBackupUriKey],
+            defaultLoudnessTarget   = p[defaultLoudnessTargetKey]   ?: Defaults.defaultLoudnessTarget,
+            customLoudnessLufs      = p[customLoudnessLufsKey]      ?: Defaults.customLoudnessLufs,
+            customLoudnessTpCeiling = p[customLoudnessTpCeilingKey] ?: Defaults.customLoudnessTpCeiling,
         )
     }
 
@@ -166,9 +182,26 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setLockScreenControls(v: Boolean) = context.dataStore.edit { it[lockScreenControlsKey] = v }
     suspend fun setCloudBackup(v: Boolean) = context.dataStore.edit { it[cloudBackupKey] = v }
     suspend fun setPreRollEnabled(v: Boolean) = context.dataStore.edit { it[preRollEnabledKey] = v }
+    suspend fun setDefaultLoudnessTarget(v: String) = context.dataStore.edit { it[defaultLoudnessTargetKey] = v }
+    suspend fun setCustomLoudnessLufs(v: Float) = context.dataStore.edit { it[customLoudnessLufsKey] = v }
+    suspend fun setCustomLoudnessTpCeiling(v: Float) = context.dataStore.edit { it[customLoudnessTpCeilingKey] = v }
     suspend fun setCloudBackupUri(v: String?) = context.dataStore.edit {
         if (v == null) it.remove(cloudBackupUriKey) else it[cloudBackupUriKey] = v
     }
+
+    /** Free-tier single shared layout (null until first saved). */
+    fun globalWorkspaceJson(): Flow<String?> =
+        context.dataStore.data.map { it[workspaceGlobalKey] }
+
+    suspend fun setGlobalWorkspaceJson(json: String) =
+        context.dataStore.edit { it[workspaceGlobalKey] = json }
+
+    /** Pro-tier per-mode layout (null until first saved for that mode). */
+    fun modeWorkspaceJson(mode: RecorderMode): Flow<String?> =
+        context.dataStore.data.map { it[workspaceModeKey(mode.name)] }
+
+    suspend fun setModeWorkspaceJson(mode: RecorderMode, json: String) =
+        context.dataStore.edit { it[workspaceModeKey(mode.name)] = json }
 
     /** Path of the currently-active recording, or null if none. Set on start, cleared on stop. */
     suspend fun setActiveRecordingPath(path: String?) {

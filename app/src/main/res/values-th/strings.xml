@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">ระบบบันทึกเสียงภาคสนาม</string>
+    <string name="app_tagline_pro">Pro · ระบบบันทึกเสียงภาคสนาม</string>
+    <string name="tap_to_record">แตะเพื่ออัด</string>
+    <string name="tap_to_start">แตะปุ่มเพื่อเริ่มอัดเสียง</string>
+    <string name="settings">ตั้งค่า</string>
+    <string name="language">ภาษา</string>
+    <string name="language_hint">เลือกภาษาของคุณ แอปจะอัปเดตทันที</string>
+    <string name="reset_factory">รีเซ็ตเป็นค่าจากโรงงาน</string>
+    <string name="reset_factory_detail">ล้างการตั้งค่าทั้งหมด ไฟล์อัด พรีเซ็ต และ Pro ยังอยู่ครบ</string>
+    <string name="reset_confirm_title">รีเซ็ตการตั้งค่าทั้งหมด?</string>
+    <string name="reset_confirm_body">การตั้งค่าการอัดจะกลับเป็นค่าเริ่มต้น ไฟล์อัด พรีเซ็ต ธีม ภาษา และ Pro จะไม่ถูกแตะต้อง</string>
+    <string name="reset">รีเซ็ต</string>
+    <string name="cancel">ยกเลิก</string>
+    <string name="privacy_policy">นโยบายความเป็นส่วนตัว</string>
+    <string name="upgrade_to_pro">อัปเกรดเป็น Pro</string>
+    <string name="restore_purchase">กู้คืนการซื้อ</string>
+    <string name="pro_unlocked">ปลดล็อก Pro แล้ว</string>
+    <string name="launch_promo">เปิดตัว -%1$d%%</string>
+    <string name="upgrade_now">อัปเกรดเลย — %1$s</string>
+    <string name="lifetime">ตลอดชีพ</string>
+</resources>

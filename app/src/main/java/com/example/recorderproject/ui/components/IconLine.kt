@@ -186,6 +186,21 @@ fun IconLineSettings(tint: Color, size: Dp = DefaultSize) {
 }
 
 @Composable
+fun IconLineSliders(tint: Color, size: Dp = DefaultSize) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width; val h = this.size.height
+        val sw = StrokeBase * density * 1.2f
+        val x0 = w * 0.18f; val x1 = w * 0.82f
+        val rows = listOf(h * 0.28f to w * 0.62f, h * 0.50f to w * 0.38f, h * 0.72f to w * 0.70f)
+        val knobR = w * 0.07f
+        for ((y, knobX) in rows) {
+            drawLine(tint, Offset(x0, y), Offset(x1, y), strokeWidth = sw, cap = StrokeCap.Round)
+            drawCircle(tint, knobR, Offset(knobX, y))
+        }
+    }
+}
+
+@Composable
 fun IconLineMenu(tint: Color, size: Dp = DefaultSize) {
     Canvas(modifier = Modifier.size(size)) {
         val w = this.size.width; val h = this.size.height

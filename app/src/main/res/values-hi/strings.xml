@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">फ़ील्ड रिकॉर्डिंग सिस्टम</string>
+    <string name="app_tagline_pro">Pro · फ़ील्ड रिकॉर्डिंग सिस्टम</string>
+    <string name="tap_to_record">रिकॉर्ड करने के लिए टैप करें</string>
+    <string name="tap_to_start">रिकॉर्डिंग शुरू करने के लिए बटन दबाएँ</string>
+    <string name="settings">सेटिंग्स</string>
+    <string name="language">भाषा</string>
+    <string name="language_hint">अपनी भाषा चुनें। ऐप तुरंत अपडेट हो जाता है।</string>
+    <string name="reset_factory">फ़ैक्टरी डिफ़ॉल्ट पर रीसेट करें</string>
+    <string name="reset_factory_detail">सभी सेटिंग्स हटाता है। रिकॉर्डिंग, प्रीसेट और Pro सुरक्षित रहते हैं।</string>
+    <string name="reset_confirm_title">सभी सेटिंग्स रीसेट करें?</string>
+    <string name="reset_confirm_body">रिकॉर्डिंग सेटिंग्स डिफ़ॉल्ट पर लौट जाती हैं। आपकी रिकॉर्डिंग, प्रीसेट, थीम, भाषा और Pro अनलॉक प्रभावित नहीं होते।</string>
+    <string name="reset">रीसेट</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="privacy_policy">गोपनीयता नीति</string>
+    <string name="upgrade_to_pro">Pro में अपग्रेड करें</string>
+    <string name="restore_purchase">खरीद पुनर्स्थापित करें</string>
+    <string name="pro_unlocked">Pro अनलॉक हो गया</string>
+    <string name="launch_promo">लॉन्च -%1$d%%</string>
+    <string name="upgrade_now">अभी अपग्रेड करें — %1$s</string>
+    <string name="lifetime">आजीवन</string>
+</resources>

@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -80,6 +81,8 @@ fun MeatRecSettings(
     onBack: () -> Unit,
     onChangeMode: () -> Unit = {},
     onPickCloudLocation: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
+    onSignInDrive: () -> Unit = {},
 ) {
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
@@ -231,6 +234,7 @@ fun MeatRecSettings(
             // L.3: Cloud Backup Folder picker row
             val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
             val cloudBackupUri by viewModel.cloudBackupUri.collectAsStateWithLifecycle()
+            val isDriveSignedIn by viewModel.isDriveSignedIn.collectAsStateWithLifecycle()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -286,6 +290,28 @@ fun MeatRecSettings(
                             checkedTrackColor = MeatOrange,
                         ),
                     )
+                }
+            }
+            if (cloudBackupOn) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (isDriveSignedIn) "● Google Drive connected" else "○ Not signed in to Google",
+                        color = if (isDriveSignedIn) Color(0xFF4CAF50) else com.example.recorderproject.ui.theme.RecorderBlueGrey,
+                        fontSize = 12.sp,
+                    )
+                    if (!isDriveSignedIn) {
+                        Button(
+                            onClick = onSignInDrive,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text("Sign in with Google", color = Color.White, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
 
@@ -347,6 +373,17 @@ fun MeatRecSettings(
                     )
                 }
                 Text("→", color = MeatOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+
+            SectionHeader("LEGAL")
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenPrivacy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White.copy(alpha = 0.75f),
+                ),
+            ) {
+                Text("Privacy Policy", fontSize = 13.sp)
             }
         }
 

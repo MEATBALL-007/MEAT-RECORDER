@@ -19,4 +19,6 @@ data class RecordFile(
     val environmentTag: String? = null,
     val starred: Boolean = false,
     val cuePoints: List<CuePoint> = emptyList(),
+    val deliveryPath: String? = null,
+    val deliveryResult: DeliveryResult? = null,
 )

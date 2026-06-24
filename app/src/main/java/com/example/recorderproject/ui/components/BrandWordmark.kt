@@ -31,6 +31,7 @@ import com.example.recorderproject.ui.theme.Spacing
 fun BrandWordmark(
     modifier: Modifier = Modifier,
     style: TextStyle = brandWordmarkDefaultStyle(),
+    showPro: Boolean = false,
 ) {
     Row(
         modifier = modifier,
@@ -38,6 +39,10 @@ fun BrandWordmark(
     ) {
         Text("MEAT", style = style, color = RecorderOrange)
         Text("REC",  style = style, color = RecorderYellow)
+        // Appended once the user owns Pro.
+        if (showPro) {
+            Text("PRO", style = style.copy(fontWeight = FontWeight.Black), color = RecorderYellow)
+        }
     }
 }
 

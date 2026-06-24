@@ -95,15 +95,15 @@ fun RecordingsSearchBar(
  */
 @Composable
 fun RecordingsFilterChips(
-    current: RecorderViewModel.FileFilter,
-    onChange: (RecorderViewModel.FileFilter) -> Unit,
+    current: com.example.recorderproject.model.FileFilter,
+    onChange: (com.example.recorderproject.model.FileFilter) -> Unit,
 ) {
     val items = listOf(
-        RecorderViewModel.FileFilter.ALL to "All",
-        RecorderViewModel.FileFilter.STARRED to "★ Starred",
-        RecorderViewModel.FileFilter.LOCKED to "🔒 Locked",
-        RecorderViewModel.FileFilter.NR to "NR",
-        RecorderViewModel.FileFilter.EQ to "EQ",
+        com.example.recorderproject.model.FileFilter.ALL to "All",
+        com.example.recorderproject.model.FileFilter.STARRED to "★ Starred",
+        com.example.recorderproject.model.FileFilter.LOCKED to "🔒 Locked",
+        com.example.recorderproject.model.FileFilter.NR to "NR",
+        com.example.recorderproject.model.FileFilter.EQ to "EQ",
     )
     Row(
         Modifier

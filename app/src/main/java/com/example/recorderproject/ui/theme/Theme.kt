@@ -4,7 +4,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,7 +78,10 @@ private val RecorderLightColors = lightColorScheme(
 @Composable
 fun RecorderProjectTheme(
     appTheme: AppTheme = AppTheme.Default,
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // MEAT REC is a dark-only product — all 10 themes are dark palettes. Force the
+    // dark scheme regardless of the device's system light/dark setting, otherwise a
+    // phone set to Light mode would fall back to the unfinished light scheme.
+    darkTheme: Boolean = true,
     reduceMotion: Boolean = false,
     content: @Composable () -> Unit,
 ) {

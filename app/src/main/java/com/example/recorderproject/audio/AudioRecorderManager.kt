@@ -97,6 +97,13 @@ class AudioRecorderManager(private val context: Context) {
         audioSource = source
     }
 
+    // Preferred input device — when set, AudioRecord routes from this hardware device
+    // instead of the OS-selected default. Used for USB-C mics, BT headsets, wired headsets.
+    private var preferredInputDevice: android.media.AudioDeviceInfo? = null
+    fun setPreferredDevice(device: android.media.AudioDeviceInfo?) {
+        preferredInputDevice = device
+    }
+
     // ------------- Real-time EQ during recording (Phase 7) -------------
     //
     // When set, every PCM frame read from AudioRecord is run through this biquad cascade
@@ -135,6 +142,18 @@ class AudioRecorderManager(private val context: Context) {
     fun setPitchListener(cb: ((Float) -> Unit)?) { pitchListener = cb }
     fun setLufsListener(l: ((Float) -> Unit)?) { lufsListener = l }
     private val lufsProcessor by lazy { LufsProcessor(sampleRate.toFloat()) }
+    @Volatile private var truePeakListener: ((Float) -> Unit)? = null
+    fun setTruePeakListener(l: ((Float) -> Unit)?) { truePeakListener = l }
+    private val truePeakDetector by lazy {
+        TruePeakDetector(sampleRate.toFloat(), channels = 1)
+    }
+
+    // G: raw peak dBFS — pre-EQ / pre-NR sample-domain peak across the chunk.
+    // Held with exponential decay so the UI gets a stable needle rather than a flicker.
+    @Volatile private var rawPeakListener: ((Float) -> Unit)? = null
+    fun setRawPeakListener(l: ((Float) -> Unit)?) { rawPeakListener = l }
+    @Volatile private var rawPeakHeldLin: Float = 0f
+    private val rawPeakDecay: Float = 0.85f   // ~250 ms half-life at ~20 chunks/s
 
     // PR3: Error listener — surfaces recording-thread exceptions (SAF revocation, disk full, etc.) to UI.
     @Volatile private var errorListener: ((Throwable) -> Unit)? = null
@@ -275,6 +294,13 @@ class AudioRecorderManager(private val context: Context) {
                 audioFormat,
                 bufferSize
             )
+            // Route to the user's selected hardware device (USB, BT, wired headset, etc.)
+            preferredInputDevice?.let { dev ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    recorder?.preferredDevice = dev
+                    Log.d(TAG, "setPreferredDevice: ${dev.productName} (id=${dev.id})")
+                }
+            }
             Log.d(TAG, "AudioRecord created successfully, state: ${recorder?.state}")
             recorder?.startRecording()
             Log.d(TAG, "Recording started, recordingState: ${recorder?.recordingState}")
@@ -358,7 +384,9 @@ class AudioRecorderManager(private val context: Context) {
                         }
                         // F2: Live pause — skip writing while paused.
                         if (paused) {
-                            onAudioFrame(List(read) { 0f })
+                            // Emit a tiny zero frame (throttled) so the meter reads silence
+                            // without boxing the whole buffer every read.
+                            if (readCount % 2 == 0) onAudioFrame(List(8) { 0f })
                             continue
                         }
                         // J.2: Slate tone — overwrite mic samples with 1 kHz sine wave.
@@ -398,13 +426,24 @@ class AudioRecorderManager(private val context: Context) {
                             }
                         }
                         writePcmFloats(floats, read)
-                        // Level meter for UI — use first channel if stereo
-                        val levels = if (channelCount == 2) {
-                            List(read / 2) { i -> floats[i * 2] }
-                        } else {
-                            List(read) { i -> floats[i] }
+                        // Level meter / waveform for UI. Throttle + downsample: pushing the
+                        // full ~512-sample buffer as a boxed List<Float> ~90x/s recomposes the
+                        // whole home screen and is the main source of recording-time lag.
+                        // Every other buffer, decimated to <=120 points, is plenty for both the
+                        // RMS meter and the 60fps waveform (which lerps between updates).
+                        // Stride sampling preserves RMS in expectation, so the meter stays accurate.
+                        if (readCount % 2 == 0) {
+                            val frameSamples = if (channelCount == 2) read / 2 else read
+                            val stride = (frameSamples / 120).coerceAtLeast(1)
+                            val levels = ArrayList<Float>(frameSamples / stride + 1)
+                            var i = 0
+                            if (channelCount == 2) {
+                                while (i < read) { levels.add(floats[i]); i += 2 * stride }
+                            } else {
+                                while (i < read) { levels.add(floats[i]); i += stride }
+                            }
+                            onAudioFrame(levels)
                         }
-                        onAudioFrame(levels)
 
                         // M1/M2: Every 4 frames (~40-80 ms), compute FFT + pitch + LUFS.
                         // FFT/Pitch need ShortArray — convert only what's needed.
@@ -443,8 +482,25 @@ class AudioRecorderManager(private val context: Context) {
                                     } else {
                                         floats.copyOf(read)
                                     }
-                                    val lufs = lufsProcessor.process(monoFloats)
-                                    ll(lufs)
+                                    lufsProcessor.process(monoFloats)
+                                    ll(lufsProcessor.shortTermLufs)
+                                    truePeakDetector.feed(monoFloats)
+                                    truePeakListener?.invoke(truePeakDetector.peakDbTP)
+                                    // G: chunk peak with exponential hold (fast attack, slow release).
+                                    val rpl = rawPeakListener
+                                    if (rpl != null) {
+                                        var chunkMax = 0f
+                                        for (s in monoFloats) {
+                                            val a = if (s < 0f) -s else s
+                                            if (a > chunkMax) chunkMax = a
+                                        }
+                                        val held = if (chunkMax > rawPeakHeldLin) chunkMax
+                                                   else rawPeakHeldLin * rawPeakDecay
+                                        rawPeakHeldLin = held
+                                        val db = if (held <= 0f) Float.NEGATIVE_INFINITY
+                                                 else 20f * kotlin.math.log10(held)
+                                        rpl(db)
+                                    }
                                 } catch (_: Exception) {}
                             }
                         }

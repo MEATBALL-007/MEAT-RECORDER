@@ -1,5 +1,6 @@
 package com.example.recorderproject.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -35,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.recorderproject.audio.WaveformLoader
 import com.example.recorderproject.model.RecordFile
 import com.example.recorderproject.ui.theme.RecorderBlueGrey
 import com.example.recorderproject.ui.theme.RecorderCharcoal
@@ -84,14 +88,46 @@ fun TrimScreen(
                 }
             }
 
+            val waveformData = remember(file.path) {
+                WaveformLoader.load(file.path, targetSamples = 300)
+            }
+            val inFraction = (range.start / durationMs.toFloat()).coerceIn(0f, 1f)
+            val outFraction = (range.endInclusive / durationMs.toFloat()).coerceIn(0f, 1f)
+
             Box(
-                Modifier.fillMaxWidth()
+                Modifier
+                    .fillMaxWidth()
                     .height(80.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0C0C10)),
-                contentAlignment = Alignment.Center,
+                    .background(Color(0xFF0C0C10))
             ) {
-                Text("[ waveform stub — phase 4 wires real samples ]", color = RecorderBlueGrey, fontSize = 11.sp)
+                Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val midY = h / 2f
+                    val barW = (w / waveformData.size.coerceAtLeast(1)).coerceAtLeast(1f)
+                    val inX = inFraction * w
+                    val outX = outFraction * w
+
+                    // Highlight selected region
+                    drawRect(
+                        color = androidx.compose.ui.graphics.Color(0x33E86A2B),
+                        topLeft = Offset(inX, 0f),
+                        size = Size(outX - inX, h),
+                    )
+
+                    waveformData.forEachIndexed { i, amp ->
+                        val x = i * barW
+                        val barH = (amp * midY).coerceIn(1f, midY)
+                        val isSelected = x in inX..outX
+                        drawRect(
+                            color = if (isSelected) androidx.compose.ui.graphics.Color(0xFFE86A2B)
+                                    else androidx.compose.ui.graphics.Color(0xFF4A5568),
+                            topLeft = Offset(x, midY - barH),
+                            size = Size(barW * 0.8f, barH * 2f),
+                        )
+                    }
+                }
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

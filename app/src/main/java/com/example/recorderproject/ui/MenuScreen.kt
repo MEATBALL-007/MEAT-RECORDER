@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.recorderproject.RecorderViewModel
 import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.LiquidBlobCanvas
@@ -105,7 +106,7 @@ fun MenuScreen(
                 .padding(padding)
                 .verticalScroll(scrollState),
         ) {
-            HeroHeader(scrollFrac = scrollFrac)
+            HeroHeader(scrollFrac = scrollFrac, showPro = viewModel.isPro.collectAsStateWithLifecycle().value)
 
             // Accent palette — each card gets its own visual tint
             val items = listOf(
@@ -166,7 +167,7 @@ fun MenuScreen(
 }
 
 @Composable
-private fun HeroHeader(scrollFrac: Float) {
+private fun HeroHeader(scrollFrac: Float, showPro: Boolean = false) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -192,10 +193,13 @@ private fun HeroHeader(scrollFrac: Float) {
                 .scale(1f - scrollFrac * 0.1f),
         ) {
             MeatrecMark(size = 84.dp)
-            BrandWordmark(style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
-            ))
+            BrandWordmark(
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.sp,
+                ),
+                showPro = showPro,
+            )
             Text(
                 "MENU",
                 color = RecorderBlueGrey,

@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.recorderproject.ui.theme.LocalReduceMotion
@@ -35,7 +36,7 @@ fun RecorderAppWithIntro(
     content: @Composable () -> Unit,
 ) {
     val reduceMotion = LocalReduceMotion.current
-    var introDone by remember { mutableStateOf(reduceMotion) }
+    var introDone by rememberSaveable { mutableStateOf(reduceMotion) }
 
     // Belt-and-suspenders: even if SplashScreen never calls its own onDone for some reason,
     // force-advance after introDurationMs so the user is never trapped on splash.

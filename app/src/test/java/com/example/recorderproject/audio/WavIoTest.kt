@@ -73,4 +73,28 @@ class WavIoTest {
         reader.close()
         assertEquals(n, total)
     }
+
+    @Test fun stream_writer_round_trips_24bit_stereo() {
+        val tmp = java.io.File.createTempFile("stream-wav-", ".wav")
+        tmp.deleteOnExit()
+        val sr = 48000; val ch = 2; val bits = 24
+
+        val chunkA = FloatArray(8192) { (it / 8192f) - 0.5f }
+        val chunkB = FloatArray(8192) { 0.5f - (it / 8192f) }
+
+        WavIo.openWriter(tmp, channels = ch, sampleRate = sr, bitDepth = bits).use { w ->
+            w.writeBlock(chunkA, chunkA.size)
+            w.writeBlock(chunkB, chunkB.size)
+        }
+
+        val readBack = WavIo.readAllSamples(tmp)
+        org.junit.Assert.assertEquals(chunkA.size + chunkB.size, readBack.size)
+        org.junit.Assert.assertEquals(chunkA[100], readBack[100], 1e-4f)
+        org.junit.Assert.assertEquals(chunkB[100], readBack[chunkA.size + 100], 1e-4f)
+
+        val hdr = WavIo.readHeader(tmp)
+        org.junit.Assert.assertEquals(ch, hdr.channels)
+        org.junit.Assert.assertEquals(sr, hdr.sampleRate)
+        org.junit.Assert.assertEquals(bits, hdr.bitDepth)
+    }
 }

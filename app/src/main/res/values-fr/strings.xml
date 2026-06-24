@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Système d’enregistrement de terrain</string>
+    <string name="app_tagline_pro">Pro · Système d’enregistrement de terrain</string>
+    <string name="tap_to_record">Touchez pour enregistrer</string>
+    <string name="tap_to_start">Touchez le bouton pour démarrer l’enregistrement</string>
+    <string name="settings">Paramètres</string>
+    <string name="language">Langue</string>
+    <string name="language_hint">Choisissez votre langue. L’app se met à jour instantanément.</string>
+    <string name="reset_factory">Réinitialiser aux réglages d’usine</string>
+    <string name="reset_factory_detail">Efface tous les réglages. Enregistrements, préréglages et Pro conservés.</string>
+    <string name="reset_confirm_title">Réinitialiser tous les réglages ?</string>
+    <string name="reset_confirm_body">Les réglages d’enregistrement reviennent par défaut. Vos enregistrements, préréglages, thème, langue et Pro ne sont PAS touchés.</string>
+    <string name="reset">Réinitialiser</string>
+    <string name="cancel">Annuler</string>
+    <string name="privacy_policy">Politique de confidentialité</string>
+    <string name="upgrade_to_pro">Passer à Pro</string>
+    <string name="restore_purchase">Restaurer l’achat</string>
+    <string name="pro_unlocked">Pro débloqué</string>
+    <string name="launch_promo">LANCEMENT -%1$d%%</string>
+    <string name="upgrade_now">Passer à Pro — %1$s</string>
+    <string name="lifetime">à vie</string>
+</resources>

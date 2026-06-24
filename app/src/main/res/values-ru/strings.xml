@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Система полевой записи</string>
+    <string name="app_tagline_pro">Pro · Система полевой записи</string>
+    <string name="tap_to_record">Нажмите, чтобы записать</string>
+    <string name="tap_to_start">Нажмите кнопку, чтобы начать запись</string>
+    <string name="settings">Настройки</string>
+    <string name="language">Язык</string>
+    <string name="language_hint">Выберите язык. Приложение обновится сразу.</string>
+    <string name="reset_factory">Сбросить к заводским настройкам</string>
+    <string name="reset_factory_detail">Стирает все настройки. Записи, пресеты и Pro сохраняются.</string>
+    <string name="reset_confirm_title">Сбросить все настройки?</string>
+    <string name="reset_confirm_body">Настройки записи вернутся к стандартным. Ваши записи, пресеты, тема, язык и Pro НЕ затрагиваются.</string>
+    <string name="reset">Сбросить</string>
+    <string name="cancel">Отмена</string>
+    <string name="privacy_policy">Политика конфиденциальности</string>
+    <string name="upgrade_to_pro">Перейти на Pro</string>
+    <string name="restore_purchase">Восстановить покупку</string>
+    <string name="pro_unlocked">Pro разблокирован</string>
+    <string name="launch_promo">СТАРТ -%1$d%%</string>
+    <string name="upgrade_now">Перейти на Pro — %1$s</string>
+    <string name="lifetime">навсегда</string>
+</resources>

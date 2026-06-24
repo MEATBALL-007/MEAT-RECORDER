@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,12 +99,21 @@ fun RecordingActiveSection(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    momentaryLufs: Float = -70f,
+    shortTermLufs: Float = -70f,
+    integratedLufs: Float = -70f,
+    truePeakDbtp: Float = Float.NEGATIVE_INFINITY,
+    loudnessTarget: com.example.recorderproject.model.LoudnessTarget = com.example.recorderproject.model.LoudnessTarget.Off,
+    reduceMotion: Boolean = false,
     onSlateTone: () -> Unit = {},
     sceneName: String = "",
     fileName: String = "",
     micSource: String = "",
     phaseCorrelation: Float = 0f,
     channelCount: Int = 1,
+    layout: com.example.recorderproject.model.WorkspaceLayout = com.example.recorderproject.model.WorkspaceLayout.DEFAULT,
+    isPro: Boolean = true,
+    onUpgrade: (com.example.recorderproject.billing.ProFeature) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -118,92 +129,50 @@ fun RecordingActiveSection(
         RecBadge(elapsedSeconds = elapsedSeconds, isPaused = isPaused)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             InputLevelBar(percent = inputLevelPercent)
+            LoudnessMeterBar(
+                momentaryLufs = if (momentaryLufs > -69.5f) momentaryLufs else lufsDb,
+                shortTermLufs = if (shortTermLufs > -69.5f) shortTermLufs else lufsDb,
+                integratedLufs = if (integratedLufs > -69.5f) integratedLufs else lufsDb,
+                truePeakDbtp = truePeakDbtp,
+                target = loudnessTarget,
+                reduceMotion = reduceMotion,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // Quick controls — order & visibility come from the saved workspace layout.
+        layout.visibleControls().chunked(3).forEach { rowControls ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    "LUFS",
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 10.sp,
-                    letterSpacing = 1.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (lufsDb > -69f) "%.1f".format(lufsDb) else "—",
-                    color = MeatYellow,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                rowControls.forEach { control ->
+                    ProLock(
+                        feature = control.proFeature,
+                        isPro = isPro,
+                        onUpgrade = onUpgrade,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        QuickControlChip(
+                            control = control,
+                            isPaused = isPaused,
+                            cueCount = cueCount,
+                            liveEqOn = liveEqOn,
+                            liveNoiseGateOn = liveNoiseGateOn,
+                            preRollOn = preRollOn,
+                            vadOn = vadOn,
+                            onTogglePause = onTogglePause,
+                            onDropCue = onDropCue,
+                            onSlateTone = onSlateTone,
+                            onToggleLiveEq = onToggleLiveEq,
+                            onToggleLiveNoiseGate = onToggleLiveNoiseGate,
+                            onOpenEqEditor = onOpenEqEditor,
+                            onTogglePreRoll = onTogglePreRoll,
+                            onToggleVad = onToggleVad,
+                        )
+                    }
+                }
+                repeat(3 - rowControls.size) { Spacer(Modifier.weight(1f)) }
             }
-        }
-        // Quick action row: pause/resume + drop cue + slate tone
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            QuickActionChip(
-                label = if (isPaused) "Resume" else "Pause",
-                icon = if (isPaused) "▶" else "❚❚",
-                onClick = onTogglePause,
-                modifier = Modifier.weight(1f),
-            )
-            QuickActionChip(
-                label = if (cueCount == 0) "Drop cue" else "Cue · $cueCount",
-                icon = "◆",
-                onClick = onDropCue,
-                modifier = Modifier.weight(1f),
-            )
-            QuickActionChip(
-                label = "Slate",
-                icon = "♪",
-                onClick = onSlateTone,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        // P3: Live EQ + NR Gate + Edit EQ — adjust the recording chain mid-take
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ActiveChip(
-                label = if (liveEqOn) "Live EQ ON" else "Live EQ",
-                active = liveEqOn,
-                onClick = onToggleLiveEq,
-                modifier = Modifier.weight(1f),
-            )
-            ActiveChip(
-                label = if (liveNoiseGateOn) "NR Gate ON" else "NR Gate",
-                active = liveNoiseGateOn,
-                onClick = onToggleLiveNoiseGate,
-                modifier = Modifier.weight(1f),
-            )
-            QuickActionChip(
-                label = "Edit EQ",
-                icon = "→",
-                onClick = onOpenEqEditor,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        // Pre-roll + VAD chip row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ActiveChip(
-                label = if (preRollOn) "Pre-roll 5s ON" else "Pre-roll 5s",
-                active = preRollOn,
-                onClick = onTogglePreRoll,
-                modifier = Modifier.weight(1f),
-            )
-            ActiveChip(
-                label = if (vadOn) "VAD ON" else "VAD",
-                active = vadOn,
-                onClick = onToggleVad,
-                modifier = Modifier.weight(1f),
-            )
         }
         // K.3: Phase correlation meter — only shown in stereo mode
         if (channelCount == 2) {
@@ -219,6 +188,45 @@ fun RecordingActiveSection(
         }
         SpectrumCard(spectrumHistory = spectrumHistory, fallbackWaveform = waveform)
         PitchCard(pitchHz = pitchHz)
+    }
+}
+
+@Composable
+private fun QuickControlChip(
+    control: com.example.recorderproject.model.QuickControl,
+    isPaused: Boolean,
+    cueCount: Int,
+    liveEqOn: Boolean,
+    liveNoiseGateOn: Boolean,
+    preRollOn: Boolean,
+    vadOn: Boolean,
+    onTogglePause: () -> Unit,
+    onDropCue: () -> Unit,
+    onSlateTone: () -> Unit,
+    onToggleLiveEq: () -> Unit,
+    onToggleLiveNoiseGate: () -> Unit,
+    onOpenEqEditor: () -> Unit,
+    onTogglePreRoll: () -> Unit,
+    onToggleVad: () -> Unit,
+) {
+    val m = Modifier.fillMaxWidth()
+    when (control) {
+        com.example.recorderproject.model.QuickControl.PAUSE ->
+            QuickActionChip(if (isPaused) "Resume" else "Pause", if (isPaused) "▶" else "❚❚", onTogglePause, m)
+        com.example.recorderproject.model.QuickControl.DROP_CUE ->
+            QuickActionChip(if (cueCount == 0) "Drop cue" else "Cue · $cueCount", "◆", onDropCue, m)
+        com.example.recorderproject.model.QuickControl.SLATE ->
+            QuickActionChip("Slate", "♪", onSlateTone, m)
+        com.example.recorderproject.model.QuickControl.LIVE_EQ ->
+            ActiveChip(if (liveEqOn) "Live EQ ON" else "Live EQ", liveEqOn, onToggleLiveEq, m)
+        com.example.recorderproject.model.QuickControl.NR_GATE ->
+            ActiveChip(if (liveNoiseGateOn) "NR Gate ON" else "NR Gate", liveNoiseGateOn, onToggleLiveNoiseGate, m)
+        com.example.recorderproject.model.QuickControl.EDIT_EQ ->
+            QuickActionChip("Edit EQ", "→", onOpenEqEditor, m)
+        com.example.recorderproject.model.QuickControl.PRE_ROLL ->
+            ActiveChip(if (preRollOn) "Pre-roll 5s ON" else "Pre-roll 5s", preRollOn, onTogglePreRoll, m)
+        com.example.recorderproject.model.QuickControl.VAD ->
+            ActiveChip(if (vadOn) "VAD ON" else "VAD", vadOn, onToggleVad, m)
     }
 }
 
@@ -427,11 +435,15 @@ private fun LiveWaveformCard(waveform: List<Float>) {
     // Hold a "displayed" buffer that smoothly eases toward each new target value.
     // Lerp factor 0.35 per 16ms tick → ~60% closure over ~30ms (one or two frames).
     val displayed = remember { mutableStateListOf<Float>() }
+    // The animation loop below runs on a constant key, so it must read the LIVE
+    // waveform via rememberUpdatedState — capturing `waveform` directly would freeze
+    // it at the initial (empty) value and the bars would never move.
+    val latestWaveform = rememberUpdatedState(waveform)
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(16) // ~60 fps
             // Resize displayed to match latest waveform length without losing existing values
-            val target = waveform
+            val target = latestWaveform.value
             if (target.isEmpty()) {
                 if (displayed.isNotEmpty()) {
                     // Decay toward zero when no input

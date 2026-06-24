@@ -171,4 +171,78 @@ object WavIo {
             out.write(bb.array())
         }
     }
+
+    fun openWriter(
+        file: File,
+        channels: Int,
+        sampleRate: Int,
+        bitDepth: Int,
+    ): StreamWriter {
+        require(bitDepth in listOf(16, 24, 32)) { "Unsupported bit depth $bitDepth" }
+        require(channels in 1..2) { "Unsupported channel count $channels" }
+        return StreamWriter(file, channels, sampleRate, bitDepth)
+    }
+
+    class StreamWriter internal constructor(
+        file: File,
+        private val channels: Int,
+        private val sampleRate: Int,
+        private val bitDepth: Int,
+    ) : AutoCloseable {
+        private val raf = java.io.RandomAccessFile(file, "rw")
+        private val bytesPerSample = bitDepth / 8
+        private var dataBytesWritten = 0L
+
+        init {
+            // Write placeholder header — sizes patched on close().
+            raf.setLength(0)
+            raf.write("RIFF".toByteArray(Charsets.US_ASCII))
+            raf.write(ByteArray(4))                            // RIFF size placeholder
+            raf.write("WAVE".toByteArray(Charsets.US_ASCII))
+            raf.write("fmt ".toByteArray(Charsets.US_ASCII))
+            raf.writeInt(Integer.reverseBytes(16))
+            raf.writeShort(java.lang.Short.reverseBytes(1.toShort()).toInt())
+            raf.writeShort(java.lang.Short.reverseBytes(channels.toShort()).toInt())
+            raf.writeInt(Integer.reverseBytes(sampleRate))
+            raf.writeInt(Integer.reverseBytes(sampleRate * channels * bytesPerSample))
+            raf.writeShort(java.lang.Short.reverseBytes((channels * bytesPerSample).toShort()).toInt())
+            raf.writeShort(java.lang.Short.reverseBytes(bitDepth.toShort()).toInt())
+            raf.write("data".toByteArray(Charsets.US_ASCII))
+            raf.write(ByteArray(4))                            // data size placeholder
+        }
+
+        /** Write `count` floats (interleaved). `count` must be a multiple of `channels`. */
+        fun writeBlock(samples: FloatArray, count: Int) {
+            require(count <= samples.size) { "count > samples.size" }
+            require(count % channels == 0) { "count must be a multiple of channels=$channels" }
+            val bb = ByteBuffer.allocate(count * bytesPerSample).order(ByteOrder.LITTLE_ENDIAN)
+            when (bitDepth) {
+                16 -> for (i in 0 until count) {
+                    val v = (samples[i].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                    bb.putShort(v)
+                }
+                24 -> for (i in 0 until count) {
+                    val v = (samples[i].coerceIn(-1f, 1f) * 8_388_607f).toInt()
+                    bb.put((v and 0xFF).toByte())
+                    bb.put(((v shr 8) and 0xFF).toByte())
+                    bb.put(((v shr 16) and 0xFF).toByte())
+                }
+                32 -> for (i in 0 until count) {
+                    val v = (samples[i].coerceIn(-1f, 1f).toDouble() * Int.MAX_VALUE).toInt()
+                    bb.putInt(v)
+                }
+            }
+            raf.write(bb.array())
+            dataBytesWritten += count.toLong() * bytesPerSample
+        }
+
+        override fun close() {
+            // Patch RIFF size at offset 4 and data size at offset 40.
+            raf.seek(4)
+            raf.writeInt(Integer.reverseBytes((36 + dataBytesWritten).toInt()))
+            raf.seek(40)
+            raf.writeInt(Integer.reverseBytes(dataBytesWritten.toInt()))
+            raf.close()
+        }
+    }
 }

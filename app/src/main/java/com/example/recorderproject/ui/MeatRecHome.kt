@@ -1,6 +1,5 @@
 package com.example.recorderproject.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -11,10 +10,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,10 +22,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -40,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,12 +48,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.recorderproject.model.RecordFile
+import com.example.recorderproject.ui.components.HomeSegmentedControl
 import com.example.recorderproject.ui.components.IconLineSettings
-import com.example.recorderproject.ui.components.OrangeAura
+import com.example.recorderproject.ui.components.IconLineSliders
 import com.example.recorderproject.ui.components.OrangeUnderglow
+import kotlinx.coroutines.launch
 
 /**
  * MeatRec home screen — pixel-faithful rebuild of the 22 May APK home.
@@ -74,7 +74,7 @@ import com.example.recorderproject.ui.components.OrangeUnderglow
  *      / NR toggle / Sample Rate pills / Channel Mode / Bit Depth / Audio Source
  *      / Save Location / Recording Limit / BT Monitor / Ghost Take / Room Profile
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MeatRecHome(
     isRecording: Boolean,
@@ -94,6 +94,7 @@ fun MeatRecHome(
     onChangeChannelCount: (Int) -> Unit,
     onTapRecord: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenQuickSettings: () -> Unit = {},
     onOpenSourcePicker: () -> Unit = {},
     onPickSaveLocation: () -> Unit = {},
     onAnalyzeRoom: () -> Unit = {},
@@ -120,8 +121,8 @@ fun MeatRecHome(
     onBulkCompareAb: () -> Unit = {},
     searchQuery: String = "",
     onSearchChange: (String) -> Unit = {},
-    fileFilter: com.example.recorderproject.RecorderViewModel.FileFilter = com.example.recorderproject.RecorderViewModel.FileFilter.ALL,
-    onFilterChange: (com.example.recorderproject.RecorderViewModel.FileFilter) -> Unit = {},
+    fileFilter: com.example.recorderproject.model.FileFilter = com.example.recorderproject.model.FileFilter.ALL,
+    onFilterChange: (com.example.recorderproject.model.FileFilter) -> Unit = {},
     sortOrder: com.example.recorderproject.model.SortOrder = com.example.recorderproject.model.SortOrder.Default,
     onSortChange: (com.example.recorderproject.model.SortOrder) -> Unit = {},
     currentMode: com.example.recorderproject.model.RecorderMode = com.example.recorderproject.model.RecorderMode.Default,
@@ -147,16 +148,36 @@ fun MeatRecHome(
     vadOn: Boolean = false,
     onToggleVad: () -> Unit = {},
     lufsDb: Float = -70f,
+    liveTpDbtp: Float = Float.NEGATIVE_INFINITY,
+    loudnessTarget: com.example.recorderproject.model.LoudnessTarget = com.example.recorderproject.model.LoudnessTarget.Off,
+    onSelectLoudnessTarget: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
+    onSaveLoudnessAsDefault: (com.example.recorderproject.model.LoudnessTarget) -> Unit = {},
+    liveRawPeakDbfs: Float = Float.NEGATIVE_INFINITY,
+    inputGainDb: Float = 0f,
+    onChangeInputGain: (Float) -> Unit = {},
+    onBumpTake: () -> Unit = {},
+    onBumpSubscene: () -> Unit = {},
+    onSubsceneMinus: () -> Unit = {},
+    onTakeMinus1: () -> Unit = {},
+    onSceneMinus1: () -> Unit = {},
+    onScenePlus1: () -> Unit = {},
     onSlateTone: () -> Unit = {},
     micSource: String = "",
     phaseCorrelation: Float = 0f,
+    isPro: Boolean = true,
+    onTapUpgrade: () -> Unit = {},
+    hasSaveLocation: Boolean = true,
+    onUpgradeFeature: (com.example.recorderproject.billing.ProFeature) -> Unit = {},
+    workspaceLayout: com.example.recorderproject.model.WorkspaceLayout = com.example.recorderproject.model.WorkspaceLayout.DEFAULT,
+    onOpenCustomize: () -> Unit = {},
 ) {
-    val scroll = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(MaterialTheme.colorScheme.background),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Save-location warning banner — shown until the user picks a folder
         // ============== 1. ORANGE TOP BAR (with gradient depth) ==============
         Row(
             modifier = Modifier
@@ -175,20 +196,50 @@ fun MeatRecHome(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-                Text(
-                    "MeatRec",
-                    color = Color.White,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.sp,
-                )
-                Text(
-                    "Field Recording System",
-                    color = MeatYellow,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.3.sp,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "MeatRec",
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.sp,
+                    )
+                    // Brand becomes "MeatRec PRO" once the user owns Pro.
+                    if (isPro) {
+                        Text(
+                            "PRO",
+                            color = MeatYellow,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                }
+                if (!hasSaveLocation) {
+                    Row(
+                        modifier = Modifier.clickable(onClick = onPickSaveLocation),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            "Saving to app storage · tap to choose a folder",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                } else {
+                    Text(
+                        androidx.compose.ui.res.stringResource(
+                            if (isPro) com.example.recorderproject.R.string.app_tagline_pro
+                            else com.example.recorderproject.R.string.app_tagline
+                        ),
+                        color = MeatYellow,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.3.sp,
+                    )
+                }
             }
             // Mode chip — taps to re-open the mode selector
             Row(
@@ -214,214 +265,165 @@ fun MeatRecHome(
                     letterSpacing = 1.sp,
                 )
             }
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(onClick = onOpenSettings),
-                contentAlignment = Alignment.Center,
-            ) {
-                IconLineSettings(tint = Color.White, size = 26.dp)
+            // Persistent "PRO" upgrade pill — free users only, one tap to the paywall.
+            if (!isPro) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MeatYellow)
+                        .clickable(onClick = onTapUpgrade)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        "★ PRO",
+                        color = Color(0xFF0C0C10),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(onClick = onOpenQuickSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconLineSliders(tint = Color.White, size = 24.dp)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(onClick = onOpenSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconLineSettings(tint = Color.White, size = 26.dp)
+                }
             }
         }
 
         // Underglow strip below the top bar
         OrangeUnderglow(modifier = Modifier.fillMaxWidth())
 
-        // ============== 2. SCROLLABLE BODY ==============
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scroll)
-                .padding(horizontal = 20.dp)
-                .padding(top = 24.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Hero record button + LiquidBlob backdrop + aura halo behind
-            Box(contentAlignment = Alignment.Center) {
-                // Subtle LiquidBlob — only visible while recording, gives a "live"
-                // feel without competing with the button itself
-                if (isRecording) {
-                    Box(modifier = Modifier.size(360.dp).alpha(0.22f)) {
-                        com.example.recorderproject.ui.components.LiquidBlobCanvas(
-                            modifier = Modifier.size(360.dp),
-                        )
-                    }
-                }
-                OrangeAura(diameter = 220.dp, recording = isRecording)
-                BigRecordButton(isRecording = isRecording, onTap = onTapRecord)
-            }
-            Text(
-                if (isRecording) "Recording…" else "Tap to Record",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            if (!isRecording) {
-                Text(
-                    "Tap the button to start recording",
-                    color = Color.White.copy(alpha = 0.50f),
-                    fontSize = 14.sp,
-                )
-            }
+        // ============== 2. SECTION PAGER (Record | Library) ==============
+        val pagerState = rememberPagerState(initialPage = 0) { 2 }
+        val pagerScope = rememberCoroutineScope()
 
-            // K1: rich recording-active section — Live Waveform + SPECTRUM + PITCH
-            AnimatedVisibility(
-                visible = isRecording,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
+        HomeSegmentedControl(
+            selectedIndex = pagerState.currentPage,
+            onSelect = { i -> pagerScope.launch { pagerState.animateScrollToPage(i) } },
+        )
+
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { page ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                com.example.recorderproject.ui.components.RecordingActiveSection(
-                    elapsedSeconds = elapsedSeconds,
-                    waveform = waveform,
-                    inputLevelPercent = inputLevelPercent,
-                    spectrumHistory = spectrumHistory,
-                    pitchHz = pitchHz,
-                    cueCount = cueCount,
-                    isPaused = isPaused,
-                    onDropCue = onDropCue,
-                    onTogglePause = onTogglePause,
-                    liveEqOn = liveEqOn,
-                    onToggleLiveEq = onToggleLiveEq,
-                    onOpenEqEditor = onOpenEqEditor,
-                    liveNoiseGateOn = liveNoiseGateOn,
-                    onToggleLiveNoiseGate = onToggleLiveNoiseGate,
-                    liveEqBandGains = liveEqBandGains,
-                    onChangeLiveEqBand = onChangeLiveEqBand,
-                    preRollOn = preRollOn,
-                    onTogglePreRoll = onTogglePreRoll,
-                    vadOn = vadOn,
-                    onToggleVad = onToggleVad,
-                    lufsDb = lufsDb,
-                    onSlateTone = onSlateTone,
-                    sceneName = sceneName,
-                    fileName = fileName,
-                    micSource = micSource,
-                    phaseCorrelation = phaseCorrelation,
-                    channelCount = channelCount,
-                )
-            }
-
-            Box(modifier = Modifier.height(8.dp))
-
-            // Recording Settings card
-            RecordingSettingsCard(
-                fileName = fileName,
-                sceneName = sceneName,
-                notes = notes,
-                noiseReductionEnabled = noiseReductionEnabled,
-                sampleRate = sampleRate,
-                bitDepth = bitDepth,
-                channelCount = channelCount,
-                onFileNameChange = onFileNameChange,
-                onSceneNameChange = onSceneNameChange,
-                onNotesChange = onNotesChange,
-                onToggleNR = onToggleNR,
-                onChangeSampleRate = onChangeSampleRate,
-                onChangeBitDepth = onChangeBitDepth,
-                onChangeChannelCount = onChangeChannelCount,
-                onOpenSourcePicker = onOpenSourcePicker,
-                onPickSaveLocation = onPickSaveLocation,
-                onAnalyzeRoom = onAnalyzeRoom,
-                monitorOn = monitorOn,
-                onToggleMonitor = onToggleMonitor,
-                monitorRmsDb = monitorRmsDb,
-                maxDurationMinutes = maxDurationMinutes,
-                onChangeMaxDuration = onChangeMaxDuration,
-            )
-
-            // Q6: bulk-select action bar — only visible when items are selected
-            if (selectedIds.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MeatOrange.copy(alpha = 0.18f))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "${selectedIds.size} selected",
-                        color = MeatOrange,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                when (page) {
+                    0 -> RecordPage(
+                        isRecording = isRecording,
+                        fileName = fileName,
+                        sceneName = sceneName,
+                        notes = notes,
+                        noiseReductionEnabled = noiseReductionEnabled,
+                        sampleRate = sampleRate,
+                        bitDepth = bitDepth,
+                        channelCount = channelCount,
+                        onFileNameChange = onFileNameChange,
+                        onSceneNameChange = onSceneNameChange,
+                        onNotesChange = onNotesChange,
+                        onToggleNR = onToggleNR,
+                        onChangeSampleRate = onChangeSampleRate,
+                        onChangeBitDepth = onChangeBitDepth,
+                        onChangeChannelCount = onChangeChannelCount,
+                        onTapRecord = onTapRecord,
+                        onOpenSourcePicker = onOpenSourcePicker,
+                        onPickSaveLocation = onPickSaveLocation,
+                        onAnalyzeRoom = onAnalyzeRoom,
+                        elapsedSeconds = elapsedSeconds,
+                        waveform = waveform,
+                        inputLevelPercent = inputLevelPercent,
+                        spectrumHistory = spectrumHistory,
+                        pitchHz = pitchHz,
+                        cueCount = cueCount,
+                        isPaused = isPaused,
+                        onDropCue = onDropCue,
+                        onTogglePause = onTogglePause,
+                        liveEqOn = liveEqOn,
+                        onToggleLiveEq = onToggleLiveEq,
+                        onOpenEqEditor = onOpenEqEditor,
+                        liveNoiseGateOn = liveNoiseGateOn,
+                        onToggleLiveNoiseGate = onToggleLiveNoiseGate,
+                        liveEqBandGains = liveEqBandGains,
+                        onChangeLiveEqBand = onChangeLiveEqBand,
+                        preRollOn = preRollOn,
+                        onTogglePreRoll = onTogglePreRoll,
+                        vadOn = vadOn,
+                        onToggleVad = onToggleVad,
+                        lufsDb = lufsDb,
+                        liveTpDbtp = liveTpDbtp,
+                        loudnessTarget = loudnessTarget,
+                        onSlateTone = onSlateTone,
+                        micSource = micSource,
+                        phaseCorrelation = phaseCorrelation,
+                        monitorOn = monitorOn,
+                        onToggleMonitor = onToggleMonitor,
+                        monitorRmsDb = monitorRmsDb,
+                        maxDurationMinutes = maxDurationMinutes,
+                        onChangeMaxDuration = onChangeMaxDuration,
+                        liveRawPeakDbfs = liveRawPeakDbfs,
+                        inputGainDb = inputGainDb,
+                        onChangeInputGain = onChangeInputGain,
+                        onBumpTake = onBumpTake,
+                        onBumpSubscene = onBumpSubscene,
+                        onSubsceneMinus = onSubsceneMinus,
+                        onTakeMinus1 = onTakeMinus1,
+                        onSceneMinus1 = onSceneMinus1,
+                        onScenePlus1 = onScenePlus1,
+                        onSelectLoudnessTarget = onSelectLoudnessTarget,
+                        onSaveLoudnessAsDefault = onSaveLoudnessAsDefault,
+                        workspaceLayout = workspaceLayout,
+                        isProUser = isPro,
+                        onUpgradeFeature = onUpgradeFeature,
+                        onOpenCustomize = onOpenCustomize,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "Clear",
-                            color = Color.White.copy(alpha = 0.65f),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF1F1F1F))
-                                .clickable(onClick = onClearSelection)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                        if (selectedIds.size == 2) {
-                            Text(
-                                "A/B",
-                                color = Color(0xFFFFC72C),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF1F1F1F))
-                                    .clickable(onClick = onBulkCompareAb)
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                            )
-                        }
-                        Text(
-                            "Delete",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MeatOrange)
-                                .clickable(onClick = onBulkDelete)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                    }
+                    else -> LibraryPage(
+                        files = files,
+                        selectedFileId = selectedFileId,
+                        isPlaying = isPlaying,
+                        onTapFile = onTapFile,
+                        onShareFile = onShareFile,
+                        onRenameFile = onRenameFile,
+                        onToggleStarFile = onToggleStarFile,
+                        onToggleLockFile = onToggleLockFile,
+                        onDeleteFile = onDeleteFile,
+                        onTrimFile = onTrimFile,
+                        onEQFile = onEQFile,
+                        selectedIds = selectedIds,
+                        onClearSelection = onClearSelection,
+                        onBulkDelete = onBulkDelete,
+                        onBulkCompareAb = onBulkCompareAb,
+                        searchQuery = searchQuery,
+                        onSearchChange = onSearchChange,
+                        fileFilter = fileFilter,
+                        onFilterChange = onFilterChange,
+                        sortOrder = sortOrder,
+                        onSortChange = onSortChange,
+                    )
                 }
             }
-
-            // Batch 4: Toolbar above the recordings list (search + filter + sort)
-            if (files.isNotEmpty() || searchQuery.isNotEmpty()) {
-                com.example.recorderproject.ui.components.RecordingsToolbar(
-                    searchQuery = searchQuery,
-                    onSearchChange = onSearchChange,
-                    currentFilter = fileFilter,
-                    onFilterChange = onFilterChange,
-                    currentSort = sortOrder,
-                    onSortChange = onSortChange,
-                )
-            }
-
-            // L1: Recordings list card — Batch 1, file library
-            com.example.recorderproject.ui.components.RecordingsListCard(
-                files = files,
-                selectedId = selectedFileId,
-                isPlaying = isPlaying,
-                onTap = onTapFile,
-                onShare = onShareFile,
-                onRename = onRenameFile,
-                onToggleStar = onToggleStarFile,
-                onToggleLock = onToggleLockFile,
-                onDelete = onDeleteFile,
-                onOpenTrim = onTrimFile,
-                onOpenEQ = onEQFile,
-            )
-
-            // Padding at the bottom so the MiniPlayer doesn't cover the last row
-            Box(modifier = Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
-private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
+internal fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit, diameter: Dp = 220.dp) {
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.93f else 1f,
@@ -432,8 +434,8 @@ private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
     Box(
         modifier = Modifier
             .scale(pressScale)
-            .size(220.dp)
-            .clip(RoundedCornerShape(110.dp))
+            .size(diameter)
+            .clip(RoundedCornerShape(diameter / 2))
             .background(
                 brush = Brush.radialGradient(
                     colors = listOf(
@@ -477,7 +479,7 @@ private fun BigRecordButton(isRecording: Boolean, onTap: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RecordingSettingsCard(
+internal fun RecordingSettingsCard(
     fileName: String,
     sceneName: String,
     notes: String,
@@ -639,8 +641,8 @@ private fun RecordingSettingsCard(
                 }
                 PillRow(
                     options = listOf(
-                        Triple(1, "Mono", "VM40 Ch.1"),
-                        Triple(2, "Stereo", "VM40 Dual"),
+                        Triple(1, "Mono", "1 channel"),
+                        Triple(2, "Stereo", "2 channels"),
                     ),
                     current = channelCount,
                     onSelect = onChangeChannelCount,
@@ -710,7 +712,7 @@ private fun RecordingSettingsCard(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (stableActive) MeatOrange else Color(0xFF1F1F1F))
+                                .background(if (stableActive) MeatOrange else MaterialTheme.colorScheme.surface)
                                 .clickable { onChangeMaxDuration(stableValue) }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center,
@@ -885,7 +887,7 @@ private fun <T> PillRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1F1F1F))
+            .background(MaterialTheme.colorScheme.surface)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {

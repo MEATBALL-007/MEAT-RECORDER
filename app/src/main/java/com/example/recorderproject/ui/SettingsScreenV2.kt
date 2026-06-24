@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,10 +17,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -28,6 +35,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +77,13 @@ fun SettingsScreenV2(
     onToggleReduceMotion: (Boolean) -> Unit,
     onPickSaveLocation: () -> Unit,
     onBack: () -> Unit,
+    onOpenPrivacy: () -> Unit = {},
+    onChangeMode: () -> Unit = {},
+    onPickCloudLocation: () -> Unit = {},
+    onSignInDrive: () -> Unit = {},
+    onOpenLanguage: () -> Unit = {},
 ) {
+    var showResetDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val sampleRate by viewModel.sampleRate.collectAsStateWithLifecycle()
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
@@ -83,9 +99,12 @@ fun SettingsScreenV2(
     val compressorOn by viewModel.compressorOn.collectAsStateWithLifecycle()
     val stereoWidenerOn by viewModel.stereoWidenerOn.collectAsStateWithLifecycle()
     val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
+    val isDriveSignedIn by viewModel.isDriveSignedIn.collectAsStateWithLifecycle()
     val lockScreenControlsOn by viewModel.lockScreenControlsOn.collectAsStateWithLifecycle()
     val groupByScene by viewModel.groupByScene.collectAsStateWithLifecycle()
     val autoStopMin by viewModel.autoStopMinutes.collectAsStateWithLifecycle()
+    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
+    val proPrice by viewModel.billing.priceText.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -101,14 +120,30 @@ fun SettingsScreenV2(
         },
         containerColor = RecorderCharcoal,
     ) { padding ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        Column(
+            Modifier
+                .widthIn(max = 600.dp)  // centred column on tablets — avoids edge-to-edge stretch
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SectionHeader("MEAT REC PRO", accent = RecorderYellow)
+            ProSettingsRow(
+                isPro = isPro,
+                priceText = proPrice,
+                onUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.HIGH_RES_AUDIO) },
+                onRestore = { viewModel.billing.queryPurchases() },
+                debugForcePro = viewModel.entitlements.isDebugForcePro(),
+                onToggleDebugPro = { viewModel.entitlements.setDebugForcePro(it) },
+            )
+
             SectionHeader("APPEARANCE", accent = RecorderYellow)
             ThemeGrid(current = theme, onChange = onChangeTheme)
 
@@ -197,9 +232,12 @@ fun SettingsScreenV2(
             )
             ToggleRow(
                 label = "Cloud backup",
-                detail = "Auto-upload to cloud (provider wiring later)",
+                detail = if (isDriveSignedIn) "Connected to Google Drive" else "Tap to connect Google Drive",
                 value = cloudBackupOn,
-                onChange = { viewModel.toggleCloudBackup() },
+                onChange = {
+                    viewModel.toggleCloudBackup()
+                    if (!cloudBackupOn && !isDriveSignedIn) onSignInDrive()
+                },
             )
             ToggleRow(
                 label = "Lock-screen controls",
@@ -228,12 +266,26 @@ fun SettingsScreenV2(
                 onPick = onPickSaveLocation,
             )
 
+            SectionHeader("LANGUAGE", accent = Color(0xFF3DC399))
+            NavRow(
+                label = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.language),
+                detail = com.example.recorderproject.i18n.AppLanguages.currentDisplayName(),
+                onClick = onOpenLanguage,
+            )
+
             SectionHeader("ACCESSIBILITY", accent = Color(0xFF7B8189))
             ToggleRow(
                 label = "Reduce motion",
                 detail = "Disables splash intro and non-essential animations",
                 value = reduceMotion,
                 onChange = onToggleReduceMotion,
+            )
+
+            SectionHeader("DATA", accent = RecorderOrange)
+            NavRow(
+                label = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_factory),
+                detail = androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_factory_detail),
+                onClick = { showResetDialog = true },
             )
 
             SectionHeader("ABOUT", accent = RecorderOrange)
@@ -281,6 +333,120 @@ fun SettingsScreenV2(
                         )
                     }
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onOpenPrivacy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = RecorderBlueGrey),
+            ) {
+                Text("Privacy Policy", fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+        }
+    }
+
+    if (showResetDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            containerColor = RecorderCharcoalCard,
+            title = { Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_confirm_title), color = Color.White, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Text(
+                    androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset_confirm_body),
+                    color = RecorderBlueGrey,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.resetFactory(); showResetDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
+                ) { Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.reset), color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showResetDialog = false }) {
+                    Text(androidx.compose.ui.res.stringResource(com.example.recorderproject.R.string.cancel), color = RecorderBlueGrey)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun NavRow(label: String, detail: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RecorderCharcoalCard)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = RecorderBlueGrey, fontSize = 12.sp)
+        }
+        Text("›", color = RecorderOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun ProSettingsRow(
+    isPro: Boolean,
+    priceText: String?,
+    onUpgrade: () -> Unit,
+    onRestore: () -> Unit,
+    debugForcePro: Boolean = false,
+    onToggleDebugPro: (Boolean) -> Unit = {},
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RecorderCharcoalCard)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (com.example.recorderproject.BuildConfig.DEBUG) {
+            ToggleRow(
+                label = "DEBUG: simulate Pro",
+                detail = "Test-only toggle — never shown in the released app",
+                value = debugForcePro,
+                onChange = onToggleDebugPro,
+            )
+        }
+        if (isPro) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(20.dp))
+                Text("Pro unlocked", color = RecorderYellow, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+            Text("Thanks for supporting MEAT REC — all features are unlocked.",
+                color = RecorderBlueGrey, fontSize = 12.sp, lineHeight = 17.sp)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = RecorderYellow, modifier = Modifier.size(20.dp))
+                Text("Upgrade to Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+            Text("Unlock studio quality, external mics, EQ, pitch shift, transcription, cloud backup & more. One payment, forever.",
+                color = RecorderBlueGrey, fontSize = 12.sp, lineHeight = 17.sp)
+            Button(
+                onClick = onUpgrade,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = RecorderOrange),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    if (priceText != null) "Upgrade — $priceText" else "See Pro features",
+                    color = Color.White, fontWeight = FontWeight.Bold,
+                )
+            }
+            OutlinedButton(
+                onClick = onRestore,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = RecorderBlueGrey),
+            ) {
+                Text("Restore purchase", fontSize = 13.sp)
             }
         }
     }

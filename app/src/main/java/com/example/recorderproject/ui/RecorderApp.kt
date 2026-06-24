@@ -80,6 +80,7 @@ import com.example.recorderproject.ui.theme.RecorderOrange
 import com.example.recorderproject.ui.theme.RecorderYellow
 import com.example.recorderproject.ui.components.BrandWordmark
 import com.example.recorderproject.ui.components.SortPicker
+import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.LocalAppTypography
 import com.example.recorderproject.ui.theme.Spacing
 
@@ -92,6 +93,11 @@ fun RecorderApp(
     onRequestPermission: () -> Unit,
     onOpenEQOnLast: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenPresets: () -> Unit = {},
+    theme: AppTheme = AppTheme.Default,
+    onChangeTheme: (AppTheme) -> Unit = {},
+    onSignInDrive: () -> Unit = {},
+    onOpenFullSettings: () -> Unit = {},
 ) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val files by viewModel.visibleRecordFiles.collectAsStateWithLifecycle()
@@ -116,7 +122,14 @@ fun RecorderApp(
     val bitDepth by viewModel.bitDepth.collectAsStateWithLifecycle()
     val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
 
-    // Elapsed seconds tracker — increments while recording
+    val isPro by viewModel.isPro.collectAsStateWithLifecycle()
+    val saveDirectoryUri by viewModel.saveDirectoryUri.collectAsStateWithLifecycle()
+    val workspaceLayout by viewModel.workspaceLayout.collectAsStateWithLifecycle()
+    val customizeOpen by viewModel.customizeOpen.collectAsStateWithLifecycle()
+    val currentMode by viewModel.recorderMode.collectAsStateWithLifecycle()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    // Elapsed seconds — UI display only; limit enforcement is in RecorderViewModel
     var elapsed by remember { mutableStateOf(0) }
     LaunchedEffect(isRecording) {
         elapsed = 0
@@ -124,6 +137,19 @@ fun RecorderApp(
             kotlinx.coroutines.delay(1000)
             elapsed++
         }
+    }
+
+    // D: surface delivery-render result as a Toast
+    val lastDelivery by viewModel.lastDeliveryResult.collectAsStateWithLifecycle()
+    LaunchedEffect(lastDelivery) {
+        val r = lastDelivery ?: return@LaunchedEffect
+        val target = r.targetLufs ?: return@LaunchedEffect
+        val msg = when {
+            r.passed -> "Rendered %.0f LUFS · %.1f dBTP · PASS".format(target, r.truePeakDbtp)
+            r.integratedLufs < -60f -> "Too quiet to normalize — re-record louder."
+            else -> "Couldn't reach %.0f LUFS without clipping — try a lower target.".format(target)
+        }
+        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
     }
 
     var slateOpen by remember { mutableStateOf(false) }
@@ -138,8 +164,20 @@ fun RecorderApp(
     val liveEqOn by viewModel.liveEqEnabled.collectAsStateWithLifecycle()
     val micSource by viewModel.micSourceLabel.collectAsStateWithLifecycle()
     val inputGainDb by viewModel.inputGainDb.collectAsStateWithLifecycle()
+    val externalInputDevices by viewModel.externalInputDevices.collectAsStateWithLifecycle()
 
     val channelCount by viewModel.channelCount.collectAsStateWithLifecycle()
+    var quickSettingsOpen by remember { mutableStateOf(false) }
+    val agcOn by viewModel.agcOn.collectAsStateWithLifecycle()
+    val hiPassOn by viewModel.hiPassOn.collectAsStateWithLifecycle()
+    val antiClipOn by viewModel.antiClipOn.collectAsStateWithLifecycle()
+    val compressorOn by viewModel.compressorOn.collectAsStateWithLifecycle()
+    val stereoWidenerOn by viewModel.stereoWidenerOn.collectAsStateWithLifecycle()
+    val vadOn by viewModel.vadOn.collectAsStateWithLifecycle()
+    val quality by viewModel.quality.collectAsStateWithLifecycle()
+    val cloudBackupOn by viewModel.cloudBackupOn.collectAsStateWithLifecycle()
+    val isDriveSignedIn by viewModel.isDriveSignedIn.collectAsStateWithLifecycle()
+
     Box(modifier = Modifier.fillMaxSize()) {
     // Faithful rebuild of 22 May APK home — see recovery/screenshots/04-after-skip.png
     MeatRecHome(
@@ -163,8 +201,12 @@ fun RecorderApp(
             if (isRecording) viewModel.stopRecording() else onStartRecording()
         },
         onOpenSettings = onOpenSettings,
+        onOpenQuickSettings = { quickSettingsOpen = true },
+        isPro = isPro,
+        onTapUpgrade = { viewModel.openPaywall(com.example.recorderproject.billing.ProFeature.LOUDNESS_DELIVERY) },
         onOpenSourcePicker = { sourcePickerOpen = true },
         onPickSaveLocation = onSelectSaveLocation,
+        hasSaveLocation = saveDirectoryUri != null,
         onAnalyzeRoom = { viewModel.openRoomProfiler() },
         files = files,
         onTapFile = { viewModel.selectFile(it) },
@@ -195,8 +237,8 @@ fun RecorderApp(
         onFilterChange = { viewModel.setFileFilter(it) },
         sortOrder = sortOrder,
         onSortChange = { viewModel.setSortOrder(it) },
-        currentMode = viewModel.recorderMode.collectAsStateWithLifecycle().value,
-        onChangeMode = onOpenSettings,
+        currentMode = currentMode,
+        onChangeMode = onOpenPresets,
         cueCount = viewModel.liveCueCount.collectAsStateWithLifecycle().value,
         isPaused = viewModel.isPaused.collectAsStateWithLifecycle().value,
         onDropCue = { viewModel.dropCueMarker() },
@@ -218,9 +260,22 @@ fun RecorderApp(
         onChangeLiveEqBand = { band, gain -> viewModel.setLiveEqBand(band, gain) },
         preRollOn = viewModel.preRollEnabled.collectAsStateWithLifecycle().value,
         onTogglePreRoll = { viewModel.togglePreRoll() },
-        vadOn = viewModel.vadOn.collectAsStateWithLifecycle().value,
+        vadOn = vadOn,
         onToggleVad = { viewModel.toggleVad() },
         lufsDb = viewModel.liveLufs.collectAsStateWithLifecycle().value,
+        liveTpDbtp = viewModel.liveTpDbTp.collectAsStateWithLifecycle().value,
+        loudnessTarget = viewModel.loudnessTarget.collectAsStateWithLifecycle().value,
+        onSelectLoudnessTarget = { viewModel.setSessionLoudnessTarget(it) },
+        onSaveLoudnessAsDefault = { viewModel.saveAsDefaultLoudnessTarget(it) },
+        liveRawPeakDbfs = viewModel.liveRawPeakDbfs.collectAsStateWithLifecycle().value,
+        inputGainDb = inputGainDb,
+        onChangeInputGain = { viewModel.updateInputGainDb(it) },
+        onBumpTake = { viewModel.bumpTake(+1) },
+        onBumpSubscene = { viewModel.bumpSubscene(+1) },
+        onSubsceneMinus = { viewModel.bumpSubscene(-1) },
+        onTakeMinus1 = { viewModel.bumpTake(-1) },
+        onSceneMinus1 = { viewModel.bumpScene(-1) },
+        onScenePlus1 = { viewModel.bumpScene(+1) },
         selectedIds = selectedIds,
         onToggleSelect = { viewModel.toggleFileSelection(it.id) },
         onBulkDelete = { viewModel.deleteSelected() },
@@ -229,6 +284,9 @@ fun RecorderApp(
         onSlateTone = { viewModel.fireSlateTone() },
         micSource = micSource,
         phaseCorrelation = viewModel.phaseCorrelation.collectAsStateWithLifecycle().value,
+        onUpgradeFeature = { feature -> viewModel.openPaywall(feature) },
+        workspaceLayout = workspaceLayout,
+        onOpenCustomize = { viewModel.openCustomize() },
     )
 
     // L2: Bottom mini player — pinned to bottom of the Box, slides up when a file is selected
@@ -257,10 +315,58 @@ fun RecorderApp(
     if (sourcePickerOpen) {
         AudioSourcePicker(
             currentSourceName = micSource,
-            usbDevices = emptyList(),
-            onPickBuiltin = { viewModel.setMicSource(it) },
-            onPickUsb = { viewModel.setMicSource(it.productName) },
+            externalDevices = externalInputDevices,
+            onPickBuiltin = {
+                viewModel.clearInputDevice()
+                viewModel.setMicSource(it)
+            },
+            onPickExternal = { device ->
+                viewModel.selectInputDevice(device)
+            },
             onDismiss = { sourcePickerOpen = false },
+        )
+    }
+
+    if (quickSettingsOpen) {
+        com.example.recorderproject.ui.components.QuickSettingsSheet(
+            agcOn = agcOn,
+            onToggleAgc = { viewModel.toggleAgc() },
+            hiPassOn = hiPassOn,
+            onToggleHiPass = { viewModel.toggleHiPass() },
+            antiClipOn = antiClipOn,
+            onToggleAntiClip = { viewModel.toggleAntiClip() },
+            compressorOn = compressorOn,
+            onToggleCompressor = { viewModel.toggleCompressor() },
+            stereoWidenerOn = stereoWidenerOn,
+            onToggleStereoWidener = { viewModel.toggleStereoWidener() },
+            vadOn = vadOn,
+            onToggleVad = { viewModel.toggleVad() },
+            quality = quality,
+            onChangeQuality = { viewModel.setQuality(it) },
+            isRecording = isRecording,
+            currentTheme = theme,
+            onChangeTheme = onChangeTheme,
+            saveLocationLabel = saveDirectoryUri?.toString() ?: "Default app folder",
+            onPickSaveLocation = onSelectSaveLocation,
+            cloudBackupOn = cloudBackupOn,
+            onToggleCloudBackup = {
+                viewModel.toggleCloudBackup()
+                if (!cloudBackupOn && !isDriveSignedIn) onSignInDrive()
+            },
+            onOpenFullSettings = { quickSettingsOpen = false; onOpenFullSettings() },
+            onDismiss = { quickSettingsOpen = false },
+        )
+    }
+
+    if (customizeOpen) {
+        com.example.recorderproject.ui.components.WorkspaceCustomizeSheet(
+            layout = workspaceLayout,
+            isPro = isPro,
+            modeName = currentMode.displayName,
+            onSave = { viewModel.saveWorkspace(it) },
+            onReset = { viewModel.resetWorkspace() },
+            onUpgrade = { feature -> viewModel.openPaywall(feature) },
+            onDismiss = { viewModel.closeCustomize() },
         )
     }
 

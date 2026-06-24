@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_tagline">Sistema de gravação de campo</string>
+    <string name="app_tagline_pro">Pro · Sistema de gravação de campo</string>
+    <string name="tap_to_record">Toque para gravar</string>
+    <string name="tap_to_start">Toque no botão para começar a gravar</string>
+    <string name="settings">Definições</string>
+    <string name="language">Idioma</string>
+    <string name="language_hint">Escolha o seu idioma. A app atualiza-se na hora.</string>
+    <string name="reset_factory">Repor predefinições de fábrica</string>
+    <string name="reset_factory_detail">Apaga todas as definições. Gravações, predefinições e Pro ficam seguros.</string>
+    <string name="reset_confirm_title">Repor todas as definições?</string>
+    <string name="reset_confirm_body">As definições de gravação voltam ao padrão. As suas gravações, predefinições, tema, idioma e Pro NÃO são alterados.</string>
+    <string name="reset">Repor</string>
+    <string name="cancel">Cancelar</string>
+    <string name="privacy_policy">Política de privacidade</string>
+    <string name="upgrade_to_pro">Obter Pro</string>
+    <string name="restore_purchase">Restaurar compra</string>
+    <string name="pro_unlocked">Pro desbloqueado</string>
+    <string name="launch_promo">LANÇAMENTO -%1$d%%</string>
+    <string name="upgrade_now">Obter agora — %1$s</string>
+    <string name="lifetime">vitalício</string>
+</resources>

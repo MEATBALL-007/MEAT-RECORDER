@@ -3,7 +3,7 @@ package com.example.recorderproject
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -18,7 +18,6 @@ import com.example.recorderproject.ui.EQScreen
 import com.example.recorderproject.ui.HarmonicPortraitScreen
 import com.example.recorderproject.ui.DesignPickerScreen
 import com.example.recorderproject.ui.MeatRecModeSelector
-import com.example.recorderproject.ui.MeatRecSettings
 import com.example.recorderproject.ui.MenuScreen
 import com.example.recorderproject.ui.MultiTakeScreen
 import com.example.recorderproject.ui.OnboardingOverlay
@@ -28,6 +27,7 @@ import com.example.recorderproject.ui.RoomProfilerScreen
 import com.example.recorderproject.ui.SceneSlicerScreen
 import com.example.recorderproject.ui.SettingsScreenV2
 import com.example.recorderproject.ui.StatisticsScreen
+import com.example.recorderproject.ui.PrivacyPolicyScreen
 import com.example.recorderproject.ui.TranscriptScreen
 import com.example.recorderproject.ui.TrimScreen
 import com.example.recorderproject.ui.components.PitchShiftDialog
@@ -35,7 +35,7 @@ import com.example.recorderproject.ui.theme.AppTheme
 import com.example.recorderproject.ui.theme.RecorderProjectTheme
 import android.widget.Toast
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val viewModel by viewModels<RecorderViewModel>()
 
     // Storage permission is a runtime permission only on API <= 28 (legacy storage).
@@ -62,10 +62,21 @@ class MainActivity : ComponentActivity() {
         // still works; the user just won't see the recording notification.
     }
 
+    // True while we're waiting for the folder-picker result mid-onboarding, so the record
+    // flow can resume automatically once a folder is chosen.
+    private var pendingRecordAfterFolderPick = false
+
     private val directoryLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { viewModel.setSaveDirectoryUri(it) }
+        if (pendingRecordAfterFolderPick) {
+            pendingRecordAfterFolderPick = false
+            // Re-enter the record flow; the gate now passes (a folder is set) and we
+            // fall through to permissions + recording. If the user cancelled the picker
+            // (uri == null) we do nothing — they tap Record again, now bound for app storage.
+            if (uri != null) requestRecordingPermissions()
+        }
     }
 
     private val cloudDirectoryLauncher = registerForActivityResult(
@@ -76,15 +87,48 @@ class MainActivity : ComponentActivity() {
 
     fun selectCloudDirectory() { cloudDirectoryLauncher.launch(null) }
 
+    private val googleSignInLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                viewModel.refreshDriveSignInState()
+                Toast.makeText(this, "Google Drive connected", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Google Sign-In failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun signInToGoogleDrive() {
+        val options = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+            com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+        )
+            .requestEmail()
+            .requestScopes(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.file"))
+            .build()
+        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this, options)
+        googleSignInLauncher.launch(client.signInIntent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             var onboardingDone by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("onboarding_done", false)) }
             var modeChosen by remember { mutableStateOf(getPreferences(MODE_PRIVATE).getBoolean("mode_chosen", false)) }
             var settingsOpen by remember { mutableStateOf(false) }
+            var languageOpen by remember { mutableStateOf(false) }
+            var privacyOpen by remember { mutableStateOf(false) }
             // Persist theme by display name across launches so user's pick survives restart.
             val savedThemeName = getPreferences(MODE_PRIVATE).getString("app_theme", null)
             var appTheme by remember { mutableStateOf(AppTheme.fromName(savedThemeName)) }
+            val onThemeChange = { theme: AppTheme ->
+                appTheme = theme
+                getPreferences(MODE_PRIVATE).edit()
+                    .putString("app_theme", theme.displayName).apply()
+            }
             var reduceMotion by remember { mutableStateOf(false) }
             RecorderProjectTheme(appTheme = appTheme, reduceMotion = reduceMotion) {
                 val eqOpen by viewModel.eqOpen.collectAsStateWithLifecycle()
@@ -99,6 +143,16 @@ class MainActivity : ComponentActivity() {
                 val statsOpen by viewModel.statsOpen.collectAsStateWithLifecycle()
                 val trimFile by viewModel.trimFile.collectAsStateWithLifecycle()
                 val designPickerOpen by viewModel.designPickerOpen.collectAsStateWithLifecycle()
+                val paywallFeature by viewModel.paywallFeature.collectAsStateWithLifecycle()
+                val proPrice by viewModel.billing.priceText.collectAsStateWithLifecycle()
+                val proOriginalPrice by viewModel.billing.originalPriceText.collectAsStateWithLifecycle()
+                val billingMessage by viewModel.billing.lastMessage.collectAsStateWithLifecycle()
+                androidx.compose.runtime.LaunchedEffect(billingMessage) {
+                    billingMessage?.let {
+                        Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show()
+                        viewModel.billing.consumeMessage()
+                    }
+                }
                 // RecorderAppWithIntro plays the fade+scale splash before revealing whatever
                 // route is active — port-back of old MEATrec intro wrapper API.
                 RecorderAppWithIntro {
@@ -136,14 +190,17 @@ class MainActivity : ComponentActivity() {
                             onboardingDone = true
                             getPreferences(MODE_PRIVATE).edit().putBoolean("onboarding_done", true).apply()
                         })
-                        settingsOpen -> MeatRecSettings(
+                        privacyOpen -> PrivacyPolicyScreen(onBack = { privacyOpen = false })
+                        languageOpen -> com.example.recorderproject.ui.LanguageScreen(
+                            onBack = { languageOpen = false },
+                        )
+                        settingsOpen -> SettingsScreenV2(
                             viewModel = viewModel,
-                            currentTheme = appTheme,
-                            onChangeTheme = {
-                                appTheme = it
-                                getPreferences(MODE_PRIVATE).edit()
-                                    .putString("app_theme", it.displayName).apply()
-                            },
+                            theme = appTheme,
+                            reduceMotion = reduceMotion,
+                            onChangeTheme = onThemeChange,
+                            onToggleReduceMotion = { reduceMotion = it },
+                            onPickSaveLocation = { directoryLauncher.launch(null) },
                             onBack = { settingsOpen = false },
                             onChangeMode = {
                                 // Reset the mode-chosen flag → next render shows the selector again
@@ -153,6 +210,9 @@ class MainActivity : ComponentActivity() {
                                 settingsOpen = false
                             },
                             onPickCloudLocation = { selectCloudDirectory() },
+                            onOpenPrivacy = { settingsOpen = false; privacyOpen = true },
+                            onSignInDrive = { signInToGoogleDrive() },
+                            onOpenLanguage = { settingsOpen = false; languageOpen = true },
                         )
                         eqOpen -> EQScreen(
                             viewModel = viewModel,
@@ -207,11 +267,12 @@ class MainActivity : ComponentActivity() {
                         trimFile != null -> TrimScreen(
                             file = trimFile!!,
                             onConfirm = { inMs, outMs ->
-                                Toast.makeText(
-                                    this,
-                                    "Trim ${inMs}ms..${outMs}ms (export wiring pending)",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                val result = viewModel.trimFile(trimFile!!, inMs, outMs)
+                                if (result != null) {
+                                    android.widget.Toast.makeText(this, "Saved: ${result.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(this, "Trim failed — file may be locked", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                                 viewModel.closeTrim()
                             },
                             onBack = { viewModel.closeTrim() },
@@ -230,6 +291,15 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onOpenSettings = { settingsOpen = true },
+                            onOpenPresets = {
+                                // CUSTOM/mode chip → re-open the preset & mode selector (not Settings).
+                                modeChosen = false
+                                getPreferences(MODE_PRIVATE).edit().putBoolean("mode_chosen", false).apply()
+                            },
+                            theme = appTheme,
+                            onChangeTheme = onThemeChange,
+                            onSignInDrive = { signInToGoogleDrive() },
+                            onOpenFullSettings = { settingsOpen = true },
                         )
                     }
 
@@ -249,12 +319,90 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { viewModel.closePitchShift() },
                         )
                     }
+
+                    // Pro paywall — floats over any route when a free user taps a locked feature.
+                    if (paywallFeature != null) {
+                        com.example.recorderproject.ui.components.ProUpgradeSheet(
+                            highlight = paywallFeature,
+                            priceText = proPrice,
+                            originalPriceText = proOriginalPrice,
+                            onUpgrade = { viewModel.billing.launchPurchase(this@MainActivity) },
+                            onRestore = { viewModel.billing.queryPurchases() },
+                            onDismiss = { viewModel.closePaywall() },
+                        )
+                    }
                 }
             }
         }
     }
 
     private fun requestRecordingPermissions() {
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (SaveLocationOnboarding.shouldPrompt(
+                hasFolder = viewModel.saveDirectoryUri.value != null,
+                alreadyPrompted = prefs.getBoolean("save_location_prompted", false),
+            )
+        ) {
+            showSaveLocationDialog()
+            return
+        }
+        if (!prefs.getBoolean("location_disclosure_shown", false)) {
+            showLocationDisclosureDialog()
+            return
+        }
+        proceedWithRecordingPermissions()
+    }
+
+    private fun showSaveLocationDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Where should recordings be saved?")
+            .setMessage(
+                "Pick a folder you'll find in your Files app and that stays even if you " +
+                "uninstall MEAT REC — or keep using private app storage."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Choose folder") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("save_location_prompted", true).apply()
+                pendingRecordAfterFolderPick = true
+                selectSaveDirectory()
+            }
+            .setNegativeButton("Use app storage") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("save_location_prompted", true).apply()
+                // Gate now passes; re-enter to continue to the location-disclosure / record flow.
+                requestRecordingPermissions()
+            }
+            .show()
+    }
+
+    private fun showLocationDisclosureDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Location Metadata (Optional)")
+            .setMessage(
+                "MEAT REC can tag your recordings with GPS coordinates — stored inside " +
+                "the WAV file so you remember where each take was recorded.\n\n" +
+                "Location data stays on your device and is never sent to any server.\n\n" +
+                "Allow location tagging?"
+            )
+            .setPositiveButton("Allow") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("location_disclosure_shown", true)
+                    .putBoolean("location_tagging_enabled", true)
+                    .apply()
+                proceedWithRecordingPermissions()
+            }
+            .setNegativeButton("No thanks") { _, _ ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("location_disclosure_shown", true)
+                    .putBoolean("location_tagging_enabled", false)
+                    .apply()
+                proceedWithRecordingPermissions()
+            }
+            .show()
+    }
+
+    private fun proceedWithRecordingPermissions() {
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         val storageGranted = !needsLegacyStoragePermission ||
@@ -263,17 +411,23 @@ class MainActivity : ComponentActivity() {
         val notificationsGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
+        val bluetoothGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
 
-        if (audioGranted && storageGranted && notificationsGranted) {
-            Toast.makeText(this, "Starting recording...", Toast.LENGTH_SHORT).show()
+        if (audioGranted && storageGranted && notificationsGranted && bluetoothGranted) {
             viewModel.startRecording()
         } else {
-            Toast.makeText(this, "Requesting permissions...", Toast.LENGTH_SHORT).show()
             val perms = buildList {
                 add(Manifest.permission.RECORD_AUDIO)
                 if (needsLegacyStoragePermission) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
                     add(Manifest.permission.POST_NOTIFICATIONS)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                if (getPreferences(MODE_PRIVATE).getBoolean("location_tagging_enabled", false)) {
+                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 }
             }.toTypedArray()
             permissionLauncher.launch(perms)
@@ -281,6 +435,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectSaveDirectory() {
-        directoryLauncher.launch(null)
+        // Best-effort initial location hint (ignored by some OEM pickers).
+        val initial: android.net.Uri? = try {
+            android.provider.DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents", "primary:Music"
+            )
+        } catch (_: Exception) { null }
+        directoryLauncher.launch(initial)
     }
 }

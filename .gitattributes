@@ -1,0 +1,29 @@
+# Cross-platform (Mac + Windows) line-ending normalization.
+# Without this, gradlew breaks on one OS and you get noisy whole-file diffs.
+
+* text=auto eol=lf
+
+# Windows-only scripts must stay CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Unix shell scripts / gradle wrapper must stay LF (run on Mac)
+gradlew text eol=lf
+*.sh    text eol=lf
+
+# Binaries — never touch line endings
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.gif   binary
+*.ico   binary
+*.jar   binary
+*.aar   binary
+*.jks   binary
+*.keystore binary
+*.aab   binary
+*.apk   binary
+*.so    binary
+*.ttf   binary
+*.otf   binary
