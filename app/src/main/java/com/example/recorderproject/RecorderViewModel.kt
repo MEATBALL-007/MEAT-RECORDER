@@ -112,9 +112,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
         }
     }
     private var stopReceiverRegistered = false
-    // Library scanning extracted into RecordingScanner (issue #13). Declared before the init
-    // block (which calls the scan functions), so it is initialized in time. Only needs `app`.
-    private val scanner = com.example.recorderproject.data.RecordingScanner(app)
     private val hydrated = MutableStateFlow(false)
 
     // Audio-input configuration extracted into AudioInputConfig (issue #13 step 6). Owns the
@@ -167,55 +164,11 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                 applySnapshot(snapshot)
                 // Re-claim SAF URI grant if we have one persisted (clears + warns if revoked).
                 saveLocation.reclaimPersistedGrant()
-                // Recovery: if a previous session died while recording, the WAV is now
-                // playable (PR1 periodic finalize) — surface it in the recordings list.
-                val activePath = settings.getActiveRecordingPath()
-                if (activePath != null) {
-                    val recoveredFile = java.io.File(activePath)
-                    if (recoveredFile.exists() && recoveredFile.length() > 44L) {
-                        // Build a RecordFile entry — best-effort metadata
-                        val durationSeconds = try {
-                            val mmr = android.media.MediaMetadataRetriever()
-                            mmr.setDataSource(activePath)
-                            val ms = mmr.extractMetadata(
-                                android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
-                            )?.toLongOrNull() ?: 0L
-                            mmr.release()
-                            (ms / 1000L).toInt()
-                        } catch (_: Exception) { 0 }
-                        val recovered = RecordFile(
-                            id = java.util.UUID.randomUUID().toString(),
-                            name = recoveredFile.name,
-                            path = recoveredFile.absolutePath,
-                            durationSeconds = durationSeconds,
-                            sceneName = "Recovered",
-                        )
-                        fileLibrary.add(recovered)
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(app, "Recovered take from previous session: ${recoveredFile.name}",
-                                Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    // Clear the marker either way — we've handled it (or the file doesn't exist)
-                    try { settings.setActiveRecordingPath(null) } catch (_: Exception) {}
-                }
-                // Detect zombie recording: previous session was recording when destroyed.
-                val wasRecording = try { settings.getIsRecording() } catch (_: Exception) { false }
-                if (wasRecording) {
-                    // The take is recoverable via PR2 logic; clear the flag here.
-                    // The user can review the recovered file in the recordings list.
-                    try { settings.setIsRecording(false) } catch (_: Exception) {}
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(app, "Previous recording recovered — check Recordings list", Toast.LENGTH_LONG).show()
-                    }
-                }
-                // Populate _recordFiles from disk on launch — without this, the user can
-                // only see files created in the current session.
-                scanRecordingsFromDisk()
-                // Also scan the SAF (folder-picker) save location, if one is set —
-                // otherwise recordings saved there disappear from the list after an app
-                // restart, since scanRecordingsFromDisk() only reads internal storage.
-                scanSafRecordings()
+                // Recover a take interrupted by a crash/kill in the previous session.
+                libraryScanner.recoverCrashedTake()
+                // Populate the library from internal storage + the SAF save folder on launch.
+                libraryScanner.scanDisk()
+                libraryScanner.scanSaf()
                 rewireRecorderFromState()
                 // Update default file name to next take for the loaded scene
                 refreshAutoFileName()
@@ -421,7 +374,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             saveDirectoryUri = { saveLocation.uri.value },
             onError = { _errorMessage.value = it },
             onTakeSaved = cloudBackup::onTakeSaved,
-            rescanFromDisk = ::scanRecordingsFromDisk,
+            rescanFromDisk = { libraryScanner.scanDisk() },
         )
 
     // Lifecycle delegations.
@@ -503,6 +456,16 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
     )
     val saveDirectoryUri: StateFlow<Uri?> = saveLocation.uri
     fun setSaveDirectoryUri(uri: Uri) = saveLocation.set(uri)
+
+    // Launch-time library population + crash recovery → LibraryScanner (issue #13 step 14).
+    // Declared after saveLocation (which it reads); recordingController's rescanFromDisk seam
+    // defer-resolves this via a lambda.
+    private val libraryScanner = com.example.recorderproject.data.LibraryScanner(
+        app = app,
+        settings = settings,
+        fileLibrary = fileLibrary,
+        saveLocation = saveLocation,
+    )
 
     // A/B compare state — delegated to PlaybackManager (issue #13).
     val abFiles: StateFlow<Pair<com.example.recorderproject.model.RecordFile, com.example.recorderproject.model.RecordFile>?> = playback.abFiles
@@ -1079,38 +1042,6 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
                     Toast.makeText(app, "Reset failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
-        }
-    }
-
-    /**
-     * On launch, populate _recordFiles from the recordings directory. Detects
-     * NR (filename ends with _nr.wav) and EQ (matching _eq.json sidecar) flags
-     * so the filter chips behave as expected.
-     *
-     * If both foo.wav and foo_nr.wav exist, only foo_nr.wav is shown — the NR
-     * version is the user-facing artifact, matching what stopRecording() adds
-     * to the list when NR is enabled.
-     */
-    private fun scanRecordingsFromDisk() {
-        val added = scanner.scanDisk(fileLibrary.current().map { it.path }.toSet())
-        if (added.isNotEmpty()) {
-            fileLibrary.addAll(added)
-            Log.i(TAG, "scanRecordingsFromDisk: added ${added.size} files from disk")
-        }
-    }
-
-    /**
-     * Like [scanRecordingsFromDisk] but for a SAF (folder-picker) save location. Recordings
-     * saved to a chosen folder are stored as content:// documents, which the internal-storage
-     * scan never sees — so without this they vanish from the list after an app restart even
-     * though the files are perfectly intact. Best-effort and fully guarded; never throws.
-     */
-    private suspend fun scanSafRecordings() = withContext(Dispatchers.IO) {
-        val uri = saveLocation.uri.value ?: return@withContext
-        val added = scanner.scanSaf(uri, fileLibrary.current().map { it.path }.toSet())
-        if (added.isNotEmpty()) {
-            fileLibrary.addAll(added)
-            Log.i(TAG, "scanSafRecordings: added ${added.size} files from SAF folder")
         }
     }
 
